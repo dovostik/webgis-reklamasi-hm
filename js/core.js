@@ -189,7 +189,7 @@ function L_tiles() {
 export function newMap(el, opts = {}) {
   const map = window.L.map(el, { zoomControl: true, attributionControl: true, preferCanvas: false, ...opts });
   const t = L_tiles(); t.sat.addTo(map);
-  window.L.control.layers({ 'Citra satelit': t.sat, 'Peta jalan': t.osm }, null, { position: 'topright' }).addTo(map);
+  map._lc = window.L.control.layers({ 'Citra satelit': t.sat, 'Peta jalan': t.osm }, null, { position: 'topright' }).addTo(map);
   return map;
 }
 export function locateControl(map) {

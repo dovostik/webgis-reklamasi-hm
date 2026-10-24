@@ -173,7 +173,7 @@ function renderPeta() {
   S.tag.filter(t => t.lat && seesBlok(S.blokMap[t.blok_id]) && t.status !== 'closed').forEach(t => window.L.circleMarker([t.lat, t.lon], { radius: 5, color: '#fff', weight: 1, fillColor: t.sumber === 'gl' ? '#E0473B' : '#F2C230', fillOpacity: 1 }).on('click', () => tagSheet(t.id)).addTo(tg));
   tg.addTo(map); ov['Tag terbuka'] = tg;
   const nur = window.L.featureGroup(); S.bedengan.forEach(b => window.L.geoJSON(b.geom, { style: { color: '#333', weight: .6, fillColor: '#A9D08E', fillOpacity: .8 } }).addTo(nur)); nur.addTo(map); ov['Nursery'] = nur;
-  window.L.control.layers(null, ov, { position: 'topright', collapsed: true }).addTo(map);
+  Object.entries(ov).forEach(([k, l]) => map._lc.addOverlay(l, k));
   const all = window.L.featureGroup(Object.values(groups));
   if (mapState) map.setView(mapState.c, mapState.z); else if (all.getLayers().length) map.fitBounds(all.getBounds(), { padding: [10, 10] });
   map.on('moveend', () => { mapState = { c: map.getCenter(), z: map.getZoom() }; });
