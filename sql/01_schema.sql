@@ -382,3 +382,9 @@ insert into storage.buckets (id, name, public) values ('scan','scan',false) on c
 drop policy if exists foto_r on storage.objects; create policy foto_r on storage.objects for select to authenticated using (bucket_id in ('foto','scan'));
 drop policy if exists foto_w on storage.objects; create policy foto_w on storage.objects for insert to authenticated with check (bucket_id in ('foto','scan') and public.my_role() <> 'none');
 drop policy if exists foto_d on storage.objects; create policy foto_d on storage.objects for delete to authenticated using (bucket_id = 'foto' and public.has_role('admin'));
+grant select, insert, update, delete on all tables in schema public to authenticated;
+grant usage, select on all sequences in schema public to authenticated;
+grant execute on all functions in schema public to authenticated;
+-- 2) jadikan akun Casimin admin (buat profilnya bila belum ada)
+insert into public.profiles (id, nama, jabatan, role, aktif)
+select id, 'Casimin', 'Reclamation Suptend', 'admin', true from auth.users where lower(email) = 'dovos1234@gmail.com'
