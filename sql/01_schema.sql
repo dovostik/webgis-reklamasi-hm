@@ -12,7 +12,7 @@ create table if not exists public.profiles (
   nama text not null default '',
   jabatan text not null default '',
   role text not null default 'viewer'
-    check (role in ('admin','owner','nursery','crew','exdas','bumdes','viewer')),
+    check (role in ('admin','spv','owner','nursery','crew','exdas','bumdes','viewer')),
   aktif boolean not null default true,
   created_at timestamptz not null default now()
 );
@@ -390,3 +390,10 @@ revoke execute on function public.can_see_blok(text), public.can_see_layer(text)
 revoke execute on function public.handle_new_user() from authenticated;
 alter function public.stamp_updates() set search_path = public;
 alter function public.set_server_time() set search_path = public;
+-- SPV Reklamasi: beri nama BASTL, tanggal blok lama, unggah/konfirmasi scan BA
+create policy spv_blok_u on public.blok for update to authenticated using (public.has_role('spv')) with check (public.has_role('spv'));
+create policy spv_periode_i on public.periode for insert to authenticated with check (public.has_role('spv'));
+create policy spv_minta on public.minta for insert to authenticated with check (public.has_role('spv'));
+create policy spv_ba_u on public.ba for update to authenticated using (public.has_role('spv'));
+create policy spv_sesi_u on public.sesi for update to authenticated using (public.has_role('spv'));
+create policy spv_foto_d on storage.objects for delete to authenticated using (bucket_id = 'foto' and public.has_role('spv'));

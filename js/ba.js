@@ -140,8 +140,8 @@ export function renderBA(id, shell) {
     <div class="card stack noprint"><div class="row between"><b class="mono small">${esc(a.nomor)}</b><span class="pill ${a.confirmed_at ? 's-ok' : a.scan_path ? 's-pend' : 's-idle'}">${a.confirmed_at ? 'Final' : a.scan_path ? 'Menunggu konfirmasi' : 'Perlu tanda tangan'}</span></div>
       ${sib.map(x => `<a class="item" href="#ba/${x.id}"><div class="grow"><b>BA ${esc(x.jenis)} pasangan</b><span class="mono">${esc(x.nomor)}</span></div></a>`).join('')}
       <div class="grid2"><button class="btn" id="bPrint">Cetak / simpan PDF</button>${a.scan_path ? '<button class="btn ghost" id="bScanV">Lihat scan</button>' : '<span></span>'}</div>
-      ${admin || isRole('owner') ? `<button class="btn ghost block" id="bScan">${a.scan_path ? 'Ganti' : 'Unggah'} scan BA bertanda tangan</button>` : ''}
-      ${admin && a.scan_path && !a.confirmed_at ? `<button class="btn block" id="bConf">${kp ? 'Konfirmasi scan & hapus foto asli inspeksi' : 'Konfirmasi scan'}</button>` : ''}
+      ${admin || isRole('spv') ? `<button class="btn ghost block" id="bScan">${a.scan_path ? 'Ganti' : 'Unggah'} scan BA bertanda tangan</button>` : ''}
+      ${(admin || isRole('spv')) && a.scan_path && !a.confirmed_at ? `<button class="btn block" id="bConf">${kp ? 'Konfirmasi scan & hapus foto asli inspeksi' : 'Konfirmasi scan'}</button>` : ''}
       <p class="note">Cetak, tanda tangan basah semua pihak, lalu unggah scan-nya.${kp ? ' Setelah admin konfirmasi, 4 foto inspeksi asli dihapus permanen.' : ''}</p></div>
     <div class="doc">${kop()}<h4>${JUDUL[a.jenis]}</h4><p class="nomor">Nomor: ${esc(a.nomor)}</p>${kp ? bodyKP(a) : bodyPP(a)}</div>
     ${kp ? lampiran(a) : ''}</div>`);

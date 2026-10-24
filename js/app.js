@@ -23,20 +23,22 @@ const ICON = {
 const LBL = { beranda: 'Beranda', peta: 'Peta', tugas: 'Tugas', scan: 'Scan tag', nursery: 'Nursery', kirim: 'Kirim bibit', tampung: 'Penampungan', gudang: 'Gudang', ba: 'BA', lainnya: 'Lainnya', admin: 'Pengguna', cetak: 'Cetak tag', akun: 'Akun saya' };
 const MENU = {
   admin: ['beranda', 'tugas', 'peta', 'kirim', 'lainnya'],
+  spv: ['beranda', 'tugas', 'peta', 'nursery', 'lainnya'],
   owner: ['tugas', 'peta', 'scan', 'tampung', 'lainnya'],
   nursery: ['nursery', 'kirim', 'tampung', 'gudang', 'lainnya'],
   crew: ['nursery', 'gudang', 'lainnya'],
   exdas: ['tugas', 'peta', 'scan', 'tampung', 'lainnya'],
   bumdes: ['tugas', 'peta', 'scan', 'tampung', 'lainnya'],
-  viewer: ['beranda', 'peta', 'ba', 'lainnya'],
+  viewer: ['beranda', 'peta', 'nursery', 'ba', 'lainnya'],
 };
 const MORE = {
   admin: ['nursery', 'tampung', 'gudang', 'ba', 'scan', 'admin', 'cetak', 'akun'],
+  spv: ['kirim', 'tampung', 'gudang', 'ba', 'cetak', 'akun'],
   owner: ['ba', 'gudang', 'akun'],
   nursery: ['ba', 'akun'],
   crew: ['akun'],
   exdas: ['ba', 'akun'], bumdes: ['ba', 'akun'],
-  viewer: ['akun'],
+  viewer: ['gudang', 'akun'],
 };
 export const role = () => S.me?.role || 'none';
 export const isRole = (...r) => r.includes(role());
@@ -93,6 +95,7 @@ export function tugasList() {
   for (const b of S.blok) {
     if (!seesBlok(b) || b.layer === 'berhasil') continue;
     const p = L.aktif(b.id);
+    if (r === 'spv' && b.layer === 'bastl' && !b.nama) { out.push({ b, p: null, t: 'Beri nama blok BASTL', k: 'warn' }); continue; }
     if (r === 'admin') {
       if (b.layer === 'bastl' && !b.nama) continue;
       if (p && p.status === 'menunggu_persetujuan') out.push({ b, p, t: 'Setujui dan terbitkan BA', k: 'warn' });
@@ -196,7 +199,7 @@ function renderBlok(id) {
   let act = '';
   // --- admin: beri nama BASTL ---
   if (b.layer === 'bastl' && !b.nama) {
-    act += r === 'admin' ? `<div class="card stack"><h2>Beri nama blok</h2><p class="note">Melanjutkan urutan terakhir blok. Setelah disimpan, permintaan bibit penanaman langsung masuk ke nursery dan pekerjaan ExDAS dimulai.</p><div class="row" style="flex-wrap:nowrap"><input id="bnm" value="${esc(nextHRP())}" aria-label="Nama blok"><button class="btn" id="bnmOk">Simpan</button></div></div>` : '<div class="alert">Petak ini belum diberi nama oleh administrator.</div>';
+    act += (r === 'admin' || r === 'spv') ? `<div class="card stack"><h2>Beri nama blok</h2><p class="note">Melanjutkan urutan terakhir blok. Setelah disimpan, permintaan bibit penanaman langsung masuk ke nursery dan pekerjaan ExDAS dimulai.</p><div class="row" style="flex-wrap:nowrap"><input id="bnm" value="${esc(nextHRP())}" aria-label="Nama blok"><button class="btn" id="bnmOk">Simpan</button></div></div>` : '<div class="alert">Petak ini belum diberi nama oleh administrator.</div>';
   }
   // --- vendor ---
   if ((r === 'exdas' && b.layer === 'bastl') || (r === 'bumdes' && b.layer === 'perawatan') || r === 'admin') {
@@ -234,7 +237,7 @@ function renderBlok(id) {
     act += `<div class="card stack"><h2>Persetujuan owner</h2><p class="small" style="margin:0">Hasil ${fmt(p.pct, 2)}% (≥ 90%). Semua tag GL sudah disulam vendor.</p><button class="btn block" id="aOk">Setujui dan terbitkan BA</button></div>`;
   }
   // --- admin input data lama perawatan ---
-  if (r === 'admin' && b.layer === 'perawatan') {
+  if ((r === 'admin' || r === 'spv') && b.layer === 'perawatan') {
     act += `<details class="card"><summary><b>Input manual admin</b></summary><div class="stack" style="margin-top:10px"><div class="grid2"><label class="f" for="aT">Tanggal closing BA tanam<input type="date" id="aT" value="${esc(b.tgl_tanam || '')}"></label><label class="f" for="aR">Realisasi rotasi terakhir<input type="date" id="aR" value="${esc(b.tgl_rotasi_terakhir || '')}"></label></div><button class="btn ghost" id="aSave">Simpan tanggal</button></div></details>`;
   }
   const info = `<dl class="kv"><dt>Luas</dt><dd>${fmt(b.ha, 2)} Ha</dd>${b.kode_bastl ? `<dt>Kode BASTL</dt><dd class="mono">${esc(b.kode_bastl)}</dd>` : ''}${b.no_bastl ? `<dt>No. BASTL</dt><dd>${esc(b.no_bastl)}</dd>` : ''}
@@ -308,9 +311,9 @@ function renderAkun() {
 function renderAdmin() {
   if (role() !== 'admin') return renderLainnya();
   shell('Pengguna', null, `<div class="stack"><div class="alert">Akun baru dibuat di Supabase: <b>Authentication → Users → Add user</b> (centang <i>Auto confirm</i>). Setelah orangnya login sekali atau muncul di daftar ini, atur nama, jabatan, dan perannya di sini.</div>
-    <div class="list">${S.profiles.map(p => `<div class="card stack"><div class="grid2"><label class="f">Nama<input data-p="${p.id}" data-k="nama" value="${esc(p.nama)}"></label><label class="f">Jabatan<input data-p="${p.id}" data-k="jabatan" value="${esc(p.jabatan || '')}"></label></div><label class="f">Peran<select data-p="${p.id}" data-k="role">${Object.entries(G.ROLE_LBL).map(([k, v]) => `<option value="${k}" ${p.role === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label><button class="btn ghost sm" data-save="${p.id}">Simpan</button></div>`).join('')}</div>
+    <div class="list">${S.profiles.map(p => `<div class="card stack"><div class="grid2"><label class="f">Nama<input data-p="${p.id}" data-k="nama" value="${esc(p.nama)}"></label><label class="f">Jabatan<input data-p="${p.id}" data-k="jabatan" value="${esc(p.jabatan || '')}"></label></div><div class="grid2"><label class="f">Peran<select data-p="${p.id}" data-k="role">${Object.entries(G.ROLE_LBL).map(([k, v]) => `<option value="${k}" ${p.role === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label><label class="f">Status<select data-p="${p.id}" data-k="aktif"><option value="true" ${p.aktif !== false ? 'selected' : ''}>Aktif</option><option value="false" ${p.aktif === false ? 'selected' : ''}>Nonaktif</option></select></label></div><button class="btn ghost sm" data-save="${p.id}">Simpan</button></div>`).join('')}</div>
     <p class="note">Penanda tangan BA diambil dari jabatan: "SPV Reklamasi", "Reclamation Suptend", "KTT", nama vendor dari akun ExDAS/BUMDES, dan GL dari pengawas yang menginspeksi (dicetak "GL Reklamasi").</p></div>`);
-  $$('[data-save]').forEach(b => b.addEventListener('click', async () => { const id = b.dataset.save; const patch = {}; $$(`[data-p="${id}"]`).forEach(i => { patch[i.dataset.k] = i.value; }); try { await upd('profiles', { id }, patch, { offline: false }); toast('Tersimpan.'); } catch (e) { toast(e.message); } }));
+  $$('[data-save]').forEach(b => b.addEventListener('click', async () => { const id = b.dataset.save; const patch = {}; $$(`[data-p="${id}"]`).forEach(i => { patch[i.dataset.k] = i.dataset.k === 'aktif' ? i.value === 'true' : i.value; }); try { await upd('profiles', { id }, patch, { offline: false }); toast('Tersimpan.'); } catch (e) { toast(e.message); } }));
 }
 
 // ---------- router ----------

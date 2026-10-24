@@ -20,8 +20,9 @@ Berjalan di browser HP, bisa dipasang ke layar utama, dan tetap mencatat saat ta
 | Peran | Menu |
 |---|---|
 | admin | semua, persetujuan BA, pengguna, cetak tag |
-| owner (SPV/GL lapangan) | tugas, peta, scan/inspeksi, penampungan, BA, gudang |
+| spv (SPV Reklamasi) | lihat semua menu, beri nama BASTL, tanggal blok lama, unggah & konfirmasi scan BA, cetak tag |
+| owner (GL lapangan) | tugas, peta, scan/inspeksi, penampungan, BA, gudang |
 | nursery (GL Nursery) | nursery, kirim bibit, penampungan, gudang, BA |
 | crew (akun bersama) | nursery, gudang |
 | exdas / bumdes | tugas, peta blok sendiri, scan, terima bibit, penampungan |
-| viewer (atasan) | beranda, peta, BA |
+| viewer (atasan) | beranda, peta, BA, stok bibit & material (lihat saja) |
