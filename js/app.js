@@ -81,7 +81,7 @@ function renderLogin(msg = '') {
     e.preventDefault(); const em = $('#le').value.trim(), pw = $('#lp').value; const er = $('#lerr');
     if (!em) { er.textContent = 'Isi email.'; er.hidden = false; return; }
     if (!pw && !demo) { er.textContent = 'Isi kata sandi.'; er.hidden = false; return; }
-    try { await SB.login(em, pw); await boot(); } catch (x) { er.textContent = x.net ? 'Tidak ada koneksi internet.' : (x.status === 400 ? 'Email atau kata sandi salah.' : x.message); er.hidden = false; }
+    try { await SB.login(em, pw); await boot(); } catch (x) { const c = x.body?.error_code || x.body?.code || ''; er.textContent = x.net ? 'Tidak ada koneksi internet.' : c === 'invalid_credentials' ? 'Email atau kata sandi salah.' : c === 'email_not_confirmed' ? 'Email belum dikonfirmasi. Admin perlu mencentang Auto Confirm User saat membuat akun.' : `Gagal masuk: ${x.message}${c ? ' (' + c + ')' : ''} [${x.status}]`; er.hidden = false; }
   });
   $$('[data-demo]').forEach(b => b.addEventListener('click', async () => { await SB.login(b.dataset.demo, ''); await boot(); }));
 }
