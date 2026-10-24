@@ -9,7 +9,7 @@ const JUDUL = { PP: 'BERITA ACARA PENYELESAIAN PEKERJAAN', KP: 'BERITA ACARA KEB
 const KODE = { PP: 'PP', KP: 'KP', KPR: 'KPR', SO: 'SO' };
 const byJab = re => S.profiles.find(p => p.aktif !== false && re.test(p.jabatan || ''));
 const signer = (re, jab) => { const p = byJab(re); return { nama: p?.nama || '……………………', jabatan: jab }; };
-const vendorSigner = v => { const p = S.profiles.find(x => x.role === v && x.aktif !== false); return { nama: p?.nama || '……………………', jabatan: v === 'exdas' ? 'Pelaksana ExDAS' : 'Ketua BUMDES' }; };
+const vendorSigner = v => { const p = S.profiles.find(x => x.role === v && x.aktif !== false); return { nama: p?.nama || '……………………', jabatan: p?.jabatan || (v === 'exdas' ? 'Pelaksana ExDAS' : 'Ketua BUMDES') }; };
 
 // ---------- persetujuan & terbit BA ----------
 export async function approvePeriode(p) {
