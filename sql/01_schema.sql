@@ -16,6 +16,7 @@ create table if not exists public.profiles (
   aktif boolean not null default true,
   created_at timestamptz not null default now()
 );
+alter table public.profiles enable row level security;
 
 create or replace function public.my_role() returns text
 language sql stable security definer set search_path = public as $$
@@ -68,6 +69,7 @@ end $$;
 
 -- nomor urut (tag QR, BA)
 create table if not exists public.counter (name text primary key, val bigint not null default 0);
+alter table public.counter enable row level security;
 create or replace function public.next_number(p_name text, p_n int default 1) returns bigint
 language plpgsql security definer set search_path = public as $$
 declare v bigint;
@@ -84,6 +86,7 @@ create table if not exists public.jenis (
   tersedia boolean, tergenang boolean, berpasir boolean, ob boolean,
   durasi_sapih int not null default 56, durasi_besar int not null default 14, durasi_bst int not null default 14
 );
+alter table public.jenis enable row level security;
 
 create table if not exists public.blok (
   id text primary key,                         -- mis. P:HRP-10, B:CLR-1, S:13
@@ -98,6 +101,7 @@ create table if not exists public.blok (
   tahun text,
   created_at timestamptz not null default now()
 );
+alter table public.blok enable row level security;
 
 create or replace function public.can_see_blok(bid text) returns boolean
 language sql stable security definer set search_path = public as $$
@@ -121,6 +125,7 @@ create table if not exists public.periode (
   approved_at timestamptz,
   created_at timestamptz not null default now()
 );
+alter table public.periode enable row level security;
 create index if not exists periode_blok on public.periode(blok_id);
 
 create table if not exists public.sesi (
@@ -135,6 +140,7 @@ create table if not exists public.sesi (
   foto jsonb not null default '[]',            -- path storage foto kegiatan (4)
   pct numeric, hasil jsonb
 );
+alter table public.sesi enable row level security;
 
 create table if not exists public.tag (
   id text primary key,                         -- HM-T-000001
@@ -149,6 +155,7 @@ create table if not exists public.tag (
   created_at timestamptz not null default now(),
   closed_at timestamptz
 );
+alter table public.tag enable row level security;
 create index if not exists tag_blok on public.tag(blok_id);
 
 create table if not exists public.tag_event (
@@ -163,6 +170,7 @@ create table if not exists public.tag_event (
   client_at timestamptz,
   at timestamptz not null default now()
 );
+alter table public.tag_event enable row level security;
 create index if not exists tag_event_tag on public.tag_event(tag_id);
 
 -- ---------- nursery ----------
@@ -171,10 +179,12 @@ create table if not exists public.bedengan (
   kapasitas int not null default 1300, status text not null default 'aktif', luas_m2 numeric,
   geom jsonb not null
 );
+alter table public.bedengan enable row level security;
 create table if not exists public.nursery_fitur (
   id serial primary key, layer text not null check (layer in ('cluster','fasilitas','parit')),
   props jsonb not null default '{}', geom jsonb not null
 );
+alter table public.nursery_fitur enable row level security;
 create table if not exists public.lot (
   id uuid primary key default gen_random_uuid(),
   bedengan text not null references public.bedengan(kode),
@@ -184,12 +194,14 @@ create table if not exists public.lot (
   created_by uuid references public.profiles(id),
   created_at timestamptz not null default now()
 );
+alter table public.lot enable row level security;
 create table if not exists public.lot_log (
   id bigserial primary key, lot_id uuid references public.lot(id),
   tipe text not null check (tipe in ('baru','mati','afkir','pindah_keluar','pindah_masuk','kirim','kembali','opname')),
   n int not null, ket text, oleh uuid references public.profiles(id), nama_pencatat text,
   at timestamptz not null default now()
 );
+alter table public.lot_log enable row level security;
 
 -- ---------- permintaan, kiriman, penampungan ----------
 create table if not exists public.minta (
@@ -200,6 +212,7 @@ create table if not exists public.minta (
   status text not null default 'terbuka' check (status in ('terbuka','selesai')),
   created_at timestamptz not null default now()
 );
+alter table public.minta enable row level security;
 create table if not exists public.kirim (
   id uuid primary key default gen_random_uuid(),
   blok_id text not null references public.blok(id),
@@ -211,6 +224,7 @@ create table if not exists public.kirim (
   dikirim_oleh uuid references public.profiles(id), dikirim_at timestamptz not null default now(),
   diterima_oleh uuid references public.profiles(id), diterima_at timestamptz
 );
+alter table public.kirim enable row level security;
 create table if not exists public.tampung_log (     -- pengurang stok penampungan selain sulam
   id bigserial primary key, blok_id text not null references public.blok(id),
   jenis text not null references public.jenis(kode),
@@ -218,20 +232,24 @@ create table if not exists public.tampung_log (     -- pengurang stok penampunga
   n int not null check (n > 0), bedengan text, lot_id uuid,
   oleh uuid references public.profiles(id), at timestamptz not null default now()
 );
+alter table public.tampung_log enable row level security;
 
 -- ---------- gudang ----------
 create table if not exists public.barang (
   nama text primary key, kategori text, satuan text, minimum numeric, stok numeric
 );
+alter table public.barang enable row level security;
 create table if not exists public.barang_tx (
   id bigserial primary key, barang text not null references public.barang(nama),
   tipe text not null check (tipe in ('masuk','keluar','opname')),
   n numeric not null, keperluan text, lokasi text, bukti text,
   oleh uuid references public.profiles(id), at timestamptz not null default now()
 );
+alter table public.barang_tx enable row level security;
 create table if not exists public.alat (
   id serial primary key, nama text not null, kategori text, satuan text, stok numeric, ket text
 );
+alter table public.alat enable row level security;
 create table if not exists public.pinjam (
   id uuid primary key default gen_random_uuid(),
   alat_id int not null references public.alat(id),
@@ -239,6 +257,7 @@ create table if not exists public.pinjam (
   oleh uuid references public.profiles(id), at timestamptz not null default now(),
   kembali_at timestamptz, kondisi text, kembali_oleh uuid references public.profiles(id)
 );
+alter table public.pinjam enable row level security;
 
 -- ---------- berita acara ----------
 create table if not exists public.ba (
@@ -250,6 +269,7 @@ create table if not exists public.ba (
   created_by uuid references public.profiles(id), created_at timestamptz not null default now(),
   scan_path text, scan_at timestamptz, confirmed_by uuid references public.profiles(id), confirmed_at timestamptz
 );
+alter table public.ba enable row level security;
 
 -- ---------- jam server pada kolom waktu ----------
 do $$
