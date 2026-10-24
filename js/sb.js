@@ -52,6 +52,14 @@ function qs(q = {}) {
 
 const real = {
   mode: 'live',
+  async debug() {
+    const t = session?.access_token; let claim = {};
+    try { claim = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch (e) {}
+    const out = [`token ${t ? 'ada' : 'TIDAK ADA'}`, `role jwt ${claim.role || '-'}`, `alg ${(() => { try { return JSON.parse(atob(t.split('.')[0])).alg; } catch (e) { return '-'; } })()}`];
+    try { const r = await fetch(base() + '/rest/v1/rpc/my_role', { method: 'POST', headers: hdr({ 'Content-Type': 'application/json' }), body: '{}' }); out.push('my_role ' + r.status + ' ' + (await r.text()).slice(0, 80)); } catch (e) { out.push('my_role gagal ' + e.message); }
+    try { const r = await fetch(base() + '/rest/v1/profiles?select=id', { headers: hdr() }); out.push('profiles ' + r.status + ' ' + (await r.text()).slice(0, 60)); } catch (e) { out.push('profiles gagal'); }
+    return out.join(' · ');
+  },
   user() { return session?.user || null; },
   async login(email, password) {
     const s = await req('/auth/v1/token?grant_type=password', { method: 'POST', headers: { apikey: CONFIG.SUPABASE_ANON_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) }, false);
