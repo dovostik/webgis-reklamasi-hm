@@ -13,7 +13,10 @@ export class ApiError extends Error { constructor(m, status, body) { super(m); t
 function base() { return CONFIG.SUPABASE_URL.replace(/\/$/, ''); }
 function hdr(extra = {}) {
   const h = { apikey: CONFIG.SUPABASE_ANON_KEY, ...extra };
-  h.Authorization = 'Bearer ' + (session?.access_token || CONFIG.SUPABASE_ANON_KEY);
+  // kunci publishable (sb_publishable_...) hanya boleh di header apikey; Authorization hanya untuk JWT
+  const k = CONFIG.SUPABASE_ANON_KEY;
+  if (session?.access_token) h.Authorization = 'Bearer ' + session.access_token;
+  else if (/^eyJ/.test(k)) h.Authorization = 'Bearer ' + k;
   return h;
 }
 async function req(path, opts = {}, retry = true) {

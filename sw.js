@@ -1,5 +1,5 @@
 // Service worker: simpan kerangka aplikasi agar bisa dibuka tanpa sinyal.
-const V = 'hm-v1';
+const V = 'hm-v2';
 const CORE = ['./', 'index.html', 'config.js', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/core.js', 'js/sb.js', 'js/logic.js', 'js/field.js', 'js/nursery.js', 'js/ba.js',
   'lib/leaflet/leaflet.js', 'lib/leaflet/leaflet.css', 'lib/jsQR.js', 'lib/qrcode.min.js',
