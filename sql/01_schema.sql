@@ -386,3 +386,7 @@ grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 grant usage, select on all sequences in schema public to authenticated;
 grant execute on all functions in schema public to authenticated;
+revoke execute on function public.can_see_blok(text), public.can_see_layer(text), public.has_role(text[]), public.my_role(), public.next_number(text,int), public.handle_new_user() from anon, public;
+revoke execute on function public.handle_new_user() from authenticated;
+alter function public.stamp_updates() set search_path = public;
+alter function public.set_server_time() set search_path = public;
