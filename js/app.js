@@ -2,7 +2,7 @@
 import { SB } from './sb.js';
 import { S, L, loadAll, derive, ins, upd, flush, pending, netState, isOnline, $, $$, toast, sheet, confirmSheet, uid, nm, newMap, locateControl } from './core.js';
 import * as G from './logic.js';
-import { downloadTiles, tileList, tileInfo, tileJob, canInstall, isInstalled, promptInstall, persist } from './offline.js';
+import { downloadTiles, tileList, tileInfo, tileJob, canInstall, isInstalled, promptInstall, persist, loadOrtho, ORTHO } from './offline.js';
 import { renderSesi, openScan, tagSheet, vendorNewTag } from './field.js';
 import { renderNursery, renderKirim, renderTampung, renderGudang } from './nursery.js';
 import { renderBAList, renderBA, approvePeriode, renderCetakTag } from './ba.js';
@@ -303,6 +303,14 @@ function simCard() {
   if (!isRole('admin', 'spv')) return '';
   return `<div class="card stack"><h2>Simulasi waktu (uji coba)</h2><p class="small" style="margin:0">Tanggal sistem: <b>${tgl(G.today())}</b>${G.SIM ? ` · dimajukan <b>${G.SIM} hari</b> dari tanggal asli` : ' · tanggal asli'}.</p><div class="grid2"><button class="btn ghost" data-sim="1">+1 hari</button><button class="btn ghost" data-sim="7">+7 hari</button></div>${G.SIM ? '<button class="btn ghost block" data-sim="0">Kembali ke tanggal asli</button>' : ''}<p class="note">Berlaku untuk semua akun. Dipakai untuk menguji kunci 7 hari, retensi 30 hari, dan jadwal rotasi tanpa menunggu. Kembalikan ke tanggal asli sebelum aplikasi dipakai sungguhan.</p></div>`;
 }
+function orthoCard() {
+  if (!isRole('admin', 'spv')) return '';
+  const d = G.today(), url = `https://github.com/dovostik/webgis-reklamasi-hm/releases/new?tag=ortho-${d}&title=${encodeURIComponent('Ortho drone ' + d)}`;
+  return `<div class="card stack"><h2>Ortho drone</h2><p class="small" style="margin:0">${ORTHO ? `Terpasang: <b>${esc(ORTHO.tag.replace(/^ortho-/, ''))}</b> · detail sampai zoom ${ORTHO.maxzoom} (±${fmt(ORTHO.res_m * 100, 1)} cm/piksel asli)` : 'Belum ada ortho drone.'}</p>
+    <ol class="small" style="margin:0;padding-left:18px"><li>Ekspor GeoTIFF dari Agisoft/Pix4D/DJI Terra, sebaiknya kompresi JPEG (maks 2 GB).</li><li>Ketuk tombol di bawah (masuk dengan akun GitHub dovostik), seret file GeoTIFF ke kotak lampiran, lalu <b>Publish release</b>.</li><li>Tunggu 15–40 menit. Ortho baru muncul otomatis di peta semua akun; ortho lama terhapus.</li><li>HP lapangan: Lainnya → Perbarui peta offline saat ada wifi.</li></ol>
+    <a class="btn ghost block" href="${url}" target="_blank" rel="noopener">Unggah ortho baru (GitHub)</a>
+    <a class="small" href="https://github.com/dovostik/webgis-reklamasi-hm/actions" target="_blank" rel="noopener">Lihat proses pemotongan</a></div>`;
+}
 function offCard() {
   const ti = tileInfo(), job = tileJob(), n = S.ready ? tileList(S).length : 0;
   return `<div class="card stack"><h2>Offline di lapangan</h2>
@@ -323,7 +331,7 @@ function startTiles(manual) {
 }
 function renderLainnya() {
   const r = role();
-  shell('Lainnya', null, `${simCard()}${offCard()}<div class="list">${(MORE[r] || []).map(k => `<a class="item" href="#${k}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">${ICON[k] || ICON.tugas}</svg><div class="grow"><b>${LBL[k]}</b></div></a>`).join('')}</div>`);
+  shell('Lainnya', null, `${simCard()}${orthoCard()}${offCard()}<div class="list">${(MORE[r] || []).map(k => `<a class="item" href="#${k}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">${ICON[k] || ICON.tugas}</svg><div class="grow"><b>${LBL[k]}</b></div></a>`).join('')}</div>`);
   $$('[data-sim]').forEach(b => b.addEventListener('click', async () => { const d = +b.dataset.sim; const n = d === 0 ? 0 : G.SIM + d; try { await upd('setting', { k: 'sim_days' }, { v: n, updated_by: S.me.id }, { offline: false }); toast(n ? `Tanggal sistem dimajukan ${n} hari.` : 'Kembali ke tanggal asli.'); renderLainnya(); } catch (e) { toast(e.message); } }));
   bindOff();
 }
@@ -364,11 +372,13 @@ document.addEventListener('visibilitychange', async () => { if (document.visibil
 async function boot() {
   try {
     const u = await SB.ensure();
+    await loadOrtho();
     if (!u) { if (SB.mode === 'demo') await loadAll().catch(() => {}); return renderLogin(); }
     await loadAll();
     if (!S.me) { const u = SB.user() || {}; const dbg = SB.debug ? await SB.debug().catch(e => e.message) : ''; return renderLogin(`Akun Anda belum terdaftar di aplikasi. Hubungi administrator. [cek: ${u.email || '-'} · id ${String(u.id || '-').slice(0, 8)} · profil terbaca ${S.profiles.length} · blok terbaca ${S.blok.length} · ${dbg}]`); }
     route(); flush(); persist();
-    if (SB.mode !== 'demo' && !tileInfo() && navigator.onLine && !(navigator.connection && navigator.connection.saveData)) setTimeout(() => startTiles(false), 4000);
+    const ti0 = tileInfo();
+    if (SB.mode !== 'demo' && (!ti0 || (ORTHO && ti0.ortho !== ORTHO.id)) && navigator.onLine && !(navigator.connection && navigator.connection.saveData)) setTimeout(() => startTiles(false), 4000);
   } catch (e) {
     if (e.status === 401) { await SB.logout(); return renderLogin('Sesi berakhir. Silakan masuk lagi.'); }
     app.className = ''; app.innerHTML = `<main><div class="card stack"><h1>Tidak bisa memuat data</h1><p class="small">${e.net ? 'Belum ada salinan data di HP ini. Buka aplikasi sekali saat ada sinyal, setelah itu bisa dipakai tanpa sinyal.' : esc(e.message)}</p><button class="btn" onclick="location.reload()">Coba lagi</button></div></main>`;

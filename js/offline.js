@@ -25,6 +25,14 @@ export function persist() { try { navigator.storage && navigator.storage.persist
 // ---------- ubin peta ----------
 export const SAT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 export const TILE_CACHE = 'hm-tiles';
+// orthophoto drone terbaru (dibuat otomatis oleh GitHub Actions dari Release ortho-*)
+export let ORTHO = null;
+export async function loadOrtho() {
+  try { const r = await fetch('ortho/meta.json', { cache: 'no-cache' }); if (r.ok) { ORTHO = await r.json(); try { localStorage.setItem('hm-ortho', JSON.stringify(ORTHO)); } catch (e) {} return ORTHO; } } catch (e) {}
+  try { ORTHO = JSON.parse(localStorage.getItem('hm-ortho') || 'null'); } catch (e) { ORTHO = null; }
+  return ORTHO;
+}
+export const orthoUrl = () => ORTHO ? `ortho/${ORTHO.id}/{z}/{x}/{y}.${ORTHO.ext || 'webp'}` : null;
 const tileXY = (lon, lat, z) => { const n = 2 ** z, r = lat * Math.PI / 180; return [Math.floor((lon + 180) / 360 * n), Math.floor((1 - Math.asinh(Math.tan(r)) / Math.PI) / 2 * n)]; };
 function bbox(g) {
   let a = 180, b = 90, c = -180, d = -90;
@@ -42,7 +50,21 @@ export function tileList(S) {
       for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) set.add(`${z}/${y}/${x}`);
     }
   }
-  return [...set].map(k => SAT_URL.replace('{z}/{y}/{x}', k));
+  const urls = [...set].map(k => SAT_URL.replace('{z}/{y}/{x}', k));
+  if (ORTHO) {
+    const [ow, os, oe, on] = ORTHO.bounds, oz = Math.min(ORTHO.maxzoom, 20), oset = new Set();
+    for (const [[a, b, c, d]] of boxes) {
+      const A = Math.max(a - buf, ow), B = Math.max(b - buf, os), C = Math.min(c + buf, oe), D = Math.min(d + buf, on);
+      if (A >= C || B >= D) continue;
+      for (let z = ORTHO.minzoom; z <= oz; z++) { const [x0, y1] = tileXY(A, B, z), [x1, y0] = tileXY(C, D, z); for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) oset.add(`${z}/${x}/${y}`); }
+    }
+    oset.forEach(k => urls.push(new URL(orthoUrl().replace('{z}/{x}/{y}', k), location.href).href));
+  }
+  return urls;
+}
+async function purgeOldOrtho(cache) {
+  if (!ORTHO) return; const keys = await cache.keys();
+  await Promise.all(keys.filter(r => r.url.includes('/ortho/') && !r.url.includes(`/ortho/${ORTHO.id}/`)).map(r => cache.delete(r)));
 }
 let running = null;
 export function tileJob() { return running; }
@@ -52,21 +74,22 @@ export async function downloadTiles(S, onProgress) {
   running = st;
   st.promise = (async () => {
     const cache = await caches.open(TILE_CACHE);
+    await purgeOldOrtho(cache);
     let i = 0;
     const worker = async () => {
       while (i < urls.length) {
         const u = urls[i++];
         try {
           if (!(await cache.match(u, { ignoreVary: true }))) {
-            const r = await fetch(u, { mode: 'cors' });
-            if (r.ok) await cache.put(u, r); else st.fail++;
+            const r = await fetch(u, { mode: u.startsWith(location.origin) ? 'same-origin' : 'cors' });
+            if (r.ok) await cache.put(u, r); else if (!(r.status === 404 && u.includes('/ortho/'))) st.fail++;
           }
         } catch (e) { st.fail++; if (!navigator.onLine) { i = urls.length; } }
         st.done++; onProgress && onProgress(st);
       }
     };
     await Promise.all(Array.from({ length: 6 }, worker));
-    const res = { total: st.total, done: st.done, fail: st.fail, at: new Date().toISOString() };
+    const res = { total: st.total, done: st.done, fail: st.fail, at: new Date().toISOString(), ortho: ORTHO ? ORTHO.id : null };
     if (!st.fail) try { localStorage.setItem('hm-tiles', JSON.stringify(res)); } catch (e) {}
     running = null; return res;
   })();

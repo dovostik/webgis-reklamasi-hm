@@ -1,0 +1,69 @@
+# Terbitkan aplikasi ke GitHub Pages, termasuk ubin orthophoto drone terbaru.
+# Ortho baru: buat Release dengan tag berawalan "ortho-" (mis. ortho-2026-11-03) dan lampirkan file GeoTIFF.
+name: deploy
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+jobs:
+  ortho:
+    if: github.event_name == 'release' && startsWith(github.event.release.tag_name, 'ortho-') && github.event.release.tag_name != 'ortho-tiles'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { sparse-checkout: tools }
+      - name: Pasang GDAL
+        run: sudo apt-get update -q && sudo apt-get install -y -q gdal-bin python3-gdal zip
+      - name: Unduh GeoTIFF
+        run: |
+          mkdir -p work && cd work
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p "*.tif" -p "*.tiff" -p "*.TIF" -p "*.TIFF"
+          ls -la
+      - name: Potong menjadi ubin
+        run: bash tools/ortho.sh work "$TAG"
+      - name: Simpan ubin (ganti yang lama)
+        run: |
+          gh release view ortho-tiles -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create ortho-tiles -R "$GITHUB_REPOSITORY" --prerelease --title "Ubin ortho (otomatis)" --notes "Dibuat otomatis. Jangan diubah."
+          gh release upload ortho-tiles work/ortho.zip -R "$GITHUB_REPOSITORY" --clobber
+      - name: Hapus ortho lama
+        run: |
+          for t in $(gh release list -R "$GITHUB_REPOSITORY" --limit 100 --json tagName -q '.[].tagName'); do
+            case "$t" in ortho-tiles|"$TAG") ;; ortho-*) gh release delete "$t" -R "$GITHUB_REPOSITORY" --yes --cleanup-tag ;; esac
+          done
+  site:
+    needs: ortho
+    if: always() && (needs.ortho.result == 'success' || needs.ortho.result == 'skipped')
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.dep.outputs.page_url }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main }
+      - name: Susun situs
+        run: |
+          mkdir -p _site
+          rsync -a --exclude '.git' --exclude '.github' --exclude 'tools' --exclude 'sql' --exclude 'test' ./ _site/
+          if gh release download ortho-tiles -R "$GITHUB_REPOSITORY" -p ortho.zip -D /tmp 2>/dev/null; then
+            mkdir -p _site/ortho && unzip -q /tmp/ortho.zip -d _site/ortho && cat _site/ortho/meta.json
+          fi
+          du -sh _site
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: _site }
+      - id: dep
+        uses: actions/deploy-pages@v4

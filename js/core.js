@@ -1,7 +1,7 @@
 // Inti: state, pemuatan data, antrean offline, GPS, scanner QR, foto, util UI.
 import { SB } from './sb.js';
 import { makeLogic, esc, setSim } from './logic.js';
-import { kvGet, kvSet, blobGet, blobSet, blobDel, SAT_URL } from './offline.js';
+import { kvGet, kvSet, blobGet, blobSet, blobDel, SAT_URL, ORTHO, orthoUrl } from './offline.js';
 
 export const S = { me: null, ready: false };
 export let L = null;
@@ -233,7 +233,13 @@ function L_tiles() {
 export function newMap(el, opts = {}) {
   const map = window.L.map(el, { zoomControl: true, attributionControl: true, preferCanvas: false, ...opts });
   const t = L_tiles(); t.sat.addTo(map);
-  map._lc = window.L.control.layers({ 'Citra satelit': t.sat, 'Peta jalan': t.osm }, null, { position: 'topright' }).addTo(map);
+  const base = { 'Citra satelit': t.sat, 'Peta jalan': t.osm };
+  map._lc = window.L.control.layers(base, null, { position: 'topright' }).addTo(map);
+  if (ORTHO) {
+    const [w, s, e, n] = ORTHO.bounds;
+    const dr = window.L.tileLayer(orthoUrl(), { minZoom: 0, maxNativeZoom: ORTHO.maxzoom, maxZoom: 22, bounds: [[s, w], [n, e]], attribution: 'Drone ' + (ORTHO.tag || '').replace(/^ortho-/, '') }).addTo(map);
+    map._lc.addOverlay(dr, 'Ortho drone ' + (ORTHO.tag || '').replace(/^ortho-/, ''));
+  }
   return map;
 }
 export function locateControl(map) {

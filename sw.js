@@ -1,5 +1,5 @@
 // Service worker: simpan kerangka aplikasi agar bisa dibuka tanpa sinyal.
-const V = 'hm-v12';
+const V = 'hm-v13';
 const CORE = ['./', 'index.html', 'config.js', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/core.js', 'js/sb.js', 'js/logic.js', 'js/field.js', 'js/nursery.js', 'js/ba.js', 'js/offline.js', 'js/master.js',
   'lib/leaflet/leaflet.js', 'lib/leaflet/leaflet.css', 'lib/jsQR.js', 'lib/qrcode.min.js',
@@ -18,6 +18,11 @@ self.addEventListener('fetch', e => {
       try { const r = await fetch(e.request.url, { mode: 'cors' }); if (r.ok) c.put(e.request.url, r.clone()); return r; }
       catch (err) { try { return await fetch(e.request); } catch (err2) { return new Response('', { status: 504 }); } }
     }));
+    return;
+  }
+  // ubin ortho drone (situs ini): cache-first, id ortho ada di alamat sehingga ortho baru tidak bentrok
+  if (u.origin === location.origin && u.pathname.includes('/ortho/') && !u.pathname.endsWith('meta.json')) {
+    e.respondWith(caches.open('hm-tiles').then(async c => { const hit = await c.match(e.request.url); if (hit) return hit; try { const r = await fetch(e.request); if (r.ok) c.put(e.request.url, r.clone()); return r; } catch (err) { return new Response('', { status: 504 }); } }));
     return;
   }
   if (u.origin === location.origin) {
