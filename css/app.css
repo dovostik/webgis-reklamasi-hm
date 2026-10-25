@@ -136,3 +136,16 @@ td.r,th.r{text-align:right}
 @media print{.doc{overflow:visible}}
 .doc .fotos{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.stack>*{min-width:0}
 .doc{width:100%;box-sizing:border-box}
+/* denah nursery */
+.dn-wrap{overflow:auto;height:min(64vh,560px);border:1px solid var(--line);border-radius:12px;background:#EEF0EA;-webkit-overflow-scrolling:touch}
+.dn-svg{display:block}
+.dn-b{cursor:pointer}
+.dn-b .dn-o{stroke:#333;stroke-width:1.2}
+.dn-b.hit .dn-o{stroke:#E0473B;stroke-width:4}
+.dn-b.dim{opacity:.35}
+.dn-b.pulse .dn-o{stroke:#E0473B;stroke-width:6;animation:dnp .4s ease-in-out 4 alternate}
+@keyframes dnp{to{stroke-opacity:.2}}
+.dn-t{font-family:var(--f-mono,ui-monospace,monospace);fill:#16241C;text-anchor:middle;dominant-baseline:middle;pointer-events:none}
+.dn-t.dk{fill:#fff}
+.dn-beli{font-family:var(--f-mono,ui-monospace,monospace);font-weight:700;fill:#4F739A;text-anchor:middle;pointer-events:none}
+.dn-fac{font-size:16px;font-weight:600;fill:#222;text-anchor:middle;dominant-baseline:middle;pointer-events:none}

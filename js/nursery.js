@@ -4,6 +4,10 @@ import { S, L, ins, upd, $, $$, toast, sheet, confirmSheet, uid, nm, newMap, pic
 import * as G from './logic.js';
 import { role, isRole, seesBlok } from './app.js';
 import { beliCard, afkirCard, bindBeli, aklimDue } from './beli.js';
+import { denahSVG } from './denah.js';
+const lsGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+let denahQ = '';
 const { esc, fmt, tgl, jam } = G;
 const CLC = { SP: '#FFF2CC', PB: '#FFD966', BF: '#A9D08E', BL: '#4E7A3B' };
 const jn = k => S.jenisMap[k]?.nama || k;
@@ -19,13 +23,16 @@ export function renderNursery(shell) {
   const tot = t => S.lot.filter(l => l.jumlah > 0 && L.bed(l.bedengan)?.tahap === t).reduce((a, l) => a + l.jumlah, 0);
   shell('Nursery', null, `<div class="stack">
     <div class="tiles"><div class="tile"><span>Siap kirim</span><b>${fmt(tr)}</b><span>≥ 2 minggu di BST</span></div><div class="tile"><span>Penyapihan</span><b>${fmt(tot('Penyapihan'))}</b><span>bibit</span></div><div class="tile"><span>Pembesaran</span><b>${fmt(tot('Pembesaran'))}</b><span>bibit</span></div><div class="tile"><span>Pindah tahap</span><b>${due.length}</b><span>lot jatuh tempo</span></div></div>
-    <div class="map" id="nmap"></div>
-    <div class="legend"><span><i class="sw" style="background:${CLC.SP}"></i>Penyapihan</span><span><i class="sw" style="background:${CLC.PB}"></i>Pembesaran</span><span><i class="sw" style="background:${CLC.BF}"></i>BST Fastgrow</span><span><i class="sw" style="background:${CLC.BL}"></i>BST Lokal</span><span>Pudar = kosong</span><span><i class="sw" style="background:#E0473B;border-radius:50%"></i>Waktunya pindah</span></div>
+    ${(() => { const v = lsGet('hm-nview', 'denah'); return `<div class="row between"><div class="seg" role="group" aria-label="Tampilan" style="min-width:200px"><button type="button" data-nv="denah" class="${v === 'denah' ? 'on' : ''}" aria-pressed="${v === 'denah'}">Denah</button><button type="button" data-nv="peta" class="${v === 'peta' ? 'on' : ''}" aria-pressed="${v === 'peta'}">Peta asli</button></div>${v === 'denah' ? '<div class="row" style="gap:6px"><button class="btn ghost sm" id="dnOut" aria-label="Perkecil">−</button><button class="btn ghost sm" id="dnIn" aria-label="Perbesar">+</button></div>' : ''}</div>
+    ${v === 'denah' ? `<input id="dnQ" type="search" placeholder="Cari kode bedengan atau jenis, mis. BF-03 atau sengon" value="${esc(denahQ)}" aria-label="Cari bedengan"><div class="chips" id="dnHits"></div><div class="dn-wrap" id="dnWrap"></div><p class="note" id="dnFac" style="margin:0"></p>` : '<div class="map" id="nmap"></div>'}`; })()}
+    <div class="legend"><span><i class="sw" style="background:${CLC.SP}"></i>Penyapihan</span><span><i class="sw" style="background:${CLC.PB}"></i>Pembesaran</span><span><i class="sw" style="background:${CLC.BF}"></i>BST Fastgrow</span><span><i class="sw" style="background:${CLC.BL}"></i>BST Lokal</span><span>Pudar = kosong</span><span><i class="sw" style="background:#E0473B;border-radius:50%"></i>Waktunya pindah</span><span><i class="sw" style="background:#2F8A57;border-radius:50%"></i>Siap kirim</span><span><i class="sw" style="background:#4F739A;border-radius:50%"></i>Aklimatisasi</span><span><b>B</b> = bibit beli</span><span>Isi warna = tingkat penuh</span></div>
     ${aklimDue().length ? `<div class="alert warn"><b>Aklimatisasi bibit beli selesai (${aklimDue().length})</b><br>Hitung bibit yang hidup di kartu Bibit beli.</div>` : ''}
     <div class="card stack"><h2>Pengingat pindah tahap</h2>${due.length ? `<div class="list">${due.map(l => `<a class="item" href="#" data-bed="${l.bedengan}"><span class="tagid">${l.bedengan}</span><div class="grow"><b>${esc(jn(l.jenis))} · ${fmt(l.jumlah)}</b><span>ke ${L.stage(l).next === 'Pembesaran' ? 'Pembesaran' : L.stage(l).next === 'BF' ? 'BST Fastgrow' : 'BST Lokal'}</span></div></a>`).join('')}</div>` : '<p class="muted small" style="margin:0">Tidak ada.</p>'}</div>
     <div class="card stack"><h2>Stok siap kirim per jenis</h2>${Object.keys(ready).length ? `<dl class="kv">${Object.entries(ready).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<dt>${esc(jn(k))}</dt><dd>${fmt(v)}${beliReady[k] ? ` <small class="muted">(beli ${fmt(beliReady[k])})</small>` : ''}</dd>`).join('')}</dl>` : '<p class="muted small" style="margin:0">Belum ada.</p>'}</div>
     ${beliCard()}${afkirCard()}
     ${can ? '<p class="note">Tap bedengan di peta untuk mencatat lot baru, mati/afkir, atau pindah tahap.</p>' : ''}</div>`);
+  $$('[data-nv]').forEach(b => b.addEventListener('click', () => { lsSet('hm-nview', b.dataset.nv); renderNursery(shell); }));
+  if (lsGet('hm-nview', 'denah') === 'denah') { bindDenah(shell); $$('[data-bed]').forEach(a => { if (!a.closest('#dnWrap')) a.addEventListener('click', e => { e.preventDefault(); bedSheet(a.dataset.bed, shell); }); }); bindBeli(document.getElementById('main'), () => renderNursery(shell)); return; }
   const map = newMap($('#nmap'), { maxZoom: 23 });
   const grp = window.L.featureGroup();
   S.nursery_fitur.forEach(f => {
@@ -90,6 +97,26 @@ function moveSheet(l, shell) {
       close(); toast('Dipindah ke ' + sg.plan.map(p => p.bed).join(', ')); renderNursery(shell);
     });
   });
+}
+
+function bindDenah(shell) {
+  const wrap = $('#dnWrap'), q = $('#dnQ'), hitsEl = $('#dnHits');
+  let z = Number(lsGet('hm-nzoom', '0')) || 0, first = !z;
+  const draw = () => {
+    const r = denahSVG(denahQ); const fit = Math.max(.25, (wrap.clientWidth - 4) / (r.w || 1));
+    if (!z) z = fit * 2; z = Math.max(fit, Math.min(3, z));
+    wrap.innerHTML = r.svg; const svg = wrap.querySelector('svg'); if (svg) { svg.style.width = (r.w * z) + 'px'; svg.style.height = (r.h * z) + 'px'; }
+    hitsEl.innerHTML = denahQ ? (r.hits.length ? r.hits.map(k => `<button type="button" class="chip" data-go="${esc(k)}">${esc(k)}</button>`).join('') : '<span class="small muted">Tidak ditemukan.</span>') : '';
+    wrap.querySelectorAll('[data-bed]').forEach(g => { const open = () => bedSheet(g.dataset.bed, shell); g.addEventListener('click', open); g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }); });
+    hitsEl.querySelectorAll('[data-go]').forEach(c => c.addEventListener('click', () => { const g = document.getElementById('dn-' + c.dataset.go); if (g) { g.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' }); g.classList.add('pulse'); setTimeout(() => g.classList.remove('pulse'), 1600); } }));
+    const fl = document.getElementById('dnFac'); if (fl) fl.textContent = r.facNames ? 'Fasilitas: ' + r.facNames + ' · garis biru = parit air.' : '';
+    if (first) { first = false; wrap.scrollLeft = (wrap.scrollWidth - wrap.clientWidth) / 2; wrap.scrollTop = (wrap.scrollHeight - wrap.clientHeight) / 2; }
+    if (denahQ && r.hits.length === 1) { const g = document.getElementById('dn-' + r.hits[0]); if (g) g.scrollIntoView({ block: 'center', inline: 'center' }); }
+  };
+  const zoom = k => { const cx = (wrap.scrollLeft + wrap.clientWidth / 2) / (wrap.scrollWidth || 1), cy = (wrap.scrollTop + wrap.clientHeight / 2) / (wrap.scrollHeight || 1); z *= k; lsSet('hm-nzoom', z); draw(); wrap.scrollLeft = cx * wrap.scrollWidth - wrap.clientWidth / 2; wrap.scrollTop = cy * wrap.scrollHeight - wrap.clientHeight / 2; };
+  $('#dnIn').addEventListener('click', () => zoom(1.3)); $('#dnOut').addEventListener('click', () => zoom(1 / 1.3));
+  let t; q.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { denahQ = q.value; draw(); }, 200); });
+  draw();
 }
 
 // ---------- kirim bibit ----------
