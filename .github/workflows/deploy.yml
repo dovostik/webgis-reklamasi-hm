@@ -1,14 +1,14 @@
-# Terbitkan aplikasi ke GitHub Pages, termasuk ubin orthophoto drone terbaru.
-# Ortho baru: buat Release dengan tag berawalan "ortho-" (mis. ortho-2026-11-03) dan lampirkan file GeoTIFF.
+# Terbitkan aplikasi ke GitHub Pages, termasuk ubin orthophoto drone.
+# Ortho diunggah dari aplikasi (menu Lainnya, khusus admin) ke cabang sementara "ortho-upload-<slot>-<waktu>".
+# Dua slot: "utama" (seluruh area, ±3 bulanan) dan "mingguan" (sebagian area, terbaru). Ubin disimpan di release "ortho-tiles".
 name: deploy
 on:
   push:
-    branches: [main]
-  release:
-    types: [published]
+    branches: [main, 'ortho-upload-**']
   workflow_dispatch:
 permissions:
   contents: write
+  actions: write
   pages: write
   id-token: write
 concurrency:
@@ -16,36 +16,52 @@ concurrency:
   cancel-in-progress: false
 jobs:
   ortho:
-    if: (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'ortho-') && github.event.release.tag_name != 'ortho-tiles') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ortho-uji]'))
+    if: startsWith(github.ref_name, 'ortho-upload-')
     runs-on: ubuntu-24.04
     timeout-minutes: 300
     env:
       GH_TOKEN: ${{ github.token }}
-      TAG: ${{ github.event.release.tag_name || 'ortho-uji' }}
+      R: ${{ github.repository }}
+      BR: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v4
-        with: { sparse-checkout: tools }
+      - name: Baca info unggahan
+        id: info
+        run: |
+          python3 - <<'P' >> "$GITHUB_OUTPUT"
+          import json, re
+          i = json.load(open('upload/info.json'))
+          slot = i.get('slot'); assert slot in ('utama', 'mingguan'), 'slot tidak dikenal'
+          tgl = re.sub(r'[^0-9-]', '', i.get('tanggal') or '')
+          print(f"slot={slot}"); print(f"tgl={tgl}"); print(f"aksi={i.get('action', 'ganti')}")
+          P
+          cat upload/info.json
       - name: Pasang GDAL
+        if: steps.info.outputs.aksi == 'ganti'
         run: sudo apt-get update -q && sudo apt-get install -y -q gdal-bin python3-gdal zip
-      - name: Unduh GeoTIFF
+      - name: Sambung potongan GeoTIFF
+        if: steps.info.outputs.aksi == 'ganti'
         run: |
-          mkdir -p work && cd work
-          if [ "${{ github.event_name }}" = "push" ]; then cp ../tools/uji/uji_ortho.tif .; else gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p "*.tif" -p "*.tiff" -p "*.TIF" -p "*.TIFF"; fi
-          ls -la
+          mkdir -p work && cat upload/part-* > work/sumber.tif && rm -rf upload/part-*
+          ls -la work
       - name: Potong menjadi ubin
-        run: bash tools/ortho.sh work "$TAG"
-      - name: Simpan ubin (ganti yang lama)
+        if: steps.info.outputs.aksi == 'ganti'
+        run: bash tools/ortho.sh work "${{ steps.info.outputs.slot }}" "${{ steps.info.outputs.tgl }}" "$([ '${{ steps.info.outputs.slot }}' = utama ] && echo 600 || echo 300)"
+      - name: Simpan ubin (ganti yang lama di slot ini)
         run: |
-          gh release view ortho-tiles -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create ortho-tiles -R "$GITHUB_REPOSITORY" --prerelease --title "Ubin ortho (otomatis)" --notes "Dibuat otomatis. Jangan diubah."
-          gh release upload ortho-tiles work/ortho.zip -R "$GITHUB_REPOSITORY" --clobber
-      - name: Hapus ortho lama
+          S="${{ steps.info.outputs.slot }}"
+          gh release view ortho-tiles -R "$R" >/dev/null 2>&1 || gh release create ortho-tiles -R "$R" --prerelease --title "Ubin ortho (otomatis)" --notes "Dibuat otomatis oleh aplikasi. Jangan diubah."
+          gh release delete-asset ortho-tiles ortho.zip -R "$R" --yes 2>/dev/null || true
+          if [ "${{ steps.info.outputs.aksi }}" = hapus ]; then gh release delete-asset ortho-tiles "tiles-$S.zip" -R "$R" --yes 2>/dev/null || true
+          else gh release upload ortho-tiles "work/tiles-$S.zip" -R "$R" --clobber; fi
+      - name: Hapus cabang sementara
+        if: always()
         run: |
-          for t in $(gh release list -R "$GITHUB_REPOSITORY" --limit 100 --json tagName -q '.[].tagName'); do
-            case "$t" in ortho-tiles|"$TAG") ;; ortho-*) gh release delete "$t" -R "$GITHUB_REPOSITORY" --yes --cleanup-tag ;; esac
-          done
+          gh api -X DELETE "repos/$R/git/refs/heads/$BR" || true
+      - name: Terbitkan ulang situs dari main
+        run: gh workflow run deploy.yml -R "$R" --ref main
   site:
-    needs: ortho
-    if: always() && (needs.ortho.result == 'success' || needs.ortho.result == 'skipped')
+    if: github.ref_name == 'main'
     runs-on: ubuntu-24.04
     environment:
       name: github-pages
@@ -57,12 +73,23 @@ jobs:
         with: { ref: main }
       - name: Susun situs
         run: |
-          mkdir -p _site
+          mkdir -p _site/ortho
           rsync -a --exclude '.git' --exclude '.github' --exclude 'tools' --exclude 'sql' --exclude 'test' ./ _site/
-          if gh release download ortho-tiles -R "$GITHUB_REPOSITORY" -p ortho.zip -D /tmp 2>/dev/null; then
-            mkdir -p _site/ortho && unzip -q /tmp/ortho.zip -d _site/ortho && cat _site/ortho/meta.json
-          fi
-          du -sh _site
+          for S in utama mingguan; do
+            if gh release download ortho-tiles -R "$GITHUB_REPOSITORY" -p "tiles-$S.zip" -D /tmp 2>/dev/null; then
+              mkdir -p "_site/ortho/$S" && unzip -q "/tmp/tiles-$S.zip" -d "_site/ortho/$S"
+            fi
+          done
+          python3 - <<'P'
+          import json, os
+          m = {}
+          for s in ('utama', 'mingguan'):
+              f = f'_site/ortho/{s}/meta.json'
+              if os.path.exists(f): m[s] = json.load(open(f))
+          json.dump(m, open('_site/ortho/meta.json', 'w'))
+          print(json.dumps(m, indent=1))
+          P
+          du -sh _site _site/ortho/* 2>/dev/null || true
       - uses: actions/upload-pages-artifact@v3
         with: { path: _site }
       - id: dep

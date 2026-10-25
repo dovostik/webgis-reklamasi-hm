@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Ubah GeoTIFF orthophoto menjadi ubin XYZ WebP (EPSG:3857) dengan batas ukuran agar muat di GitHub Pages.
+# Pakai: ortho.sh <folder> <slot utama|mingguan> <tanggal> [batas MB]
 set -euo pipefail
 trap 'echo "::error::ortho.sh gagal di baris $LINENO: $BASH_COMMAND"' ERR
-W="$1"; TAG="$2"; cd "$W"
+W="$1"; SLOT="$2"; TGL="${3:-}"; BUDGET="${4:-600}"; cd "$W"
 SRC=$(find . -maxdepth 1 -type f \( -iname "*.tif" -o -iname "*.tiff" \) | head -1)
 [ -n "$SRC" ] || { echo "::error::Tidak ada file GeoTIFF"; exit 1; }
 echo "Sumber: $SRC"; gdalinfo "$SRC" | head -30 || true
@@ -16,10 +17,10 @@ c = osr.CoordinateTransformation(s, t); a = c.TransformPoint(x0, y0); b = c.Tran
 print(abs(g[1]), a[0], a[1], b[0], b[1])
 P
 )"
-# zoom asli dari ukuran piksel; dibatasi agar total ubin ±< 900 MB (asumsi 25 KB/ubin)
-MZ=$(python3 - "$RES" "$W84" "$S84" "$E84" "$N84" <<'P'
+# zoom asli dari ukuran piksel; dibatasi agar total ubin di bawah batas MB slot (asumsi 25 KB/ubin)
+MZ=$(python3 - "$RES" "$W84" "$S84" "$E84" "$N84" "$BUDGET" <<'P'
 import sys, math
-res, w, s, e, n = map(float, sys.argv[1:])
+res, w, s, e, n, budget = map(float, sys.argv[1:])
 nat = min(21, max(16, math.ceil(math.log2(156543.034 / res))))
 def tiles(z):
     k = 2 ** z
@@ -27,17 +28,17 @@ def tiles(z):
     def ty(lat): r = math.radians(lat); return int((1 - math.asinh(math.tan(r)) / math.pi) / 2 * k)
     return (tx(e) - tx(w) + 1) * (ty(s) - ty(n) + 1)
 z = nat
-while z > 16 and sum(tiles(i) for i in range(14, z + 1)) * 25 > 900_000: z -= 1
+while z > 16 and sum(tiles(i) for i in range(14, z + 1)) * 25 > budget * 1000: z -= 1
 print(z)
 P
 )
 echo "Ukuran piksel ${RES} m, zoom maksimum ${MZ}"
 gdal2tiles.py --xyz -z "14-${MZ}" -r average --processes="$(nproc)" --tiledriver=WEBP --webp-quality=75 -w none m.tif t >/dev/null
-ID=$(echo "$TAG" | tr -cd 'A-Za-z0-9-_')
+ID="$(echo "${TGL:-x}" | tr -cd '0-9')-$(date -u +%H%M%S)"
 mkdir -p "out/$ID" && mv t/* "out/$ID/"
 cat > out/meta.json <<J
-{"id":"$ID","tag":"$TAG","dibuat":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","minzoom":14,"maxzoom":$MZ,"bounds":[$W84,$S84,$E84,$N84],"res_m":$RES,"ext":"webp"}
+{"id":"$ID","slot":"$SLOT","tanggal":"$TGL","dibuat":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","minzoom":14,"maxzoom":$MZ,"bounds":[$W84,$S84,$E84,$N84],"res_m":$RES,"ext":"webp"}
 J
-cat out/meta.json; echo "::notice::Ortho $TAG: zoom 14-$MZ, $(find out -name '*.webp' | wc -l) ubin, $(du -sh out | cut -f1)"
-(cd out && zip -q -r -0 ../ortho.zip .)
-ls -la ortho.zip
+cat out/meta.json; echo "::notice::Ortho $SLOT $TGL: zoom 14-$MZ, $(find out -name '*.webp' | wc -l) ubin, $(du -sh out | cut -f1)"
+(cd out && zip -q -r -0 "../tiles-$SLOT.zip" .)
+ls -la "tiles-$SLOT.zip"

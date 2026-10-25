@@ -2,7 +2,8 @@
 import { SB } from './sb.js';
 import { S, L, loadAll, derive, ins, upd, flush, pending, netState, isOnline, $, $$, toast, sheet, confirmSheet, uid, nm, newMap, locateControl } from './core.js';
 import * as G from './logic.js';
-import { downloadTiles, tileList, tileInfo, tileJob, canInstall, isInstalled, promptInstall, persist, loadOrtho, ORTHO } from './offline.js';
+import { downloadTiles, tileList, tileInfo, tileJob, canInstall, isInstalled, promptInstall, persist, loadOrtho, ORTHO, SLOTS, orthoKey } from './offline.js';
+import { tokenGet, tokenSet, checkToken, uploadOrtho, jobStatus, lastJob } from './ortho-up.js';
 import { renderSesi, openScan, tagSheet, vendorNewTag } from './field.js';
 import { renderNursery, renderKirim, renderTampung, renderGudang } from './nursery.js';
 import { renderBAList, renderBA, approvePeriode, renderCetakTag } from './ba.js';
@@ -303,13 +304,49 @@ function simCard() {
   if (!isRole('admin', 'spv')) return '';
   return `<div class="card stack"><h2>Simulasi waktu (uji coba)</h2><p class="small" style="margin:0">Tanggal sistem: <b>${tgl(G.today())}</b>${G.SIM ? ` · dimajukan <b>${G.SIM} hari</b> dari tanggal asli` : ' · tanggal asli'}.</p><div class="grid2"><button class="btn ghost" data-sim="1">+1 hari</button><button class="btn ghost" data-sim="7">+7 hari</button></div>${G.SIM ? '<button class="btn ghost block" data-sim="0">Kembali ke tanggal asli</button>' : ''}<p class="note">Berlaku untuk semua akun. Dipakai untuk menguji kunci 7 hari, retensi 30 hari, dan jadwal rotasi tanpa menunggu. Kembalikan ke tanggal asli sebelum aplikasi dipakai sungguhan.</p></div>`;
 }
+// Ortho drone: hanya admin yang mengunggah; semua akun melihat hasilnya di peta.
 function orthoCard() {
-  if (!isRole('admin', 'spv')) return '';
-  const d = G.today(), url = `https://github.com/dovostik/webgis-reklamasi-hm/releases/new?tag=ortho-${d}&title=${encodeURIComponent('Ortho drone ' + d)}`;
-  return `<div class="card stack"><h2>Ortho drone</h2><p class="small" style="margin:0">${ORTHO ? `Terpasang: <b>${esc(ORTHO.tag.replace(/^ortho-/, ''))}</b> · detail sampai zoom ${ORTHO.maxzoom} (±${fmt(ORTHO.res_m * 100, 1)} cm/piksel asli)` : 'Belum ada ortho drone.'}</p>
-    <ol class="small" style="margin:0;padding-left:18px"><li>Ekspor GeoTIFF dari Agisoft/Pix4D/DJI Terra, sebaiknya kompresi JPEG (maks 2 GB).</li><li>Ketuk tombol di bawah (masuk dengan akun GitHub dovostik), seret file GeoTIFF ke kotak lampiran, lalu <b>Publish release</b>.</li><li>Tunggu 15–40 menit. Ortho baru muncul otomatis di peta semua akun; ortho lama terhapus.</li><li>HP lapangan: Lainnya → Perbarui peta offline saat ada wifi.</li></ol>
-    <a class="btn ghost block" href="${url}" target="_blank" rel="noopener">Unggah ortho baru (GitHub)</a>
-    <a class="small" href="https://github.com/dovostik/webgis-reklamasi-hm/actions" target="_blank" rel="noopener">Lihat proses pemotongan</a></div>`;
+  if (!isRole('admin')) return '';
+  const st = SLOTS.map(([k, lbl]) => { const o = ORTHO[k]; return `<div><b>${lbl}</b>: ${o ? `${esc(o.tanggal ? tgl(o.tanggal) : o.id)} · zoom maks ${o.maxzoom} (±${fmt(o.res_m * 100, 0)} cm/piksel)` : '<span class="muted">belum ada</span>'}</div>`; }).join('');
+  const tok = tokenGet(), job = lastJob();
+  const body = !tok ? `<p class="small" style="margin:0">Sekali saja: tempel token GitHub khusus repo aplikasi. Token tersimpan hanya di perangkat ini.</p>
+      <details class="small"><summary>Cara membuat token</summary><ol style="padding-left:18px;margin:6px 0"><li>Buka github.com → Settings → Developer settings → Personal access tokens → <b>Fine-grained tokens</b> → Generate new token.</li><li>Repository access: <b>Only select repositories</b> → webgis-reklamasi-hm.</li><li>Permissions: <b>Contents: Read and write</b>, <b>Actions: Read</b>. Expiration bebas (mis. 1 tahun).</li><li>Salin token (diawali github_pat_) lalu tempel di bawah.</li></ol></details>
+      <input id="ghTok" type="password" placeholder="github_pat_…" autocomplete="off"><button class="btn block" id="ghTokSave">Simpan token</button>`
+    : `<label class="small">Jenis ortho<select id="oSlot"><option value="mingguan">Ortho mingguan (terbaru, paling atas)</option><option value="utama">Ortho utama (seluruh area)</option></select></label>
+      <label class="small">Tanggal terbang<input id="oTgl" type="date" value="${G.today()}"></label>
+      <label class="small">File GeoTIFF (.tif)<input id="oFile" type="file" accept=".tif,.tiff,image/tiff"></label>
+      <div id="oProg" class="small muted"></div>
+      <button class="btn block" id="oUp">Unggah dan ganti ortho lama</button>
+      <div class="row" style="gap:8px"><button class="btn ghost grow" id="oDel">Kosongkan slot terpilih</button><button class="btn ghost grow" id="ghTokDel">Ganti token</button></div>`;
+  return `<div class="card stack"><h2>Ortho drone</h2><div class="small stack" style="gap:2px">${st}</div>
+    <p class="small muted" style="margin:0">Urutan di peta: citra online → ortho utama → ortho mingguan (terbaru di atas). Setiap akun bisa menyembunyikan lewat tombol lapisan di peta.</p>
+    ${job ? `<div class="small" id="oJob"><b>Unggahan terakhir</b> (${esc(job.slot)}, ${esc(job.tanggal || '')}): <span id="oJobSt">memeriksa…</span> <a href="#" id="oJobRf">perbarui</a></div>` : ''}
+    ${body}</div>`;
+}
+function bindOrtho() {
+  if (!isRole('admin')) return;
+  const on = (id, fn) => { const x = document.getElementById(id); if (x) x.addEventListener('click', async e => { e.preventDefault(); x.disabled = true; try { await fn(); } catch (err) { toast(err.message, 5000); const p = document.getElementById('oProg'); if (p) p.textContent = err.message; } finally { x.disabled = false; } }); };
+  const prog = m => { const p = document.getElementById('oProg'); if (p) p.textContent = m; };
+  const refresh = async () => { const el = document.getElementById('oJobSt'); if (!el) return; try { const r = await jobStatus(); el.textContent = r ? r.teks : '–'; if (r && r.tahap !== 'selesai' && r.tahap !== 'gagal') setTimeout(() => location.hash === '#lainnya' && refresh(), 20000); } catch (e) { el.textContent = e.message; } };
+  refresh(); on('oJobRf', refresh);
+  on('ghTokSave', async () => { const v = $('#ghTok').value.trim(); if (!v) return toast('Tempel token dulu.'); await checkToken(v); tokenSet(v); toast('Token tersimpan di perangkat ini.'); renderLainnya(); });
+  on('ghTokDel', async () => { if (!(await confirmSheet('Hapus token dari perangkat ini? Anda perlu menempel token lagi untuk mengunggah.'))) return; tokenSet(''); renderLainnya(); });
+  on('oUp', async () => {
+    const f = $('#oFile').files[0], slot = $('#oSlot').value, tanggal = $('#oTgl').value;
+    if (!f) return toast('Pilih file GeoTIFF.');
+    if (!/\.tiff?$/i.test(f.name)) return toast('File harus GeoTIFF (.tif).');
+    if (f.size > 2 * 1024 ** 3) return toast('File lebih dari 2 GB. Ekspor ulang dengan kompresi JPEG.');
+    const lbl = slot === 'utama' ? 'Ortho utama' : 'Ortho mingguan';
+    if (!(await confirmSheet(`Unggah <b>${esc(f.name)}</b> (${fmt(f.size / 1024 ** 2, 0)} MB) sebagai <b>${lbl}</b> tanggal ${esc(tgl(tanggal))}? ${lbl} yang lama akan diganti. Jangan tutup halaman ini sampai pengiriman selesai.`))) return;
+    const job = await uploadOrtho({ file: f, slot, tanggal }, s => prog(`${s.msg} (${Math.round(s.i / Math.max(1, s.n) * 100)}%)`));
+    prog(''); toast('Terkirim. GitHub sedang memotong ubin, biasanya 15–40 menit.', 5000); renderLainnya();
+  });
+  on('oDel', async () => {
+    const slot = $('#oSlot').value, lbl = slot === 'utama' ? 'Ortho utama' : 'Ortho mingguan';
+    if (!ORTHO[slot]) return toast(`${lbl} memang belum ada.`);
+    if (!(await confirmSheet(`Kosongkan ${lbl}? Lapisan ini hilang dari peta semua akun.`, 'Ya, kosongkan', true))) return;
+    await uploadOrtho({ slot, tanggal: G.today(), action: 'hapus' }); toast('Diproses. Hilang dari peta dalam beberapa menit.'); renderLainnya();
+  });
 }
 function offCard() {
   const ti = tileInfo(), job = tileJob(), n = S.ready ? tileList(S).length : 0;
@@ -333,7 +370,7 @@ function renderLainnya() {
   const r = role();
   shell('Lainnya', null, `${simCard()}${orthoCard()}${offCard()}<div class="list">${(MORE[r] || []).map(k => `<a class="item" href="#${k}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">${ICON[k] || ICON.tugas}</svg><div class="grow"><b>${LBL[k]}</b></div></a>`).join('')}</div>`);
   $$('[data-sim]').forEach(b => b.addEventListener('click', async () => { const d = +b.dataset.sim; const n = d === 0 ? 0 : G.SIM + d; try { await upd('setting', { k: 'sim_days' }, { v: n, updated_by: S.me.id }, { offline: false }); toast(n ? `Tanggal sistem dimajukan ${n} hari.` : 'Kembali ke tanggal asli.'); renderLainnya(); } catch (e) { toast(e.message); } }));
-  bindOff();
+  bindOff(); bindOrtho();
 }
 function renderAkun() {
   shell('Akun saya', null, `<div class="stack"><div class="card"><dl class="kv"><dt>Nama</dt><dd>${esc(S.me.nama)}</dd><dt>Jabatan</dt><dd>${esc(S.me.jabatan || '–')}</dd><dt>Peran</dt><dd>${esc(G.ROLE_LBL[role()])}</dd><dt>Mode</dt><dd>${SB.mode === 'demo' ? 'Demo (data di HP)' : 'Online'}</dd><dt>Antrean offline</dt><dd>${pending()}</dd></dl></div>
@@ -378,7 +415,7 @@ async function boot() {
     if (!S.me) { const u = SB.user() || {}; const dbg = SB.debug ? await SB.debug().catch(e => e.message) : ''; return renderLogin(`Akun Anda belum terdaftar di aplikasi. Hubungi administrator. [cek: ${u.email || '-'} · id ${String(u.id || '-').slice(0, 8)} · profil terbaca ${S.profiles.length} · blok terbaca ${S.blok.length} · ${dbg}]`); }
     route(); flush(); persist();
     const ti0 = tileInfo();
-    if (SB.mode !== 'demo' && (!ti0 || (ORTHO && ti0.ortho !== ORTHO.id)) && navigator.onLine && !(navigator.connection && navigator.connection.saveData)) setTimeout(() => startTiles(false), 4000);
+    if (SB.mode !== 'demo' && (!ti0 || ti0.ortho !== orthoKey()) && navigator.onLine && !(navigator.connection && navigator.connection.saveData)) setTimeout(() => startTiles(false), 4000);
   } catch (e) {
     if (e.status === 401) { await SB.logout(); return renderLogin('Sesi berakhir. Silakan masuk lagi.'); }
     app.className = ''; app.innerHTML = `<main><div class="card stack"><h1>Tidak bisa memuat data</h1><p class="small">${e.net ? 'Belum ada salinan data di HP ini. Buka aplikasi sekali saat ada sinyal, setelah itu bisa dipakai tanpa sinyal.' : esc(e.message)}</p><button class="btn" onclick="location.reload()">Coba lagi</button></div></main>`;

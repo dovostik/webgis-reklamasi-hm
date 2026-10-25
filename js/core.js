@@ -1,7 +1,7 @@
 // Inti: state, pemuatan data, antrean offline, GPS, scanner QR, foto, util UI.
 import { SB } from './sb.js';
 import { makeLogic, esc, setSim } from './logic.js';
-import { kvGet, kvSet, blobGet, blobSet, blobDel, SAT_URL, ORTHO, orthoUrl } from './offline.js';
+import { kvGet, kvSet, blobGet, blobSet, blobDel, SAT_URL, ORTHO, orthoUrl, SLOTS } from './offline.js';
 
 export const S = { me: null, ready: false };
 export let L = null;
@@ -235,11 +235,17 @@ export function newMap(el, opts = {}) {
   const t = L_tiles(); t.sat.addTo(map);
   const base = { 'Citra satelit': t.sat, 'Peta jalan': t.osm };
   map._lc = window.L.control.layers(base, null, { position: 'topright' }).addTo(map);
-  if (ORTHO) {
-    const [w, s, e, n] = ORTHO.bounds;
-    const dr = window.L.tileLayer(orthoUrl(), { minZoom: 0, maxNativeZoom: ORTHO.maxzoom, maxZoom: 22, bounds: [[s, w], [n, e]], attribution: 'Drone ' + (ORTHO.tag || '').replace(/^ortho-/, '') }).addTo(map);
-    map._lc.addOverlay(dr, 'Ortho drone ' + (ORTHO.tag || '').replace(/^ortho-/, ''));
-  }
+  // urutan tampilan: citra online < ortho utama < ortho mingguan (terbaru paling atas); centang untuk menyembunyikan
+  let hide = {}; try { hide = JSON.parse(localStorage.getItem('hm-ortho-hide') || '{}'); } catch (e) {}
+  SLOTS.forEach(([k, lbl], i) => {
+    const o = ORTHO[k]; if (!o) return;
+    const [w, so, e, n] = o.bounds;
+    const lay = window.L.tileLayer(orthoUrl(k), { maxNativeZoom: o.maxzoom, minNativeZoom: o.minzoom, maxZoom: 22, bounds: [[so, w], [n, e]], zIndex: 10 + i, attribution: `${lbl} ${o.tanggal || ''}` });
+    if (!hide[k]) lay.addTo(map);
+    map._lc.addOverlay(lay, `${lbl} ${o.tanggal || ''}`);
+    lay.on('add', () => { hide[k] = false; try { localStorage.setItem('hm-ortho-hide', JSON.stringify(hide)); } catch (x) {} });
+    lay.on('remove', () => { hide[k] = true; try { localStorage.setItem('hm-ortho-hide', JSON.stringify(hide)); } catch (x) {} });
+  });
   return map;
 }
 export function locateControl(map) {
