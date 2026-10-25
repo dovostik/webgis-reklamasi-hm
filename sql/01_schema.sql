@@ -404,3 +404,11 @@ create policy setting_r on public.setting for select to authenticated using (pub
 create policy setting_u on public.setting for update to authenticated using (public.has_role('admin','spv')) with check (public.has_role('admin','spv'));
 grant select, update on public.setting to authenticated;
 insert into public.setting (k, v) values ('sim_days', '0') on conflict (k) do nothing;
+-- master data dinamis
+alter table public.barang add column if not exists aktif boolean not null default true;
+alter table public.alat add column if not exists aktif boolean not null default true;
+alter table public.jenis add column if not exists aktif boolean not null default true;
+alter table public.barang_tx drop constraint if exists barang_tx_barang_fkey;
+alter table public.barang_tx add constraint barang_tx_barang_fkey foreign key (barang) references public.barang(nama) on update cascade;
+create policy barang_i on public.barang for insert to authenticated with check (public.has_role('admin','nursery'));
+create policy alat_i on public.alat for insert to authenticated with check (public.has_role('admin','nursery'));

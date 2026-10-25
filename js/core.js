@@ -40,6 +40,7 @@ function replayOutbox() {
 export function derive() {
   setSim((S.setting || []).find(x => x.k === 'sim_days')?.v || 0);
   S.jenisMap = Object.fromEntries(S.jenis.map(j => [j.kode, j]));
+  S.jenisAktif = S.jenis.filter(j => j.aktif !== false);
   S.blokMap = Object.fromEntries(S.blok.map(b => [b.id, b]));
   S.bedMap = Object.fromEntries(S.bedengan.map(b => [b.kode, b]));
   S.profMap = Object.fromEntries(S.profiles.map(p => [p.id, p]));

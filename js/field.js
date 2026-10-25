@@ -6,8 +6,8 @@ import { role, seesBlok, route, tagColor, tagItem } from './app.js';
 const { esc, fmt, tgl, jam } = G;
 
 const jenisOpts = (jalur, sel) => {
-  const grp = jalur === 'pioneer' ? S.jenis.filter(j => j.tipe === 'pionir') : S.jenis.filter(j => j.tipe !== 'pionir');
-  const rest = S.jenis.filter(j => !grp.includes(j));
+  const grp = jalur === 'pioneer' ? S.jenisAktif.filter(j => j.tipe === 'pionir') : S.jenisAktif.filter(j => j.tipe !== 'pionir');
+  const rest = S.jenisAktif.filter(j => !grp.includes(j));
   return `<optgroup label="${jalur === 'pioneer' ? 'Pionir' : 'Lokal & MPTS'}">${grp.map(j => `<option value="${j.kode}" ${j.kode === sel ? 'selected' : ''}>${esc(j.nama)}</option>`).join('')}</optgroup><optgroup label="Lainnya">${rest.map(j => `<option value="${j.kode}">${esc(j.nama)}</option>`).join('')}</optgroup>`;
 };
 

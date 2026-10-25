@@ -48,6 +48,7 @@ export function makeLogic(S) {
   function allowed(tag) {
     const dead = deadAt(tag);
     return S.jenis.filter(j => {
+      if (j.aktif === false) return false;
       if (dead.has(j.kode)) return false;
       if (tag.kondisi === 'tergenang') return j.tergenang === true;
       if (tag.kondisi === 'berpasir') return j.berpasir === true;

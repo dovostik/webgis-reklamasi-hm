@@ -6,6 +6,7 @@ import { downloadTiles, tileList, tileInfo, tileJob, canInstall, isInstalled, pr
 import { renderSesi, openScan, tagSheet, vendorNewTag } from './field.js';
 import { renderNursery, renderKirim, renderTampung, renderGudang } from './nursery.js';
 import { renderBAList, renderBA, approvePeriode, renderCetakTag } from './ba.js';
+import { renderMaster } from './master.js';
 const { esc, fmt, tgl, jam } = G;
 
 const app = document.getElementById('app');
@@ -21,7 +22,7 @@ const ICON = {
   ba: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h7"/>',
   lainnya: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
 };
-const LBL = { beranda: 'Beranda', peta: 'Peta', tugas: 'Tugas', scan: 'Scan tag', nursery: 'Nursery', kirim: 'Kirim bibit', tampung: 'Penampungan', gudang: 'Gudang', ba: 'BA', lainnya: 'Lainnya', admin: 'Pengguna', cetak: 'Cetak tag', akun: 'Akun saya' };
+const LBL = { beranda: 'Beranda', peta: 'Peta', tugas: 'Tugas', scan: 'Scan tag', nursery: 'Nursery', kirim: 'Kirim bibit', tampung: 'Penampungan', gudang: 'Gudang', ba: 'BA', lainnya: 'Lainnya', admin: 'Pengguna', cetak: 'Cetak tag', akun: 'Akun saya', master: 'Master data' };
 const MENU = {
   admin: ['beranda', 'tugas', 'peta', 'kirim', 'lainnya'],
   spv: ['beranda', 'tugas', 'peta', 'nursery', 'lainnya'],
@@ -33,10 +34,10 @@ const MENU = {
   viewer: ['beranda', 'peta', 'nursery', 'ba', 'lainnya'],
 };
 const MORE = {
-  admin: ['nursery', 'tampung', 'gudang', 'ba', 'scan', 'admin', 'cetak', 'akun'],
+  admin: ['nursery', 'tampung', 'gudang', 'ba', 'scan', 'admin', 'master', 'cetak', 'akun'],
   spv: ['kirim', 'tampung', 'gudang', 'ba', 'cetak', 'akun'],
   owner: ['ba', 'gudang', 'akun'],
-  nursery: ['ba', 'akun'],
+  nursery: ['ba', 'master', 'akun'],
   crew: ['akun'],
   exdas: ['ba', 'akun'], bumdes: ['ba', 'akun'],
   viewer: ['gudang', 'akun'],
@@ -353,7 +354,7 @@ export function route() {
     beranda: renderBeranda, tugas: renderTugas, peta: renderPeta, blok: () => renderBlok(decodeURIComponent(a)),
     sesi: () => renderSesi(a, shell), scan: () => openScan(shell), nursery: () => renderNursery(shell), kirim: () => renderKirim(shell),
     tampung: () => renderTampung(shell), gudang: () => renderGudang(shell), ba: () => a ? renderBA(a, shell) : renderBAList(shell),
-    lainnya: renderLainnya, akun: renderAkun, admin: renderAdmin, cetak: () => renderCetakTag(shell),
+    lainnya: renderLainnya, akun: renderAkun, admin: renderAdmin, cetak: () => renderCetakTag(shell), master: () => renderMaster(shell),
   }[key] || renderLainnya)();
 }
 window.addEventListener('hashchange', route);
