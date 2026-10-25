@@ -416,3 +416,39 @@ alter table public.barang_tx drop constraint if exists barang_tx_barang_fkey;
 alter table public.barang_tx add constraint barang_tx_barang_fkey foreign key (barang) references public.barang(nama) on update cascade;
 create policy barang_i on public.barang for insert to authenticated with check (public.has_role('admin','nursery'));
 create policy alat_i on public.alat for insert to authenticated with check (public.has_role('admin','nursery'));
+-- bibit dari beli: aklimatisasi 7 hari di BST, riwayat terpisah dari produksi mandiri, afkir dirawat, hutang pemasok
+create table if not exists public.beli (
+  id uuid primary key default gen_random_uuid(),
+  tgl_datang date not null, pemasok text not null, no_dok text, bukti text,
+  jenis text not null references public.jenis(kode),
+  n_datang int not null check (n_datang > 0),
+  pengganti_untuk uuid references public.beli(id),
+  status text not null default 'aklimatisasi' check (status in ('aklimatisasi','selesai')),
+  aklim_sampai date not null, n_hidup int, n_afkir int, dihitung_at timestamptz,
+  created_by uuid references public.profiles(id), created_at timestamptz not null default now()
+);
+alter table public.beli enable row level security;
+create table if not exists public.beli_log (      -- afkir beli: pulih ke BST atau mati
+  id bigserial primary key, beli_id uuid not null references public.beli(id),
+  tipe text not null check (tipe in ('pulih','mati')), n int not null check (n > 0),
+  bedengan text, lot_id uuid, oleh uuid references public.profiles(id), nama_pencatat text,
+  at timestamptz not null default now()
+);
+alter table public.beli_log enable row level security;
+alter table public.lot add column if not exists sumber text not null default 'mandiri';
+alter table public.lot add column if not exists beli_id uuid references public.beli(id);
+alter table public.lot add column if not exists aklim_sampai date;
+do $$ declare c text; begin
+  select conname into c from pg_constraint where conrelid = 'public.lot_log'::regclass and contype = 'c' and pg_get_constraintdef(oid) like '%tipe%';
+  if c is not null then execute format('alter table public.lot_log drop constraint %I', c); end if;
+  alter table public.lot_log add constraint lot_log_tipe_check check (tipe in ('baru','mati','afkir','pindah_keluar','pindah_masuk','kirim','kembali','opname','beli_masuk','aklim_hidup','aklim_afkir','pulih'));
+end $$;
+drop policy if exists r on public.beli;     create policy r on public.beli     for select to authenticated using (public.my_role() <> 'none');
+drop policy if exists r on public.beli_log; create policy r on public.beli_log for select to authenticated using (public.my_role() <> 'none');
+drop policy if exists w on public.beli;     create policy w on public.beli     for all to authenticated using (public.has_role('admin','nursery','crew')) with check (public.has_role('admin','nursery','crew'));
+drop policy if exists w on public.beli_log; create policy w on public.beli_log for insert to authenticated with check (public.has_role('admin','nursery','crew'));
+grant select, insert, update on public.beli to authenticated;
+grant select, insert on public.beli_log to authenticated;
+grant usage, select on sequence public.beli_log_id_seq to authenticated;
+create trigger srv_time before insert on public.beli for each row execute function public.set_server_time('created_at');
+create trigger srv_time before insert on public.beli_log for each row execute function public.set_server_time('at');

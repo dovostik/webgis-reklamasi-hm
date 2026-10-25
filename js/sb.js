@@ -96,8 +96,8 @@ function makeMock() {
   const now = () => new Date().toISOString();
   const tbl = t => (db[t] = db[t] || []);
   const pk = { blok: 'id', jenis: 'kode', bedengan: 'kode', barang: 'nama', tag: 'id', counter: 'name', setting: 'k' };
-  const TIME = { periode: 'created_at', sesi: 'mulai_at', tag: 'created_at', tag_event: 'at', lot: 'created_at', lot_log: 'at', minta: 'created_at', kirim: 'dikirim_at', tampung_log: 'at', barang_tx: 'at', pinjam: 'at', ba: 'created_at' };
-  const DEF = { minta: { status: 'terbuka', pio: 0, sis: 0 }, kirim: { status: 'dikirim' }, tag: { status: 'mati', low_acc: false }, periode: { status: 'pelaksanaan', nomor: 1 }, sesi: { track: [], foto: [] }, ba: { data: {} } };
+  const TIME = { periode: 'created_at', sesi: 'mulai_at', tag: 'created_at', tag_event: 'at', lot: 'created_at', lot_log: 'at', minta: 'created_at', kirim: 'dikirim_at', tampung_log: 'at', barang_tx: 'at', pinjam: 'at', ba: 'created_at', beli: 'created_at', beli_log: 'at' };
+  const DEF = { minta: { status: 'terbuka', pio: 0, sis: 0 }, kirim: { status: 'dikirim' }, tag: { status: 'mati', low_acc: false }, periode: { status: 'pelaksanaan', nomor: 1 }, sesi: { track: [], foto: [] }, ba: { data: {} }, beli: { status: 'aklimatisasi' }, lot: { sumber: 'mandiri' } };
   let seq = 1;
   const match = (r, q) => Object.entries(q).every(([k, v]) => ['select', 'order', 'limit'].includes(k) || (Array.isArray(v) ? v.includes(r[k]) : v === null ? r[k] == null : String(r[k]) === String(v)));
   const me = () => db.__user || null;
@@ -124,7 +124,7 @@ function makeMock() {
       const out = [];
       for (const r0 of [].concat(rows)) {
         const r = { ...(DEF[t] || {}), ...r0 };
-        if (!r[pk[t] || 'id']) r[pk[t] || 'id'] = (t === 'tag_event' || t === 'lot_log' || t === 'tampung_log' || t === 'barang_tx') ? seq++ + Date.now() : crypto.randomUUID();
+        if (!r[pk[t] || 'id']) r[pk[t] || 'id'] = (t === 'tag_event' || t === 'lot_log' || t === 'tampung_log' || t === 'barang_tx' || t === 'beli_log') ? seq++ + Date.now() : crypto.randomUUID();
         if (TIME[t]) r[TIME[t]] = now();
         if (t === 'pinjam' || t === 'tag_event') r.oleh = r.oleh || me()?.id;
         tbl(t).push(r); out.push({ ...r });

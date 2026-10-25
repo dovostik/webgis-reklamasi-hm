@@ -154,6 +154,8 @@ export function makeLogic(S) {
     const b = bed(l.bedengan); const j = J()[l.jenis] || {}; const inBed = diffDays(today(), l.tgl_masuk);
     const dS = j.durasi_sapih || 56, dB = j.durasi_besar || 14, dT = j.durasi_bst || 14;
     if (!b) return { tahap: '?', left: 0 };
+    if (l.aklim_sampai) { const left = diffDays(l.aklim_sampai, today()); return { tahap: 'BST', left, due: false, ready: false, aklim: true, next: null }; }
+    if (l.sumber === 'beli' && b.tahap !== 'Penyapihan' && b.tahap !== 'Pembesaran') return { tahap: 'BST', left: 0, due: false, ready: true, next: null };
     if (b.tahap === 'Penyapihan') { const left = dS - diffDays(today(), l.tgl_sapih); return { tahap: b.tahap, left, due: left <= 0, ready: false, next: 'Pembesaran' }; }
     if (b.tahap === 'Pembesaran') { const left = dB - inBed; return { tahap: b.tahap, left, due: left <= 0, ready: false, next: j.tipe === 'pionir' ? 'BF' : 'BL' }; }
     const left = dT - inBed; return { tahap: 'BST', left, due: false, ready: left <= 0, next: null };

@@ -3,6 +3,7 @@ import { SB } from './sb.js';
 import { S, L, ins, upd, $, $$, toast, sheet, confirmSheet, uid, nm, newMap, pickPhoto } from './core.js';
 import * as G from './logic.js';
 import { role, isRole, seesBlok } from './app.js';
+import { beliCard, afkirCard, bindBeli, aklimDue } from './beli.js';
 const { esc, fmt, tgl, jam } = G;
 const CLC = { SP: '#FFF2CC', PB: '#FFD966', BF: '#A9D08E', BL: '#4E7A3B' };
 const jn = k => S.jenisMap[k]?.nama || k;
@@ -13,15 +14,17 @@ const getCrew = box => { const i = box.querySelector('#cn'); return i ? i.value.
 let nurseryView = null;
 export function renderNursery(shell) {
   const can = isRole('admin', 'nursery', 'crew');
-  const ready = L.readyStock(); const tr = Object.values(ready).reduce((a, b) => a + b, 0);
+  const ready = L.readyStock(); const beliReady = {}; S.lot.forEach(l => { if (l.sumber === 'beli' && l.jumlah > 0 && L.stage(l).ready) beliReady[l.jenis] = (beliReady[l.jenis] || 0) + l.jumlah; }); const tr = Object.values(ready).reduce((a, b) => a + b, 0);
   const due = S.lot.filter(l => l.jumlah > 0 && L.stage(l).due);
   const tot = t => S.lot.filter(l => l.jumlah > 0 && L.bed(l.bedengan)?.tahap === t).reduce((a, l) => a + l.jumlah, 0);
   shell('Nursery', null, `<div class="stack">
     <div class="tiles"><div class="tile"><span>Siap kirim</span><b>${fmt(tr)}</b><span>≥ 2 minggu di BST</span></div><div class="tile"><span>Penyapihan</span><b>${fmt(tot('Penyapihan'))}</b><span>bibit</span></div><div class="tile"><span>Pembesaran</span><b>${fmt(tot('Pembesaran'))}</b><span>bibit</span></div><div class="tile"><span>Pindah tahap</span><b>${due.length}</b><span>lot jatuh tempo</span></div></div>
     <div class="map" id="nmap"></div>
     <div class="legend"><span><i class="sw" style="background:${CLC.SP}"></i>Penyapihan</span><span><i class="sw" style="background:${CLC.PB}"></i>Pembesaran</span><span><i class="sw" style="background:${CLC.BF}"></i>BST Fastgrow</span><span><i class="sw" style="background:${CLC.BL}"></i>BST Lokal</span><span>Pudar = kosong</span><span><i class="sw" style="background:#E0473B;border-radius:50%"></i>Waktunya pindah</span></div>
+    ${aklimDue().length ? `<div class="alert warn"><b>Aklimatisasi bibit beli selesai (${aklimDue().length})</b><br>Hitung bibit yang hidup di kartu Bibit beli.</div>` : ''}
     <div class="card stack"><h2>Pengingat pindah tahap</h2>${due.length ? `<div class="list">${due.map(l => `<a class="item" href="#" data-bed="${l.bedengan}"><span class="tagid">${l.bedengan}</span><div class="grow"><b>${esc(jn(l.jenis))} · ${fmt(l.jumlah)}</b><span>ke ${L.stage(l).next === 'Pembesaran' ? 'Pembesaran' : L.stage(l).next === 'BF' ? 'BST Fastgrow' : 'BST Lokal'}</span></div></a>`).join('')}</div>` : '<p class="muted small" style="margin:0">Tidak ada.</p>'}</div>
-    <div class="card stack"><h2>Stok siap kirim per jenis</h2>${Object.keys(ready).length ? `<dl class="kv">${Object.entries(ready).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<dt>${esc(jn(k))}</dt><dd>${fmt(v)}</dd>`).join('')}</dl>` : '<p class="muted small" style="margin:0">Belum ada.</p>'}</div>
+    <div class="card stack"><h2>Stok siap kirim per jenis</h2>${Object.keys(ready).length ? `<dl class="kv">${Object.entries(ready).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<dt>${esc(jn(k))}</dt><dd>${fmt(v)}${beliReady[k] ? ` <small class="muted">(beli ${fmt(beliReady[k])})</small>` : ''}</dd>`).join('')}</dl>` : '<p class="muted small" style="margin:0">Belum ada.</p>'}</div>
+    ${beliCard()}${afkirCard()}
     ${can ? '<p class="note">Tap bedengan di peta untuk mencatat lot baru, mati/afkir, atau pindah tahap.</p>' : ''}</div>`);
   const map = newMap($('#nmap'), { maxZoom: 23 });
   const grp = window.L.featureGroup();
@@ -38,13 +41,14 @@ export function renderNursery(shell) {
   if (nurseryView) map.setView(nurseryView.c, nurseryView.z); else if (grp.getLayers().length) map.fitBounds(grp.getBounds(), { padding: [6, 6] });
   map.on('moveend', () => { nurseryView = { c: map.getCenter(), z: map.getZoom() }; });
   $$('[data-bed]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); bedSheet(a.dataset.bed, shell); }));
+  bindBeli(document.getElementById('main'), () => renderNursery(shell));
 }
 function bedSheet(kode, shell) {
   const b = L.bed(kode); const ls = L.lotsIn(kode); const f = L.fill(kode), cap = b.kapasitas || 1300;
   const can = isRole('admin', 'nursery', 'crew');
   sheet(`<div class="stack"><div class="row between"><h2>${esc(kode)}</h2><span class="pill s-idle">${esc(b.tahap)}${b.cluster === 'BF' ? ' Fastgrow' : b.cluster === 'BL' ? ' Lokal' : ''}</span></div>
     <div><div class="row between small"><span>Terisi</span><span class="mono">${fmt(f)} / ${fmt(cap)}</span></div><div class="bar"><span style="width:${Math.min(100, f / cap * 100)}%"></span></div></div>
-    ${ls.map(l => { const st = L.stage(l); return `<div class="sec"><div class="row between"><b>${esc(jn(l.jenis))}</b>${st.ready ? '<span class="pill s-ok">Siap kirim</span>' : st.due ? '<span class="pill s-warn">Waktunya pindah</span>' : `<span class="pill s-idle">${st.left} hari lagi</span>`}</div><dl class="kv"><dt>Jumlah</dt><dd>${fmt(l.jumlah)}</dd><dt>Sapih</dt><dd>${tgl(l.tgl_sapih)}</dd><dt>Masuk bedengan</dt><dd>${tgl(l.tgl_masuk)}</dd><dt>Umur</dt><dd>${fmt(G.diffDays(G.today(), l.tgl_sapih) / 7, 1)} minggu</dd></dl>${can ? `<div class="grid2"><button class="btn ghost sm" data-afk="${l.id}">Catat mati/afkir</button>${st.due ? `<button class="btn sm" data-move="${l.id}">Pindahkan</button>` : '<span></span>'}</div>` : ''}</div>`; }).join('') || '<p class="muted small" style="margin:0">Bedengan kosong.</p>'}
+    ${ls.map(l => { const st = L.stage(l); return `<div class="sec"><div class="row between"><b>${esc(jn(l.jenis))}${l.sumber === 'beli' ? ' <span class="pill s-pend">Beli</span>' : ''}</b>${st.aklim ? `<span class="pill s-warn">Aklimatisasi${st.left > 0 ? ' · ' + st.left + ' hari' : ' · hitung'}</span>` : st.ready ? '<span class="pill s-ok">Siap kirim</span>' : st.due ? '<span class="pill s-warn">Waktunya pindah</span>' : `<span class="pill s-idle">${st.left} hari lagi</span>`}</div><dl class="kv"><dt>Jumlah</dt><dd>${fmt(l.jumlah)}</dd>${l.sumber === 'beli' ? `<dt>Asal</dt><dd>Beli · ${esc(S.beli?.find(x => x.id === l.beli_id)?.pemasok || '')}</dd><dt>Datang</dt><dd>${tgl(l.tgl_sapih)}</dd>` : `<dt>Sapih</dt><dd>${tgl(l.tgl_sapih)}</dd>`}<dt>Masuk bedengan</dt><dd>${tgl(l.tgl_masuk)}</dd>${l.sumber === 'beli' ? '' : `<dt>Umur</dt><dd>${fmt(G.diffDays(G.today(), l.tgl_sapih) / 7, 1)} minggu</dd>`}</dl>${can && !st.aklim ? `<div class="grid2"><button class="btn ghost sm" data-afk="${l.id}">Catat mati/afkir</button>${st.due ? `<button class="btn sm" data-move="${l.id}">Pindahkan</button>` : '<span></span>'}</div>` : ''}</div>`; }).join('') || '<p class="muted small" style="margin:0">Bedengan kosong.</p>'}
     ${can && b.tahap === 'Penyapihan' ? `<form class="sec" id="nl"><h3>Lot baru (sapih ke polybag)</h3><div class="grid2"><label class="f" for="nlJ">Jenis<select id="nlJ">${S.jenisAktif.filter(j => j.tersedia !== false).map(j => `<option value="${j.kode}">${esc(j.nama)}</option>`).join('')}</select></label><label class="f" for="nlN">Jumlah bibit<input id="nlN" type="number" min="1" inputmode="numeric" value="${Math.max(0, Math.min(1200, cap - f))}"></label></div>${crewName()}<p class="note">Polybag kecil berkurang otomatis sesuai jumlah bibit.</p><p class="err" id="nlErr" hidden></p><button class="btn" type="submit">Tambah lot</button></form>` : ''}
     <button class="btn ghost block" data-close>Tutup</button></div>`, (box, close) => {
     box.querySelectorAll('[data-afk]').forEach(btn => btn.addEventListener('click', () => { close(); afkirSheet(S.lot.find(x => x.id === btn.dataset.afk), shell); }));
@@ -136,7 +140,9 @@ export function renderTampung(shell) {
       return `<div class="card stack"><div class="row between"><b>${esc(G.blokName(x.b))}</b>${closed ? `<span class="pill ${left < 0 ? 's-bad' : 's-warn'}">${left < 0 ? 'Lewat ' + (-left) + ' hari' : 'Kembalikan ≤ ' + left + ' hari'}</span>` : '<span class="pill s-pend">Blok berjalan</span>'}</div>
       ${x.dk.map(k => `<div class="row between small"><span>Dikirim: ${esc(jn(k.jenis))} ${fmt(k.n)} dari ${esc(k.bedengan || '')}</span>${isRole('admin', 'owner', 'exdas', 'bumdes') ? `<button class="btn sm" data-tr="${k.id}">Terima</button>` : ''}</div>`).join('')}
       ${Object.entries(x.st).map(([k, v]) => `<div class="sec"><div class="row between"><b>${esc(jn(k))}</b><span class="mono">${fmt(v)} bibit</span></div>${nurs || isRole('owner', 'exdas', 'bumdes') ? `<div class="grid2"><button class="btn ghost sm" data-afk="${esc(x.b.id)}|${k}">Catat afkir</button>${nurs ? `<button class="btn sm" data-kb="${esc(x.b.id)}|${k}">Kembalikan ke nursery</button>` : '<span class="small muted">pengembalian dicatat nursery</span>'}</div>` : ''}</div>`).join('')}</div>`; }).join('') || '<div class="card"><p class="muted" style="margin:0">Tidak ada bibit di penampungan.</p></div>'}
+    ${afkirCard()}
     <p class="note">Sisa dikembalikan setelah blok closing (pengingat 3 hari). Bibit di sekat satu blok tidak boleh dipakai blok lain.</p></div>`);
+  bindBeli(document.getElementById('main'), () => renderTampung(shell));
   $$('[data-tr]').forEach(b => b.addEventListener('click', async () => { await upd('kirim', { id: b.dataset.tr }, { status: 'diterima' }); toast('Diterima.'); renderTampung(shell); }));
   $$('[data-afk]').forEach(b => b.addEventListener('click', () => { const [bid, jk] = b.dataset.afk.split('|'); qtySheet(`Afkir di penampungan · ${jn(jk)}`, L.stokTampung(bid)[jk], null, async n => { await ins('tampung_log', { blok_id: bid, jenis: jk, tipe: 'afkir', n, oleh: S.me.id }); toast('Afkir tercatat.'); renderTampung(shell); }); }));
   $$('[data-kb]').forEach(b => b.addEventListener('click', () => {
@@ -145,10 +151,10 @@ export function renderTampung(shell) {
     const src = S.kirim.filter(k => k.blok_id === bid && k.jenis === jk).pop();
     qtySheet(`Kembalikan ${jn(jk)} ke nursery`, L.stokTampung(bid)[jk], `<label class="f" for="qB">Bedengan tujuan <small>dipilih tim nursery</small><select id="qB">${beds.map(x => `<option ${x.kode === src?.bedengan ? 'selected' : ''}>${x.kode}</option>`).join('')}</select></label>`, async (n, box) => {
       const bed = box.querySelector('#qB').value; if (!bed) return toast('Tidak ada bedengan BST yang muat.');
-      const sl = S.lot.find(l => l.id === src?.lot_id); const same = S.lot.find(l => l.bedengan === bed && l.jenis === jk && sl && l.tgl_sapih === sl.tgl_sapih);
+      const sl = S.lot.find(l => l.id === src?.lot_id); const same = S.lot.find(l => l.bedengan === bed && l.jenis === jk && sl && l.tgl_sapih === sl.tgl_sapih && (l.beli_id || null) === (sl.beli_id || null) && !l.aklim_sampai);
       let lotId;
       if (same) { lotId = same.id; await upd('lot', { id: same.id }, { jumlah: same.jumlah + n }); }
-      else { lotId = uid(); await ins('lot', { id: lotId, bedengan: bed, jenis: jk, jumlah: n, tgl_sapih: sl?.tgl_sapih || G.addDays(G.today(), -84), tgl_masuk: sl?.tgl_masuk || G.addDays(G.today(), -14), created_by: S.me.id }); }
+      else { lotId = uid(); await ins('lot', { id: lotId, bedengan: bed, jenis: jk, jumlah: n, tgl_sapih: sl?.tgl_sapih || G.addDays(G.today(), -84), tgl_masuk: sl?.tgl_masuk || G.addDays(G.today(), -14), sumber: sl?.sumber || 'mandiri', beli_id: sl?.beli_id || null, created_by: S.me.id }); }
       await ins('lot_log', { lot_id: lotId, tipe: 'kembali', n, ket: 'dari ' + G.blokName(S.blokMap[bid]), oleh: S.me.id, nama_pencatat: S.me.nama });
       await ins('tampung_log', { blok_id: bid, jenis: jk, tipe: 'kembali', n, bedengan: bed, lot_id: lotId, oleh: S.me.id });
       toast(`${fmt(n)} ${jn(jk)} kembali ke ${bed}.`); renderTampung(shell);
