@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Ubah GeoTIFF orthophoto menjadi ubin XYZ WebP (EPSG:3857) dengan batas ukuran agar muat di GitHub Pages.
 set -euo pipefail
+trap 'echo "::error::ortho.sh gagal di baris $LINENO: $BASH_COMMAND"' ERR
 W="$1"; TAG="$2"; cd "$W"
-SRC=$(ls *.tif *.tiff *.TIF *.TIFF 2>/dev/null | head -1)
-echo "Sumber: $SRC"; gdalinfo "$SRC" | head -30
+SRC=$(find . -maxdepth 1 -type f \( -iname "*.tif" -o -iname "*.tiff" \) | head -1)
+[ -n "$SRC" ] || { echo "::error::Tidak ada file GeoTIFF"; exit 1; }
+echo "Sumber: $SRC"; gdalinfo "$SRC" | head -30 || true
 gdalwarp -q -t_srs EPSG:3857 -r bilinear -dstalpha -multi -wo NUM_THREADS=ALL_CPUS -co TILED=YES -co COMPRESS=DEFLATE -co BIGTIFF=IF_SAFER "$SRC" m.tif
 read RES W84 S84 E84 N84 <<<"$(python3 - <<'P'
 from osgeo import gdal, osr
@@ -36,6 +38,6 @@ mkdir -p "out/$ID" && mv t/* "out/$ID/"
 cat > out/meta.json <<J
 {"id":"$ID","tag":"$TAG","dibuat":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","minzoom":14,"maxzoom":$MZ,"bounds":[$W84,$S84,$E84,$N84],"res_m":$RES,"ext":"webp"}
 J
-cat out/meta.json; find out -name '*.webp' | wc -l; du -sh out
+cat out/meta.json; echo "::notice::Ortho $TAG: zoom 14-$MZ, $(find out -name '*.webp' | wc -l) ubin, $(du -sh out | cut -f1)"
 (cd out && zip -q -r -0 ../ortho.zip .)
 ls -la ortho.zip
