@@ -21,6 +21,7 @@ Berjalan di browser HP, bisa dipasang ke layar utama, dan tetap mencatat saat ta
 |---|---|
 | admin | semua, persetujuan BA, pengguna, cetak tag |
 | spv (SPV Reklamasi) | lihat semua menu, beri nama BASTL, tanggal blok lama, unggah & konfirmasi scan BA, cetak tag |
+| admrek (Admin Reklamasi) | lihat semua menu, cetak tag, cetak BA, unggah & konfirmasi scan BA (tanpa beri nama BASTL, tanggal blok lama, simulasi tanggal) |
 | owner (GL lapangan) | tugas, peta, scan/inspeksi, penampungan, BA, gudang |
 | nursery (GL Nursery) | nursery, kirim bibit, penampungan, gudang, BA |
 | crew (akun bersama) | nursery, gudang |

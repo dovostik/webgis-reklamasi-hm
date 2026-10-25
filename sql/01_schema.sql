@@ -12,7 +12,7 @@ create table if not exists public.profiles (
   nama text not null default '',
   jabatan text not null default '',
   role text not null default 'viewer'
-    check (role in ('admin','spv','owner','nursery','crew','exdas','bumdes','viewer')),
+    check (role in ('admin','spv','admrek','owner','nursery','crew','exdas','bumdes','viewer')),
   aktif boolean not null default true,
   created_at timestamptz not null default now()
 );
@@ -397,6 +397,10 @@ create policy spv_minta on public.minta for insert to authenticated with check (
 create policy spv_ba_u on public.ba for update to authenticated using (public.has_role('spv'));
 create policy spv_sesi_u on public.sesi for update to authenticated using (public.has_role('spv'));
 create policy spv_foto_d on storage.objects for delete to authenticated using (bucket_id = 'foto' and public.has_role('spv'));
+-- Admin Reklamasi: seperti SPV tanpa penamaan BASTL, tanggal blok lama, dan simulasi tanggal
+create policy admrek_ba_u on public.ba for update to authenticated using (public.has_role('admrek'));
+create policy admrek_sesi_u on public.sesi for update to authenticated using (public.has_role('admrek'));
+create policy admrek_foto_d on storage.objects for delete to authenticated using (bucket_id = 'foto' and public.has_role('admrek'));
 -- pengaturan bersama (simulasi tanggal uji coba)
 create table if not exists public.setting (k text primary key, v jsonb not null default '0', updated_by uuid references public.profiles(id), updated_at timestamptz not null default now());
 alter table public.setting enable row level security;

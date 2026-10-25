@@ -27,6 +27,7 @@ const LBL = { beranda: 'Beranda', peta: 'Peta', tugas: 'Tugas', scan: 'Scan tag'
 const MENU = {
   admin: ['beranda', 'tugas', 'peta', 'kirim', 'lainnya'],
   spv: ['beranda', 'tugas', 'peta', 'nursery', 'lainnya'],
+  admrek: ['beranda', 'peta', 'nursery', 'ba', 'lainnya'],
   owner: ['tugas', 'peta', 'scan', 'tampung', 'lainnya'],
   nursery: ['nursery', 'kirim', 'tampung', 'gudang', 'lainnya'],
   crew: ['nursery', 'gudang', 'lainnya'],
@@ -37,6 +38,7 @@ const MENU = {
 const MORE = {
   admin: ['nursery', 'tampung', 'gudang', 'ba', 'scan', 'admin', 'master', 'cetak', 'akun'],
   spv: ['kirim', 'tampung', 'gudang', 'ba', 'cetak', 'akun'],
+  admrek: ['tugas', 'kirim', 'tampung', 'gudang', 'cetak', 'akun'],
   owner: ['ba', 'gudang', 'akun'],
   nursery: ['ba', 'master', 'akun'],
   crew: ['akun'],
