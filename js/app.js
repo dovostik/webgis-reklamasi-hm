@@ -1,7 +1,8 @@
 // Shell aplikasi: login, menu per peran, router, beranda, peta, detail blok, admin.
 import { SB } from './sb.js';
-import { S, L, loadAll, derive, ins, upd, flush, pending, netState, $, $$, toast, sheet, confirmSheet, uid, nm, newMap, locateControl } from './core.js';
+import { S, L, loadAll, derive, ins, upd, flush, pending, netState, isOnline, $, $$, toast, sheet, confirmSheet, uid, nm, newMap, locateControl } from './core.js';
 import * as G from './logic.js';
+import { downloadTiles, tileList, tileInfo, tileJob, canInstall, isInstalled, promptInstall, persist } from './offline.js';
 import { renderSesi, openScan, tagSheet, vendorNewTag } from './field.js';
 import { renderNursery, renderKirim, renderTampung, renderGudang } from './nursery.js';
 import { renderBAList, renderBA, approvePeriode, renderCetakTag } from './ba.js';
@@ -50,7 +51,7 @@ function shell(title, sub, body) {
   const tabs = (MENU[r] || []).map(k => `<a href="#${k}" class="${cur === k || (k === 'lainnya' && MORE[r]?.includes(cur)) ? 'on' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>${LBL[k]}${badges[k] ? `<span class="badge">${badges[k]}</span>` : ''}</a>`).join('');
   app.className = '';
   app.innerHTML = `<header class="top"><div class="logo"><img src="img/logo.svg" alt="PT Hamparan Mulya"></div><div class="t"><b>${esc(title)}</b><span>${esc(sub || (S.me ? S.me.nama + ' · ' + G.ROLE_LBL[r] : ''))}</span></div><span class="net" id="net">Online</span></header><main id="main">${G.SIM ? `<div class="alert warn" style="margin-bottom:12px">Mode uji coba: tanggal sistem ${tgl(G.today())} (dimajukan ${G.SIM} hari).</div>` : ''}${body}</main><nav class="tabs">${tabs}</nav>`;
-  netState(navigator.onLine);
+  netState(isOnline());
   return $('#main');
 }
 function countBadges() {
@@ -272,7 +273,7 @@ function renderBlok(id) {
   on('#vTag', async () => { await vendorNewTag(b, p); route(); });
   on('#vDone', async () => { if (!(await confirmSheet(`Nyatakan ${p.tipe === 'retensi' ? 'retensi' : 'perawatan'} di ${esc(G.blokName(b))} selesai? GL akan menerima tugas inspeksi 7 hari setelah sulam terakhir.`))) return; await upd('periode', { id: p.id }, { status: 'siap_inspeksi' }); toast('Dilaporkan selesai. Tugas inspeksi masuk ke GL.'); route(); });
   on('#vSulamDone', async () => { const next = p.hasil?.final ? 'menunggu_persetujuan' : 'verifikasi'; await upd('periode', { id: p.id }, { status: next }); toast(next === 'verifikasi' ? 'Sulam selesai. GL akan memverifikasi tag GL.' : 'Sulam selesai. Menunggu persetujuan owner.'); route(); });
-  on('#gStart', async () => { const sid = uid(); await ins('sesi', { id: sid, periode_id: p.id, blok_id: id, tipe: p.status === 'verifikasi' ? 'verifikasi' : 'inspeksi', oleh: S.me.id }, { offline: false }); await upd('periode', { id: p.id }, { status: 'inspeksi' }, { offline: false }); location.hash = '#sesi/' + sid; });
+  on('#gStart', async () => { const sid = uid(); await ins('sesi', { id: sid, periode_id: p.id, blok_id: id, tipe: p.status === 'verifikasi' ? 'verifikasi' : 'inspeksi', oleh: S.me.id }); await upd('periode', { id: p.id }, { status: 'inspeksi' }); location.hash = '#sesi/' + sid; });
   on('#aOk', async () => { await approvePeriode(p); route(); });
   on('#aSave', async () => { await upd('blok', { id }, { tgl_tanam: $('#aT').value || null, tgl_rotasi_terakhir: $('#aR').value || null }); toast('Tanggal tersimpan.'); route(); });
 }
@@ -301,14 +302,33 @@ function simCard() {
   if (!isRole('admin', 'spv')) return '';
   return `<div class="card stack"><h2>Simulasi waktu (uji coba)</h2><p class="small" style="margin:0">Tanggal sistem: <b>${tgl(G.today())}</b>${G.SIM ? ` · dimajukan <b>${G.SIM} hari</b> dari tanggal asli` : ' · tanggal asli'}.</p><div class="grid2"><button class="btn ghost" data-sim="1">+1 hari</button><button class="btn ghost" data-sim="7">+7 hari</button></div>${G.SIM ? '<button class="btn ghost block" data-sim="0">Kembali ke tanggal asli</button>' : ''}<p class="note">Berlaku untuk semua akun. Dipakai untuk menguji kunci 7 hari, retensi 30 hari, dan jadwal rotasi tanpa menunggu. Kembalikan ke tanggal asli sebelum aplikasi dipakai sungguhan.</p></div>`;
 }
+function offCard() {
+  const ti = tileInfo(), job = tileJob(), n = S.ready ? tileList(S).length : 0;
+  return `<div class="card stack"><h2>Offline di lapangan</h2>
+    <dl class="kv"><dt>Data terakhir</dt><dd>${S.snapAt ? tgl(S.snapAt) + ' ' + jam(S.snapAt) : '–'}${S.offline ? ' (offline)' : ''}</dd><dt>Belum terkirim</dt><dd>${pending()} catatan</dd><dt>Peta satelit offline</dt><dd id="tileSt">${job ? `mengunduh ${job.done}/${job.total}` : ti ? `${fmt(ti.total)} ubin · ${tgl(ti.at)}` : 'belum diunduh'}</dd></dl>
+    <button class="btn ghost block" id="tileGo" ${job ? 'disabled' : ''}>${ti ? 'Perbarui' : 'Unduh'} peta offline area kerja (${fmt(n)} ubin)</button>
+    ${!isInstalled() ? `<button class="btn block" id="instGo">Pasang aplikasi di HP</button>` : '<p class="note" style="margin:0">Aplikasi sudah terpasang di HP.</p>'}
+    <p class="note">Tanpa sinyal, semua catatan (tag, sulam, sesi inspeksi, foto, nursery, gudang) disimpan di HP dan dikirim otomatis begitu ada sinyal. Unduh peta saat ada wifi atau sinyal bagus, sekali saja; perbarui bila ada blok baru.</p></div>`;
+}
+function bindOff() {
+  const tg = $('#tileGo'); if (tg) tg.addEventListener('click', () => startTiles(true));
+  const ig = $('#instGo'); if (ig) ig.addEventListener('click', async () => { if (canInstall()) { if (await promptInstall()) toast('Aplikasi dipasang. Buka dari ikon Reklamasi HM di layar utama.'); } else toast('Di Chrome: ketuk menu ⋮ lalu "Instal aplikasi" atau "Tambahkan ke layar utama".', 5000); });
+}
+function startTiles(manual) {
+  if (!navigator.onLine) { if (manual) toast('Butuh sinyal untuk mengunduh peta.'); return; }
+  const p = downloadTiles(S, st => { const el = document.getElementById('tileSt'); if (el) el.textContent = `mengunduh ${st.done}/${st.total}`; });
+  if (manual) toast('Mengunduh peta offline di latar belakang…');
+  p.then(r => { if (manual || r.fail) toast(r.fail ? `Peta offline: ${r.fail} ubin gagal, coba Perbarui lagi.` : 'Peta offline siap dipakai tanpa sinyal.'); if (location.hash === '#lainnya') renderLainnya(); });
+}
 function renderLainnya() {
   const r = role();
-  shell('Lainnya', null, `${simCard()}<div class="list">${(MORE[r] || []).map(k => `<a class="item" href="#${k}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">${ICON[k] || ICON.tugas}</svg><div class="grow"><b>${LBL[k]}</b></div></a>`).join('')}</div>`);
+  shell('Lainnya', null, `${simCard()}${offCard()}<div class="list">${(MORE[r] || []).map(k => `<a class="item" href="#${k}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">${ICON[k] || ICON.tugas}</svg><div class="grow"><b>${LBL[k]}</b></div></a>`).join('')}</div>`);
   $$('[data-sim]').forEach(b => b.addEventListener('click', async () => { const d = +b.dataset.sim; const n = d === 0 ? 0 : G.SIM + d; try { await upd('setting', { k: 'sim_days' }, { v: n, updated_by: S.me.id }, { offline: false }); toast(n ? `Tanggal sistem dimajukan ${n} hari.` : 'Kembali ke tanggal asli.'); renderLainnya(); } catch (e) { toast(e.message); } }));
+  bindOff();
 }
 function renderAkun() {
   shell('Akun saya', null, `<div class="stack"><div class="card"><dl class="kv"><dt>Nama</dt><dd>${esc(S.me.nama)}</dd><dt>Jabatan</dt><dd>${esc(S.me.jabatan || '–')}</dd><dt>Peran</dt><dd>${esc(G.ROLE_LBL[role()])}</dd><dt>Mode</dt><dd>${SB.mode === 'demo' ? 'Demo (data di HP)' : 'Online'}</dd><dt>Antrean offline</dt><dd>${pending()}</dd></dl></div>
-    <button class="btn ghost block" id="sync">Muat ulang data</button><button class="btn bad block" id="out">Keluar</button>
+    <button class="btn ghost block" id="sync">Perbarui data</button><button class="btn bad block" id="out">Keluar</button>
     <p class="note">Pasang di layar utama: buka menu browser lalu pilih "Tambahkan ke layar utama".</p></div>`);
   $('#sync').addEventListener('click', async () => { await flush(); await loadAll(); toast('Data diperbarui.'); });
   $('#out').addEventListener('click', async () => { if (pending() && !(await confirmSheet('Masih ada data yang belum terkirim. Tetap keluar?', 'Keluar', true))) return; await SB.logout(); location.hash = ''; renderLogin(); });
@@ -346,10 +366,11 @@ async function boot() {
     if (!u) { if (SB.mode === 'demo') await loadAll().catch(() => {}); return renderLogin(); }
     await loadAll();
     if (!S.me) { const u = SB.user() || {}; const dbg = SB.debug ? await SB.debug().catch(e => e.message) : ''; return renderLogin(`Akun Anda belum terdaftar di aplikasi. Hubungi administrator. [cek: ${u.email || '-'} · id ${String(u.id || '-').slice(0, 8)} · profil terbaca ${S.profiles.length} · blok terbaca ${S.blok.length} · ${dbg}]`); }
-    route(); flush();
+    route(); flush(); persist();
+    if (SB.mode !== 'demo' && !tileInfo() && navigator.onLine && !(navigator.connection && navigator.connection.saveData)) setTimeout(() => startTiles(false), 4000);
   } catch (e) {
     if (e.status === 401) { await SB.logout(); return renderLogin('Sesi berakhir. Silakan masuk lagi.'); }
-    app.className = ''; app.innerHTML = `<main><div class="card stack"><h1>Tidak bisa memuat data</h1><p class="small">${esc(e.message)}</p><button class="btn" onclick="location.reload()">Coba lagi</button></div></main>`;
+    app.className = ''; app.innerHTML = `<main><div class="card stack"><h1>Tidak bisa memuat data</h1><p class="small">${e.net ? 'Belum ada salinan data di HP ini. Buka aplikasi sekali saat ada sinyal, setelah itu bisa dipakai tanpa sinyal.' : esc(e.message)}</p><button class="btn" onclick="location.reload()">Coba lagi</button></div></main>`;
   }
 }
 export { shell, boot };

@@ -1,6 +1,6 @@
 // Berita acara: persetujuan owner, terbit nomor, cetak, unggah scan, hapus foto; cetak tag QR.
 import { SB } from './sb.js';
-import { S, L, ins, upd, $, $$, toast, confirmSheet, uid, nm, pickFile } from './core.js';
+import { S, L, ins, upd, $, $$, toast, confirmSheet, uid, nm, pickFile, fileUrl } from './core.js';
 import * as G from './logic.js';
 import { isRole, seesBlok } from './app.js';
 const { esc, fmt, tgl } = G;
@@ -147,7 +147,7 @@ export function renderBA(id, shell) {
     ${kp ? lampiran(a) : ''}</div>`);
   $('#bPrint').addEventListener('click', () => window.print());
   const qr = $('#baqr'); if (qr && window.QRCode) new window.QRCode(qr, { text: qr.dataset.qr, width: 84, height: 84, correctLevel: window.QRCode.CorrectLevel.M });
-  $$('img[data-foto]').forEach(async im => { try { im.src = await SB.signedUrl('foto', im.dataset.foto); } catch (e) {} });
+  $$('img[data-foto]').forEach(async im => { try { im.src = await fileUrl('foto', im.dataset.foto); } catch (e) {} });
   const sv = $('#bScanV'); if (sv) sv.addEventListener('click', async () => { try { window.open(await SB.signedUrl('scan', a.scan_path), '_blank'); } catch (e) { toast(e.message); } });
   const su = $('#bScan'); if (su) su.addEventListener('click', async () => {
     const f = await pickFile('image/*,application/pdf'); if (!f) return;

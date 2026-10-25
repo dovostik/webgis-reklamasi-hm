@@ -1,6 +1,6 @@
 // Lapangan: sesi inspeksi GL (jejak GPS, scan tag, foto), scan tag umum, sulam vendor.
 import { SB } from './sb.js';
-import { S, L, ins, upd, $, $$, toast, sheet, confirmSheet, uid, nm, GPS, dist, waitGPS, scanQR, pickPhoto, newMap, locateControl } from './core.js';
+import { S, L, ins, upd, $, $$, toast, sheet, confirmSheet, uid, nm, GPS, dist, waitGPS, scanQR, pickPhoto, newMap, locateControl, uploadOrQueue, fileUrl } from './core.js';
 import * as G from './logic.js';
 import { role, seesBlok, route, tagColor, tagItem } from './app.js';
 const { esc, fmt, tgl, jam } = G;
@@ -67,7 +67,7 @@ export function renderSesi(id, shell) {
   </div>`);
   void el;
   // gambar foto
-  $$('img[data-src]').forEach(async im => { try { im.src = await SB.signedUrl('foto', im.dataset.src); } catch (e) {} });
+  $$('img[data-src]').forEach(async im => { try { im.src = await fileUrl('foto', im.dataset.src); } catch (e) {} });
   // peta
   const map = newMap($('#smap')); const gj = window.L.geoJSON(b.geom, { style: { color: '#fff', weight: 2, fillOpacity: .08 } }).addTo(map); map.fitBounds(gj.getBounds(), { padding: [10, 10] });
   const line = window.L.polyline(track.map(x => [x[1], x[0]]), { color: '#29B6F6', weight: 3 }).addTo(map);
@@ -105,26 +105,26 @@ export function renderSesi(id, shell) {
   $$('[data-ph]').forEach(btn => btn.addEventListener('click', async () => {
     if (!mine) return; const i = +btn.dataset.ph; const blob = await pickPhoto(); if (!blob) return;
     const path = `${s.id}/${i + 1}-${Date.now()}.jpg`;
-    try { btn.innerHTML = '…'; await SB.upload('foto', path, blob); const f = [...(s.foto || [])]; f[i] = path; await upd('sesi', { id: s.id }, { foto: f.filter(Boolean) }, { offline: false }); renderSesi(id, shell); }
-    catch (e) { toast(e.net ? 'Foto butuh sinyal untuk diunggah. Coba lagi saat ada sinyal.' : e.message); btn.innerHTML = '+ foto'; }
+    try { btn.innerHTML = '…'; const how = await uploadOrQueue('foto', path, blob); const f = [...(s.foto || [])]; f[i] = path; await upd('sesi', { id: s.id }, { foto: f.filter(Boolean) }); if (how === 'queued') toast('Foto disimpan di HP, diunggah otomatis saat ada sinyal.'); renderSesi(id, shell); }
+    catch (e) { toast(e.message); btn.innerHTML = '+ foto'; }
   }));
   // tutup sesi
   const cl = $('#sClose'); if (cl) cl.addEventListener('click', async () => {
     const realS = L.realisasi(b); const tot = realS.pio + realS.sis; const pct = tot ? (tot - dead.size) / tot * 100 : 0;
     if (!(await confirmSheet(`Tutup sesi dengan ${dead.size} tanaman mati? Persen hidup ${fmt(pct, 2)}%. ${pct >= G.STD.ambang ? 'Vendor wajib menyulam semua tag GL, lalu BA menunggu persetujuan owner.' : 'Di bawah 90%: vendor menyulam tag GL, lalu GL verifikasi ulang.'}`, 'Tutup sesi'))) return;
     try {
-      await upd('sesi', { id: s.id }, { track, selesai_at: new Date().toISOString() }, { offline: false });
+      await upd('sesi', { id: s.id }, { track, selesai_at: new Date().toISOString() });
       const sesiList = S.sesi.filter(x => x.periode_id === p.id);
       const sen = L.sensus(p, b, sesiList);
-      await upd('sesi', { id: s.id }, { pct: sen.pct, hasil: { rows: sen.rows, aktual: sen.aktual } }, { offline: false });
+      await upd('sesi', { id: s.id }, { pct: sen.pct, hasil: { rows: sen.rows, aktual: sen.aktual } });
       const openGl = L.openGL(p).length;
       const final = sen.pct >= G.STD.ambang;
-      await upd('periode', { id: p.id }, { status: openGl ? 'sulam_gl' : 'menunggu_persetujuan', pct: sen.pct, hasil: { final, rows: sen.rows, sesi_id: s.id } }, { offline: false });
+      await upd('periode', { id: p.id }, { status: openGl ? 'sulam_gl' : 'menunggu_persetujuan', pct: sen.pct, hasil: { final, rows: sen.rows, sesi_id: s.id } });
       try { localStorage.removeItem(LK); } catch (e) {}
       if (trackUnsub) trackUnsub(); clearInterval(trackTimer);
       toast(`Sesi ditutup · ${fmt(sen.pct, 2)}%. ${openGl ? openGl + ' tag GL dikirim ke vendor untuk disulam.' : 'Menunggu persetujuan owner.'}`, 4000);
       location.hash = '#blok/' + encodeURIComponent(b.id);
-    } catch (e) { toast(e.net ? 'Menutup sesi butuh sinyal. Coba lagi saat ada sinyal.' : e.message); }
+    } catch (e) { toast(e.message); }
   });
 }
 

@@ -21,8 +21,11 @@ function hdr(extra = {}) {
 }
 async function req(path, opts = {}, retry = true) {
   let r;
-  try { r = await fetch(base() + path, opts); }
+  // sinyal lemah: batasi waktu tunggu agar aplikasi beralih ke data di HP (unggah file diberi waktu lebih lama)
+  const ctl = new AbortController(); const tmo = setTimeout(() => ctl.abort(), opts.body instanceof Blob ? 90000 : 15000);
+  try { r = await fetch(base() + path, { ...opts, signal: ctl.signal }); }
   catch (e) { throw new NetError('Tidak ada koneksi'); }
+  finally { clearTimeout(tmo); }
   if (r.status === 401 && retry && session?.refresh_token) {
     const ok = await refresh();
     if (ok) { opts.headers = { ...opts.headers, Authorization: 'Bearer ' + session.access_token }; return req(path, opts, false); }

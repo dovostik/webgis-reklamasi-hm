@@ -1,6 +1,7 @@
 // Inti: state, pemuatan data, antrean offline, GPS, scanner QR, foto, util UI.
 import { SB } from './sb.js';
 import { makeLogic, esc, setSim } from './logic.js';
+import { kvGet, kvSet, blobGet, blobSet, blobDel, SAT_URL } from './offline.js';
 
 export const S = { me: null, ready: false };
 export let L = null;
@@ -8,11 +9,33 @@ const TABLES = ['setting', 'profiles', 'jenis', 'blok', 'periode', 'sesi', 'tag'
 const PK = { jenis: 'kode', bedengan: 'kode', barang: 'nama', setting: 'k' };
 const pkOf = t => PK[t] || 'id';
 
+// data dimuat dari server; tanpa sinyal memakai salinan terakhir di HP, lalu antrean lokal diterapkan di atasnya
 export async function loadAll() {
-  const res = await Promise.all(TABLES.map(t => SB.select(t, t === 'barang_tx' ? { order: 'at.desc', limit: 300 } : t === 'lot_log' ? { order: 'at.desc', limit: 500 } : {}).catch(e => { if (e.status === 404) return []; throw e; })));
-  TABLES.forEach((t, i) => { S[t] = res[i] || []; });
+  let res = null;
+  try {
+    res = await Promise.all(TABLES.map(t => SB.select(t, t === 'barang_tx' ? { order: 'at.desc', limit: 300 } : t === 'lot_log' ? { order: 'at.desc', limit: 500 } : {}).catch(e => { if (e.status === 404) return []; throw e; })));
+    TABLES.forEach((t, i) => { S[t] = res[i] || []; });
+    S.offline = false; S.snapAt = new Date().toISOString();
+    saveSnap();
+  } catch (e) {
+    if (!e.net) throw e;
+    const snap = await kvGet(snapKey());
+    if (!snap) throw e;
+    TABLES.forEach(t => { S[t] = snap.data[t] || []; });
+    S.offline = true; S.snapAt = snap.at; netState(false);
+  }
+  replayOutbox();
   derive();
   S.ready = true;
+}
+const snapKey = () => 'snap:' + (SB.user()?.id || 'anon');
+let snapT = null;
+function saveSnap() { clearTimeout(snapT); snapT = setTimeout(() => { const data = {}; TABLES.forEach(t => { data[t] = (S[t] || []).filter(r => !r._pending); }); kvSet(snapKey(), { at: S.snapAt || new Date().toISOString(), data }); }, 300); }
+function replayOutbox() {
+  for (const o of outbox) {
+    if (o.op === 'insert') applyLocal('insert', o.t, o.rows.map(r => ({ ...r, _pending: true, at: r.at || o.at, created_at: r.created_at || o.at })), null, null, true);
+    else if (o.op === 'update') applyLocal('update', o.t, null, o.match, o.patch, true);
+  }
 }
 export function derive() {
   setSim((S.setting || []).find(x => x.k === 'sim_days')?.v || 0);
@@ -29,17 +52,30 @@ const OB = 'hm-outbox';
 let outbox = []; try { outbox = JSON.parse(localStorage.getItem(OB) || '[]'); } catch (e) { outbox = []; }
 const saveOB = () => { try { localStorage.setItem(OB, JSON.stringify(outbox)); } catch (e) {} };
 export const pending = () => outbox.length;
-function applyLocal(op, t, rows, match, patch) {
+// foto: unggah sekarang, atau simpan di HP dan unggah otomatis saat ada sinyal
+export async function uploadOrQueue(bucket, path, blob) {
+  try { await SB.upload(bucket, path, blob); return 'sent'; }
+  catch (e) {
+    if (!e.net) throw e;
+    const key = bucket + '/' + path; await blobSet(key, blob);
+    outbox.push({ op: 'upload', bucket, path, key }); saveOB(); netState(false); return 'queued';
+  }
+}
+export async function fileUrl(bucket, path) {
+  const b = await blobGet(bucket + '/' + path); if (b) return URL.createObjectURL(b);
+  return SB.signedUrl(bucket, path);
+}
+function applyLocal(op, t, rows, match, patch, quiet) {
   S[t] = S[t] || [];
   if (op === 'insert') [].concat(rows).forEach(r => { const k = pkOf(t); const i = S[t].findIndex(x => x[k] === r[k]); if (i >= 0) S[t][i] = { ...S[t][i], ...r }; else S[t].push(r); });
   else S[t].forEach((r, i) => { if (Object.entries(match).every(([k, v]) => String(r[k]) === String(v))) S[t][i] = { ...r, ...(rows && rows.find(x => x[pkOf(t)] === r[pkOf(t)]) || patch) }; });
-  derive();
+  if (!quiet) { derive(); saveSnap(); }
 }
 export async function ins(t, rows, opts = {}) {
   rows = [].concat(rows).map(r => ({ ...r }));
   try { const out = await SB.insert(t, rows); applyLocal('insert', t, out); return out; }
   catch (e) {
-    if (e.net && opts.offline !== false) { outbox.push({ op: 'insert', t, rows }); saveOB(); applyLocal('insert', t, rows.map(r => ({ ...r, _pending: true, at: r.at || new Date().toISOString(), created_at: r.created_at || new Date().toISOString() }))); netState(false); toast('Tersimpan di HP. Dikirim otomatis saat ada sinyal.'); return rows; }
+    if (e.net && opts.offline !== false) { outbox.push({ op: 'insert', t, rows, at: new Date().toISOString() }); saveOB(); applyLocal('insert', t, rows.map(r => ({ ...r, _pending: true, at: r.at || new Date().toISOString(), created_at: r.created_at || new Date().toISOString() }))); netState(false); toast('Tersimpan di HP. Dikirim otomatis saat ada sinyal.'); return rows; }
     throw e;
   }
 }
@@ -56,13 +92,19 @@ export async function flush() {
   try {
     while (outbox.length) {
       const o = outbox[0];
-      try { o.op === 'insert' ? await SB.insert(o.t, o.rows.map(r => { const x = { ...r }; delete x._pending; return x; })) : await SB.update(o.t, o.match, o.patch); outbox.shift(); saveOB(); }
-      catch (e) { if (e.net) { netState(false); break; } console.warn('outbox drop', o, e); outbox.shift(); saveOB(); toast('Satu data gagal disimpan: ' + e.message); }
+      try {
+        if (o.op === 'upload') { const b = await blobGet(o.key); if (b) await SB.upload(o.bucket, o.path, b); await blobDel(o.key); }
+        else if (o.op === 'insert') await SB.insert(o.t, o.rows.map(r => { const x = { ...r }; delete x._pending; return x; }));
+        else await SB.update(o.t, o.match, o.patch);
+        outbox.shift(); saveOB();
+      }
+      catch (e) { if (e.net) { netState(false); break; } if (e.status === 409) { outbox.shift(); saveOB(); continue; } console.warn('outbox drop', o, e); outbox.shift(); saveOB(); toast('Satu data gagal disimpan: ' + e.message); }
     }
     if (!outbox.length) { netState(true); await loadAll(); window.dispatchEvent(new Event('hm:data')); }
   } finally { flushing = false; }
 }
 let online = navigator.onLine;
+export const isOnline = () => online && navigator.onLine;
 export function netState(v) { online = v; const el = document.getElementById('net'); if (el) { el.className = 'net' + (v ? '' : ' off'); el.textContent = v ? (outbox.length ? `${outbox.length} antre` : 'Online') : `Offline${outbox.length ? ' · ' + outbox.length + ' antre' : ''}`; } }
 window.addEventListener('online', () => { netState(true); flush(); });
 window.addEventListener('offline', () => netState(false));
@@ -183,7 +225,7 @@ export function pickFile(accept = 'image/*,application/pdf') {
 // ---------- peta ----------
 export const SAT = () => L_tiles();
 function L_tiles() {
-  const sat = window.L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 19, maxZoom: 22, attribution: 'Citra © Esri, Maxar' });
+  const sat = window.L.tileLayer(SAT_URL, { maxNativeZoom: 18, maxZoom: 22, crossOrigin: true, attribution: 'Citra © Esri, Maxar' });
   const osm = window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxNativeZoom: 19, maxZoom: 22, attribution: '© OpenStreetMap' });
   return { sat, osm };
 }
