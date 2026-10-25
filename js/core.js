@@ -1,11 +1,11 @@
 // Inti: state, pemuatan data, antrean offline, GPS, scanner QR, foto, util UI.
 import { SB } from './sb.js';
-import { makeLogic, esc } from './logic.js';
+import { makeLogic, esc, setSim } from './logic.js';
 
 export const S = { me: null, ready: false };
 export let L = null;
-const TABLES = ['profiles', 'jenis', 'blok', 'periode', 'sesi', 'tag', 'tag_event', 'bedengan', 'nursery_fitur', 'lot', 'lot_log', 'minta', 'kirim', 'tampung_log', 'barang', 'barang_tx', 'alat', 'pinjam', 'ba'];
-const PK = { jenis: 'kode', bedengan: 'kode', barang: 'nama' };
+const TABLES = ['setting', 'profiles', 'jenis', 'blok', 'periode', 'sesi', 'tag', 'tag_event', 'bedengan', 'nursery_fitur', 'lot', 'lot_log', 'minta', 'kirim', 'tampung_log', 'barang', 'barang_tx', 'alat', 'pinjam', 'ba'];
+const PK = { jenis: 'kode', bedengan: 'kode', barang: 'nama', setting: 'k' };
 const pkOf = t => PK[t] || 'id';
 
 export async function loadAll() {
@@ -15,6 +15,7 @@ export async function loadAll() {
   S.ready = true;
 }
 export function derive() {
+  setSim((S.setting || []).find(x => x.k === 'sim_days')?.v || 0);
   S.jenisMap = Object.fromEntries(S.jenis.map(j => [j.kode, j]));
   S.blokMap = Object.fromEntries(S.blok.map(b => [b.id, b]));
   S.bedMap = Object.fromEntries(S.bedengan.map(b => [b.kode, b]));

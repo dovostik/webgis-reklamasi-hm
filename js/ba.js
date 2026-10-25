@@ -19,7 +19,7 @@ export async function approvePeriode(p) {
   if (!(await confirmSheet(`Setujui hasil ${fmt(p.pct, 2)}% di ${esc(G.blokName(b))} dan terbitkan BA?`, 'Setujui & terbitkan'))) return;
   const jenis = p.tipe === 'cek1' ? ['PP', 'KP'] : p.tipe === 'retensi' ? ['KPR'] : ['PP', 'KP'];
   const unit = p.vendor === 'exdas' ? 'TEWEH' : 'BUMDES';
-  const now = new Date(), rom = G.ROM[new Date(now.getTime() + 7 * 3600e3).getUTCMonth()], th = new Date(now.getTime() + 7 * 3600e3).getUTCFullYear();
+  const td = G.toDate(G.today()), rom = G.ROM[td.getUTCMonth()], th = td.getUTCFullYear();
   const sesiList = S.sesi.filter(s => s.periode_id === p.id && s.selesai_at);
   const gl = sesiList.length ? S.profMap[sesiList[sesiList.length - 1].oleh] : null;
   const tanam = {}; S.tampung_log.filter(l => l.blok_id === b.id && l.tipe === 'tanam').forEach(l => { tanam[l.jenis] = (tanam[l.jenis] || 0) + l.n; });

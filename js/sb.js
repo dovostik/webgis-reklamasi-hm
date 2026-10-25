@@ -88,11 +88,11 @@ function makeMock() {
   let db = null;
   try { db = JSON.parse(localStorage.getItem(MK) || 'null'); } catch (e) { db = null; }
   if (!db) db = JSON.parse(JSON.stringify(window.__DEMO_SEED__ || {}));
-  db.counter = db.counter || {}; db.files = db.files || {};
+  db.counter = db.counter || {}; db.files = db.files || {}; if (!db.setting) db.setting = [{ k: 'sim_days', v: 0 }];
   const persist = () => { try { localStorage.setItem(MK, JSON.stringify(db)); } catch (e) {} };
   const now = () => new Date().toISOString();
   const tbl = t => (db[t] = db[t] || []);
-  const pk = { blok: 'id', jenis: 'kode', bedengan: 'kode', barang: 'nama', tag: 'id', counter: 'name' };
+  const pk = { blok: 'id', jenis: 'kode', bedengan: 'kode', barang: 'nama', tag: 'id', counter: 'name', setting: 'k' };
   const TIME = { periode: 'created_at', sesi: 'mulai_at', tag: 'created_at', tag_event: 'at', lot: 'created_at', lot_log: 'at', minta: 'created_at', kirim: 'dikirim_at', tampung_log: 'at', barang_tx: 'at', pinjam: 'at', ba: 'created_at' };
   const DEF = { minta: { status: 'terbuka', pio: 0, sis: 0 }, kirim: { status: 'dikirim' }, tag: { status: 'mati', low_acc: false }, periode: { status: 'pelaksanaan', nomor: 1 }, sesi: { track: [], foto: [] }, ba: { data: {} } };
   let seq = 1;

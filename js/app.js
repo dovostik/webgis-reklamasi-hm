@@ -49,7 +49,7 @@ function shell(title, sub, body) {
   const badges = countBadges();
   const tabs = (MENU[r] || []).map(k => `<a href="#${k}" class="${cur === k || (k === 'lainnya' && MORE[r]?.includes(cur)) ? 'on' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>${LBL[k]}${badges[k] ? `<span class="badge">${badges[k]}</span>` : ''}</a>`).join('');
   app.className = '';
-  app.innerHTML = `<header class="top"><div class="logo"><img src="img/logo.svg" alt="PT Hamparan Mulya"></div><div class="t"><b>${esc(title)}</b><span>${esc(sub || (S.me ? S.me.nama + ' · ' + G.ROLE_LBL[r] : ''))}</span></div><span class="net" id="net">Online</span></header><main id="main">${body}</main><nav class="tabs">${tabs}</nav>`;
+  app.innerHTML = `<header class="top"><div class="logo"><img src="img/logo.svg" alt="PT Hamparan Mulya"></div><div class="t"><b>${esc(title)}</b><span>${esc(sub || (S.me ? S.me.nama + ' · ' + G.ROLE_LBL[r] : ''))}</span></div><span class="net" id="net">Online</span></header><main id="main">${G.SIM ? `<div class="alert warn" style="margin-bottom:12px">Mode uji coba: tanggal sistem ${tgl(G.today())} (dimajukan ${G.SIM} hari).</div>` : ''}${body}</main><nav class="tabs">${tabs}</nav>`;
   netState(navigator.onLine);
   return $('#main');
 }
@@ -297,9 +297,14 @@ async function laporTanam(b, p) {
 }
 
 // ---------- lainnya, akun, admin pengguna ----------
+function simCard() {
+  if (!isRole('admin', 'spv')) return '';
+  return `<div class="card stack"><h2>Simulasi waktu (uji coba)</h2><p class="small" style="margin:0">Tanggal sistem: <b>${tgl(G.today())}</b>${G.SIM ? ` · dimajukan <b>${G.SIM} hari</b> dari tanggal asli` : ' · tanggal asli'}.</p><div class="grid2"><button class="btn ghost" data-sim="1">+1 hari</button><button class="btn ghost" data-sim="7">+7 hari</button></div>${G.SIM ? '<button class="btn ghost block" data-sim="0">Kembali ke tanggal asli</button>' : ''}<p class="note">Berlaku untuk semua akun. Dipakai untuk menguji kunci 7 hari, retensi 30 hari, dan jadwal rotasi tanpa menunggu. Kembalikan ke tanggal asli sebelum aplikasi dipakai sungguhan.</p></div>`;
+}
 function renderLainnya() {
   const r = role();
-  shell('Lainnya', null, `<div class="list">${(MORE[r] || []).map(k => `<a class="item" href="#${k}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">${ICON[k] || ICON.tugas}</svg><div class="grow"><b>${LBL[k]}</b></div></a>`).join('')}</div>`);
+  shell('Lainnya', null, `${simCard()}<div class="list">${(MORE[r] || []).map(k => `<a class="item" href="#${k}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">${ICON[k] || ICON.tugas}</svg><div class="grow"><b>${LBL[k]}</b></div></a>`).join('')}</div>`);
+  $$('[data-sim]').forEach(b => b.addEventListener('click', async () => { const d = +b.dataset.sim; const n = d === 0 ? 0 : G.SIM + d; try { await upd('setting', { k: 'sim_days' }, { v: n, updated_by: S.me.id }, { offline: false }); toast(n ? `Tanggal sistem dimajukan ${n} hari.` : 'Kembali ke tanggal asli.'); renderLainnya(); } catch (e) { toast(e.message); } }));
 }
 function renderAkun() {
   shell('Akun saya', null, `<div class="stack"><div class="card"><dl class="kv"><dt>Nama</dt><dd>${esc(S.me.nama)}</dd><dt>Jabatan</dt><dd>${esc(S.me.jabatan || '–')}</dd><dt>Peran</dt><dd>${esc(G.ROLE_LBL[role()])}</dd><dt>Mode</dt><dd>${SB.mode === 'demo' ? 'Demo (data di HP)' : 'Online'}</dd><dt>Antrean offline</dt><dd>${pending()}</dd></dl></div>

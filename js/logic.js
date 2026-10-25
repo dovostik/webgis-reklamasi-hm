@@ -12,7 +12,10 @@ export const TIPE_LBL = { cek1: 'Cek 1 penanaman', retensi: 'Retensi', rotasi: '
 
 // ---------- tanggal ----------
 export const DAY = 864e5;
-export const today = () => new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10); // tanggal WIB
+// SIM: geser tanggal untuk uji coba (diatur admin/SPV, berlaku untuk semua akun)
+export let SIM = 0;
+export const setSim = n => { SIM = Number(n) || 0; };
+export const today = () => new Date(Date.now() + 7 * 3600e3 + SIM * 864e5).toISOString().slice(0, 10); // tanggal WIB
 export const toDate = s => s ? new Date(String(s).length <= 10 ? s + 'T12:00:00Z' : s) : null;
 export const iso = d => d.toISOString().slice(0, 10);
 export const addDays = (s, n) => { const d = toDate(s); d.setUTCDate(d.getUTCDate() + n); return iso(d); };

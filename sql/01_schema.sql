@@ -397,3 +397,10 @@ create policy spv_minta on public.minta for insert to authenticated with check (
 create policy spv_ba_u on public.ba for update to authenticated using (public.has_role('spv'));
 create policy spv_sesi_u on public.sesi for update to authenticated using (public.has_role('spv'));
 create policy spv_foto_d on storage.objects for delete to authenticated using (bucket_id = 'foto' and public.has_role('spv'));
+-- pengaturan bersama (simulasi tanggal uji coba)
+create table if not exists public.setting (k text primary key, v jsonb not null default '0', updated_by uuid references public.profiles(id), updated_at timestamptz not null default now());
+alter table public.setting enable row level security;
+create policy setting_r on public.setting for select to authenticated using (public.my_role() <> 'none');
+create policy setting_u on public.setting for update to authenticated using (public.has_role('admin','spv')) with check (public.has_role('admin','spv'));
+grant select, update on public.setting to authenticated;
+insert into public.setting (k, v) values ('sim_days', '0') on conflict (k) do nothing;
