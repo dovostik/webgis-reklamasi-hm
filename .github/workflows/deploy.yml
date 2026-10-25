@@ -16,12 +16,12 @@ concurrency:
   cancel-in-progress: false
 jobs:
   ortho:
-    if: github.event_name == 'release' && startsWith(github.event.release.tag_name, 'ortho-') && github.event.release.tag_name != 'ortho-tiles'
+    if: (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'ortho-') && github.event.release.tag_name != 'ortho-tiles') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ortho-uji]'))
     runs-on: ubuntu-24.04
     timeout-minutes: 300
     env:
       GH_TOKEN: ${{ github.token }}
-      TAG: ${{ github.event.release.tag_name }}
+      TAG: ${{ github.event.release.tag_name || 'ortho-uji' }}
     steps:
       - uses: actions/checkout@v4
         with: { sparse-checkout: tools }
@@ -30,7 +30,7 @@ jobs:
       - name: Unduh GeoTIFF
         run: |
           mkdir -p work && cd work
-          gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p "*.tif" -p "*.tiff" -p "*.TIF" -p "*.TIFF"
+          if [ "${{ github.event_name }}" = "push" ]; then cp ../tools/uji/uji_ortho.tif .; else gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p "*.tif" -p "*.tiff" -p "*.TIF" -p "*.TIFF"; fi
           ls -la
       - name: Potong menjadi ubin
         run: bash tools/ortho.sh work "$TAG"
