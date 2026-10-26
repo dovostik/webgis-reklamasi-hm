@@ -489,3 +489,7 @@ language sql stable security definer set search_path = public as $$
   select exists(select 1 from public.blok b where b.id = bid and (public.can_see_layer(b.layer) or (b.asal_bastl and public.my_role() = 'exdas')))
 $$;
 alter policy r on public.blok using (public.can_see_layer(layer) or (asal_bastl and public.my_role() = 'exdas'));
+-- alur ExDAS baru: BA PP diajukan vendor (4 foto kegiatan), BA KP diajukan GL, BA KPR diajukan ExDAS; semua disetujui admin (tanda tangan elektronik)
+alter table public.periode drop constraint if exists periode_status_check;
+alter table public.periode add constraint periode_status_check check (status in ('pelaksanaan','pp_diajukan','siap_inspeksi','inspeksi','sulam_gl','verifikasi','ajukan_ba','menunggu_persetujuan','selesai'));
+alter table public.periode add column if not exists pp jsonb;

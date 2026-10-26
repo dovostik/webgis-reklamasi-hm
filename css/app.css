@@ -149,3 +149,5 @@ td.r,th.r{text-align:right}
 .dn-t.dk{fill:#fff}
 .dn-beli{font-family:var(--f-mono,ui-monospace,monospace);font-weight:700;fill:#4F739A;text-anchor:middle;pointer-events:none}
 .dn-fac{font-size:16px;font-weight:600;fill:#222;text-anchor:middle;dominant-baseline:middle;pointer-events:none}
+.doc .ttd em.esign{display:block;margin:8px auto 0;max-width:180px;border:1.5px solid #1D6B47;color:#1D6B47;border-radius:6px;padding:3px 6px;font-style:normal;font-family:Arial,sans-serif;font-size:9.5px;line-height:1.35}
+.doc .ttd span.es{margin-top:6px}

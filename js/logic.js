@@ -5,9 +5,10 @@ export const KONDISI = [['pmk', 'PMK spreading'], ['tergenang', 'Tergenang'], ['
 export const KONDLBL = Object.fromEntries(KONDISI);
 export const ROLE_LBL = { admin: 'Administrator', spv: 'SPV Reklamasi', admrek: 'Admin Reklamasi', owner: 'GL lapangan', nursery: 'GL Nursery', crew: 'Tenaga harian nursery', exdas: 'Vendor ExDAS', bumdes: 'Vendor BUMDES', viewer: 'Atasan (lihat saja)' };
 export const STATUS_LBL = {
-  pelaksanaan: 'Pelaksanaan vendor', siap_inspeksi: 'Siap inspeksi GL', inspeksi: 'Inspeksi berjalan',
+  pelaksanaan: 'Pelaksanaan vendor', pp_diajukan: 'BA PP menunggu persetujuan', ajukan_ba: 'Siap diajukan BA', siap_inspeksi: 'Siap inspeksi GL', inspeksi: 'Inspeksi berjalan',
   sulam_gl: 'Vendor menyulam tag GL', verifikasi: 'Siap verifikasi GL', menunggu_persetujuan: 'Menunggu persetujuan owner', selesai: 'Selesai'
 };
+export const PP_FOTO = ['Pengajiran', 'Pupuk kandang di lubang tanam', 'Penanaman', 'Penaburan LCC'];
 export const TIPE_LBL = { cek1: 'Cek 1 penanaman', retensi: 'Retensi', rotasi: 'Rotasi perawatan' };
 
 // ---------- tanggal ----------
@@ -90,7 +91,7 @@ export function makeLogic(S) {
   function retensiInfo(p) {
     if (!p || p.tipe !== 'retensi') return null;
     const c1 = selesai(p.blok_id, 'cek1').pop(); if (!c1) return null;
-    const until = addDays(tglWIB(c1.approved_at), 30);
+    const until = addMonths(tglWIB(c1.approved_at), 3); // retensi dimulai 3 bulan setelah BA KP
     return { until, left: diffDays(until, today()) };
   }
   function rotasiInfo(b) {

@@ -1,12 +1,12 @@
 // Shell aplikasi: login, menu per peran, router, beranda, peta, detail blok, admin.
 import { SB } from './sb.js';
-import { S, L, loadAll, derive, ins, upd, flush, pending, netState, isOnline, $, $$, toast, sheet, confirmSheet, uid, nm, newMap, locateControl } from './core.js';
+import { S, L, loadAll, derive, ins, upd, flush, pending, netState, isOnline, $, $$, toast, sheet, confirmSheet, uid, nm, newMap, locateControl, fileUrl, uploadOrQueue, pickPhoto, GPS } from './core.js';
 import * as G from './logic.js';
 import { downloadTiles, tileList, tileInfo, tileJob, canInstall, isInstalled, promptInstall, persist, loadOrtho, ORTHO, SLOTS, orthoKey } from './offline.js';
 import { tokenGet, tokenSet, checkToken, uploadOrtho, jobStatus, lastJob } from './ortho-up.js';
 import { renderSesi, openScan, tagSheet, vendorNewTag } from './field.js';
 import { renderNursery, renderKirim, renderTampung, renderGudang, kembaliSheet, kembaliDue } from './nursery.js';
-import { renderBAList, renderBA, approvePeriode, renderCetakTag } from './ba.js';
+import { renderBAList, renderBA, approvePeriode, approvePP, renderCetakTag } from './ba.js';
 import { renderMaster } from './master.js';
 const { esc, fmt, tgl, jam } = G;
 
@@ -28,22 +28,22 @@ const MENU = {
   admin: ['beranda', 'tugas', 'peta', 'kirim', 'lainnya'],
   spv: ['beranda', 'tugas', 'peta', 'nursery', 'lainnya'],
   admrek: ['beranda', 'peta', 'nursery', 'ba', 'lainnya'],
-  owner: ['tugas', 'peta', 'scan', 'tampung', 'lainnya'],
+  owner: ['tugas', 'peta', 'scan', 'kirim', 'lainnya'],
   nursery: ['nursery', 'kirim', 'tampung', 'gudang', 'lainnya'],
   crew: ['nursery', 'gudang', 'lainnya'],
-  exdas: ['tugas', 'peta', 'scan', 'tampung', 'lainnya'],
-  bumdes: ['tugas', 'peta', 'scan', 'tampung', 'lainnya'],
+  exdas: ['tugas', 'peta', 'scan', 'kirim', 'lainnya'],
+  bumdes: ['tugas', 'peta', 'scan', 'kirim', 'lainnya'],
   viewer: ['beranda', 'peta', 'nursery', 'ba', 'lainnya'],
 };
 const MORE = {
   admin: ['nursery', 'tampung', 'gudang', 'ba', 'scan', 'admin', 'master', 'cetak', 'akun'],
   spv: ['kirim', 'tampung', 'gudang', 'ba', 'cetak', 'akun'],
   admrek: ['tugas', 'kirim', 'tampung', 'gudang', 'cetak', 'akun'],
-  owner: ['ba', 'gudang', 'akun'],
+  owner: ['tampung', 'ba', 'gudang', 'akun'],
   nursery: ['ba', 'master', 'akun'],
-  crew: ['akun'],
-  exdas: ['ba', 'akun'], bumdes: ['ba', 'akun'],
-  viewer: ['gudang', 'akun'],
+  crew: ['kirim', 'tampung', 'akun'],
+  exdas: ['tampung', 'ba', 'akun'], bumdes: ['tampung', 'ba', 'akun'],
+  viewer: ['kirim', 'tampung', 'gudang', 'akun'],
 };
 export const role = () => S.me?.role || 'none';
 export const isRole = (...r) => r.includes(role());
@@ -63,7 +63,8 @@ function countBadges() {
   if (!S.ready || !S.me) return b;
   const t = tugasList().length; if (t) b.tugas = t;
   if (['admin', 'nursery'].includes(r)) { const n = L.sulamDemand().filter(o => o.kurang > 0).length + L.tanamDemand().length; if (n) b.kirim = n; }
-  if (['owner', 'exdas', 'bumdes', 'admin'].includes(r)) { const k = S.kirim.filter(x => x.status === 'dikirim' && seesBlok(S.blokMap[x.blok_id])).length; if (k) b.tampung = k; }
+  if (['owner', 'exdas', 'bumdes', 'admin'].includes(r)) { const k = S.kirim.filter(x => x.status === 'dikirim' && seesBlok(S.blokMap[x.blok_id])).length; if (k) b.kirim = (b.kirim || 0) + k; }
+  if (['admin', 'nursery'].includes(r)) { const k = (S.kembali || []).filter(x => x.status === 'dikirim').length; if (k) b.tampung = k; }
   if (r === 'admin') { const a = S.periode.filter(p => p.status === 'menunggu_persetujuan').length; if (a) b.tugas = (b.tugas || 0); }
   return b;
 }
@@ -104,7 +105,10 @@ export function tugasList() {
     if (r === 'admin') {
       if (b.layer === 'bastl' && !b.nama) continue;
       if (p && p.status === 'menunggu_persetujuan') out.push({ b, p, t: 'Setujui dan terbitkan BA', k: 'warn' });
+      if (p && p.status === 'pp_diajukan') out.push({ b, p, t: 'Setujui BA Penyelesaian Pekerjaan', k: 'warn' });
     }
+    if ((r === 'owner' || r === 'admin') && p && p.status === 'ajukan_ba' && p.tipe === 'cek1') out.push({ b, p, t: 'Ajukan BA Keberhasilan Penilaian', k: 'warn' });
+    if ((r === 'exdas' || r === 'bumdes' || r === 'owner') && S.kirim.some(k => k.blok_id === b.id && k.status === 'dikirim')) { const ks = S.kirim.filter(k => k.blok_id === b.id && k.status === 'dikirim'); out.push({ b, p, t: `Terima kiriman bibit: ${ks.map(k => (S.jenisMap[k.jenis]?.nama || k.jenis) + ' ' + fmt(k.n)).join(', ')}`, k: 'warn', href: '#kirim' }); }
     if (r === 'owner' || r === 'admin') {
       if (p && ['siap_inspeksi', 'verifikasi'].includes(p.status)) { const lk = L.lockInfo(p); out.push({ b, p, t: (p.status === 'verifikasi' ? 'Verifikasi tag GL' : 'Inspeksi') + (lk ? ` · mulai ${tgl(lk.until)}` : ' · siap'), k: lk ? 'idle' : 'pend' }); }
       if (p && p.status === 'inspeksi') out.push({ b, p, t: 'Inspeksi sedang berjalan', k: 'pend' });
@@ -114,7 +118,8 @@ export function tugasList() {
       if (r === 'exdas' && b.layer !== 'bastl') continue; // blok yang sudah diserahkan ke BUMDES: riwayat saja
       if (!p && b.layer === 'perawatan') { const ri = L.rotasiInfo(b); if (ri && ri.dleft <= 30) out.push({ b, p: null, t: `Rotasi perawatan jatuh tempo ${tgl(ri.next)}`, k: ri.dleft < 0 ? 'bad' : 'warn' }); continue; }
       if (!p) continue;
-      if (p.status === 'pelaksanaan') out.push({ b, p, t: p.tipe === 'cek1' ? 'Penanaman berjalan' : p.tipe === 'retensi' ? 'Retensi berjalan' : 'Perawatan berjalan', k: 'pend' });
+      if (p.status === 'pelaksanaan') { const ret = L.retensiInfo(p); out.push({ b, p, t: p.tipe === 'cek1' ? 'Penanaman berjalan' : p.tipe === 'retensi' ? (ret && ret.left > 0 ? `Retensi dimulai ${tgl(ret.until)}` : 'Retensi berjalan') : 'Perawatan berjalan', k: ret && ret.left > 0 ? 'idle' : 'pend' }); }
+      if (p.status === 'ajukan_ba' && p.tipe === 'retensi' && r === 'exdas') out.push({ b, p, t: 'Ajukan BA Keberhasilan Penilaian Retensi', k: 'warn' });
       if (p.status === 'sulam_gl') out.push({ b, p, t: `Sulam ${L.openGL(p).length} tag GL`, k: 'bad' });
     }
   }
@@ -151,7 +156,7 @@ function renderTugas() {
   const list = tugasList(); const r = role();
   const mine = S.blok.filter(b => seesBlok(b) && b.layer !== 'berhasil' && (b.layer !== 'bastl' || b.nama));
   shell('Tugas', null, `<div class="stack">
-    <div class="list">${list.length ? list.map(x => `<a class="item" href="#blok/${esc(x.b.id)}"><div class="grow"><b>${esc(G.blokName(x.b))} <span class="muted small">${fmt(x.b.ha, 2)} Ha</span></b><span>${esc(x.t)}</span></div><span class="pill s-${x.k}">${x.p ? esc(G.STATUS_LBL[x.p.status]) : 'Jadwal'}</span></a>`).join('') : '<div class="card"><p class="muted" style="margin:0">Tidak ada tugas saat ini.</p></div>'}</div>
+    <div class="list">${list.length ? list.map(x => `<a class="item" href="${x.href || '#blok/' + esc(x.b.id)}"><div class="grow"><b>${esc(G.blokName(x.b))} <span class="muted small">${fmt(x.b.ha, 2)} Ha</span></b><span>${esc(x.t)}</span></div><span class="pill s-${x.k}">${x.p ? esc(G.STATUS_LBL[x.p.status]) : 'Jadwal'}</span></a>`).join('') : '<div class="card"><p class="muted" style="margin:0">Tidak ada tugas saat ini.</p></div>'}</div>
     <div class="card stack"><div class="row between"><h2>${r === 'exdas' || r === 'bumdes' ? 'Blok saya' : 'Semua blok kerja'}</h2><span class="small muted">${mine.length}</span></div>
       <input id="tq" placeholder="Cari nama blok" aria-label="Cari blok">
       <div class="list" id="tl">${mine.map(b => blokItem(b)).join('')}</div></div></div>`);
@@ -216,19 +221,28 @@ function renderBlok(id) {
     if (p && p.status === 'pelaksanaan') {
       if (p.tipe === 'cek1') {
         const tot = Object.values(stok).reduce((a, x) => a + x, 0);
-        act += `<div class="card stack"><h2>Penanaman ExDAS</h2><p class="small" style="margin:0">Bibit diterima di lapangan (blok ini): <b>${fmt(tot)}</b>${dk.length ? ` · ${fmt(dk.reduce((a, k) => a + k.n, 0))} dalam pengiriman` : ''}.</p><button class="btn block" id="vLapor" ${tot > 0 && !dk.length ? '' : 'disabled'}>Lapor penanaman selesai</button>${dk.length ? '<p class="note">Terima dulu semua kiriman bibit.</p>' : tot ? '' : '<p class="note">Menunggu bibit dari nursery.</p>'}</div>`;
+        act += `<div class="card stack"><h2>Penanaman ExDAS</h2><p class="small" style="margin:0">Bibit diterima di lapangan (blok ini): <b>${fmt(tot)}</b>${dk.length ? ` · ${fmt(dk.reduce((a, k) => a + k.n, 0))} dalam pengiriman` : ''}.</p><button class="btn block" id="vLapor" ${tot > 0 && !dk.length ? '' : 'disabled'}>Penanaman selesai · buat BA Penyelesaian Pekerjaan</button><p class="note" style="margin:0">Isi jumlah tertanam, unggah 4 foto (pengajiran, pupuk kandang di lubang tanam, penanaman, penaburan LCC), lalu kirim BA PP ke owner. Peta blok terlampir otomatis.</p>${dk.length ? '<p class="note">Terima dulu semua kiriman bibit.</p>' : tot ? '' : '<p class="note">Menunggu bibit dari nursery.</p>'}</div>`;
+      } else if (L.retensiInfo(p)?.left > 0) {
+        const ret = L.retensiInfo(p);
+        act += `<div class="card stack"><h2>Retensi ExDAS</h2><div class="alert">Retensi dimulai <b>${tgl(ret.until)}</b> (${ret.left} hari lagi), 3 bulan setelah BA Keberhasilan Penilaian. Setelah itu ExDAS merawat, memasang tag pada tanaman mati, menyulam, lalu menyatakan retensi selesai.</div></div>`;
       } else {
-        const ov = L.openVendor(p); const ret = L.retensiInfo(p);
-        act += `<div class="card stack"><h2>${p.tipe === 'retensi' ? 'Retensi ExDAS (30 hari)' : 'Perawatan rotasi ' + p.nomor}</h2>
+        const ov = L.openVendor(p); const ret = null;
+        act += `<div class="card stack"><h2>${p.tipe === 'retensi' ? 'Retensi ExDAS' : 'Perawatan rotasi ' + p.nomor}</h2>
           <p class="small" style="margin:0">Tandai setiap tanaman mati dengan tag, sulam, lalu scan tag yang sama. Tag vendor belum disulam: <b>${ov.length}</b>.</p>
           <div class="grid2"><button class="btn ghost" id="vTag">+ Tag tanaman mati</button><a class="btn ghost" href="#scan">Scan sulam</a></div>
           <button class="btn block" id="vDone" ${ov.length || (ret && ret.left > 0) ? 'disabled' : ''}>${p.tipe === 'retensi' ? 'Retensi selesai' : 'Perawatan selesai'}</button>
           ${ov.length ? '<p class="note">Terkunci: masih ada tag vendor yang belum disulam.</p>' : ret && ret.left > 0 ? `<p class="note">Retensi berakhir ${tgl(ret.until)} (${ret.left} hari lagi).</p>` : ''}</div>`;
       }
     }
+    if (p && p.status === 'pp_diajukan') {
+      act += `<div class="card stack"><h2>BA Penyelesaian Pekerjaan diajukan</h2><p class="small" style="margin:0">Dikirim ${tgl(p.pp?.diajukan_at)} ${jam(p.pp?.diajukan_at)}. Menunggu persetujuan owner. Setelah disetujui, GL owner mengecek 7 hari kemudian.</p>${ppFotos(p)}${r === 'admin' ? '<button class="btn block" id="aPP">Setujui BA Penyelesaian Pekerjaan</button>' : ''}</div>`;
+    }
+    if (p && p.status === 'ajukan_ba' && p.tipe === 'retensi') {
+      act += `<div class="card stack"><h2>Ajukan BA Keberhasilan Penilaian Retensi</h2><p class="small" style="margin:0">Hasil inspeksi retensi ${fmt(p.pct, 2)}% (≥ 90%) dan semua tag GL sudah disulam.</p><button class="btn block" id="vAjukan" ${r === 'exdas' || r === 'admin' ? '' : 'disabled'}>Ajukan BA KPR ke owner</button></div>`;
+    }
     if (p && p.status === 'sulam_gl') {
       const og = L.openGL(p);
-      act += `<div class="card stack"><h2>Sulam tag GL (${og.length})</h2><p class="small" style="margin:0">Semua tag GL wajib disulam lalu discan. ${p.hasil?.final ? 'Setelah semua selesai, BA menunggu persetujuan owner.' : 'Setelah semua selesai, GL melakukan verifikasi.'}</p><a class="btn ghost block" href="#scan">Scan sulam</a><button class="btn block" id="vSulamDone" ${og.length ? 'disabled' : ''}>Konfirmasi sulam selesai</button>${og.length ? `<p class="note">Terkunci: ${og.length} tag GL belum disulam (${og.map(t => esc(t.id.slice(-6))).join(', ')}). Tombol aktif setelah semua tag discan sulam.</p>` : ''}</div>`;
+      act += `<div class="card stack"><h2>Sulam tag GL (${og.length})</h2><p class="small" style="margin:0">Semua tag GL wajib disulam lalu discan. ${!p.hasil?.final ? 'Setelah semua selesai, GL melakukan verifikasi.' : p.tipe === 'cek1' ? 'Setelah semua selesai, GL mengajukan BA Keberhasilan Penilaian.' : p.tipe === 'retensi' ? 'Setelah semua selesai, ExDAS mengajukan BA Keberhasilan Penilaian Retensi.' : 'Setelah semua selesai, BA menunggu persetujuan owner.'}</p><a class="btn ghost block" href="#scan">Scan sulam</a><button class="btn block" id="vSulamDone" ${og.length ? 'disabled' : ''}>${p.hasil?.final && p.tipe === 'retensi' ? 'Sulam selesai · ajukan BA KPR' : 'Konfirmasi sulam selesai'}</button>${og.length ? `<p class="note">Terkunci: ${og.length} tag GL belum disulam (${og.map(t => esc(t.id.slice(-6))).join(', ')}). Tombol aktif setelah semua tag discan sulam.</p>` : ''}</div>`;
     }
   }
   // --- GL owner ---
@@ -237,10 +251,11 @@ function renderBlok(id) {
       const lk = L.lockInfo(p);
       act += `<div class="card stack"><h2>${p.status === 'verifikasi' ? 'Verifikasi tag GL' : 'Inspeksi ' + G.TIPE_LBL[p.tipe].toLowerCase()}</h2>${lk ? `<div class="alert warn">${esc(lk.why)}${lk.until ? ` Bisa dimulai ${tgl(lk.until)}.` : ''}</div>` : '<p class="small" style="margin:0">Sapu seluruh jalur. Jejak GPS direkam otomatis. Wajib 4 foto kegiatan.</p>'}<button class="btn block" id="gStart" ${lk ? 'disabled' : ''}>Mulai ${p.status === 'verifikasi' ? 'verifikasi' : 'inspeksi'}</button></div>`;
     }
+    if (p.status === 'ajukan_ba' && p.tipe === 'cek1') act += `<div class="card stack"><h2>Ajukan BA Keberhasilan Penilaian</h2><p class="small" style="margin:0">Hasil Cek 1 ${fmt(p.pct, 2)}% (≥ 90%) dan semua tag GL sudah disulam ExDAS. Lampiran: 4 foto inspeksi, peta jejak GPS, dan titik tag.</p><button class="btn block" id="gAjukan">Ajukan BA KP ke owner</button></div>`;
     if (p.status === 'inspeksi') { const s = S.sesi.find(x => x.periode_id === p.id && !x.selesai_at); act += `<div class="card stack"><h2>Sesi berjalan</h2><p class="small" style="margin:0">Oleh ${esc(nm(s?.oleh))} sejak ${tgl(s?.mulai_at)} ${jam(s?.mulai_at)}.</p><a class="btn block" href="#sesi/${s?.id}">Lanjutkan sesi</a></div>`; }
   }
   if (r === 'admin' && p && p.status === 'menunggu_persetujuan') {
-    act += `<div class="card stack"><h2>Persetujuan owner</h2><p class="small" style="margin:0">Hasil ${fmt(p.pct, 2)}% (≥ 90%). Semua tag GL sudah disulam vendor.</p><button class="btn block" id="aOk">Setujui dan terbitkan BA</button></div>`;
+    act += `<div class="card stack"><h2>Persetujuan owner</h2><p class="small" style="margin:0">Hasil ${fmt(p.pct, 2)}% (≥ 90%). Semua tag GL sudah disulam vendor.${p.hasil?.diajukan ? ` Diajukan ${esc(nm(p.hasil.diajukan.id))} ${tgl(p.hasil.diajukan.at)}.` : ''}</p><button class="btn block" id="aOk">Setujui dan terbitkan BA (tanda tangan elektronik)</button></div>`;
   }
   // --- admin input data lama perawatan ---
   if ((r === 'admin' || r === 'spv') && b.layer === 'perawatan') {
@@ -277,7 +292,16 @@ function renderBlok(id) {
   on('#vLapor', async () => laporTanam(b, p));
   on('#vTag', async () => { await vendorNewTag(b, p); route(); });
   on('#vDone', async () => { if (!(await confirmSheet(`Nyatakan ${p.tipe === 'retensi' ? 'retensi' : 'perawatan'} di ${esc(G.blokName(b))} selesai? GL akan menerima tugas inspeksi 7 hari setelah sulam terakhir.`))) return; await upd('periode', { id: p.id }, { status: 'siap_inspeksi' }); toast('Dilaporkan selesai. Tugas inspeksi masuk ke GL.'); route(); });
-  on('#vSulamDone', async () => { const next = p.hasil?.final ? 'menunggu_persetujuan' : 'verifikasi'; await upd('periode', { id: p.id }, { status: next }); toast(next === 'verifikasi' ? 'Sulam selesai. GL akan memverifikasi tag GL.' : 'Sulam selesai. Menunggu persetujuan owner.'); route(); });
+  const diajukan = () => ({ ...(p.hasil || {}), diajukan: { id: S.me.id, at: new Date().toISOString() } });
+  on('#vSulamDone', async () => {
+    const next = !p.hasil?.final ? 'verifikasi' : p.vendor === 'exdas' && p.tipe === 'cek1' ? 'ajukan_ba' : 'menunggu_persetujuan';
+    await upd('periode', { id: p.id }, next === 'menunggu_persetujuan' && p.tipe === 'retensi' ? { status: next, hasil: diajukan() } : { status: next });
+    toast(next === 'verifikasi' ? 'Sulam selesai. GL akan memverifikasi tag GL.' : next === 'ajukan_ba' ? 'Sulam selesai. GL tinggal mengajukan BA Keberhasilan Penilaian.' : p.tipe === 'retensi' ? 'BA KPR diajukan ke owner.' : 'Sulam selesai. Menunggu persetujuan owner.'); route();
+  });
+  on('#vAjukan', async () => { await upd('periode', { id: p.id }, { status: 'menunggu_persetujuan', hasil: diajukan() }); toast('BA KPR diajukan ke owner.'); route(); });
+  on('#gAjukan', async () => { await upd('periode', { id: p.id }, { status: 'menunggu_persetujuan', hasil: diajukan() }); toast('BA KP diajukan ke owner.'); route(); });
+  on('#aPP', async () => { await approvePP(p); route(); });
+  $$('img[data-ppfoto]').forEach(async im => { try { im.src = await fileUrl('foto', im.dataset.ppfoto); } catch (e) {} });
   on('#gStart', async () => { const sid = uid(); await ins('sesi', { id: sid, periode_id: p.id, blok_id: id, tipe: p.status === 'verifikasi' ? 'verifikasi' : 'inspeksi', oleh: S.me.id }); await upd('periode', { id: p.id }, { status: 'inspeksi' }); location.hash = '#sesi/' + sid; });
   on('#aOk', async () => { await approvePeriode(p); route(); });
   const kb = $('#kbBtn'); if (kb) kb.addEventListener('click', () => kembaliSheet(id, route));
@@ -287,18 +311,34 @@ export const tagColor = t => t.status === 'closed' ? '#2F8A57' : t.status === 'd
 export const tagItem = t => { const ev = L.events(t.id); const last = ev[ev.length - 1]; return `<a class="item" href="#" data-tag="${esc(t.id)}"><span class="tagid">${esc(t.id.slice(-6))}</span><div class="grow"><b>${t.status === 'mati' ? 'Mati' : t.status === 'disulam' ? 'Disulam' : 'Hidup, closed'} · ${t.sumber === 'gl' ? 'tag GL' : 'tag vendor'}</b><span>${esc(t.jalur || '')} · ${esc(G.KONDLBL[t.kondisi] || '')}${t.low_acc ? ' · akurasi rendah' : ''} · ${last ? esc(S.jenisMap[last.jenis]?.nama || '') + ' ' + tgl(last.at) : ''}</span></div></a>`; };
 function nextHRP() { let mx = 0; S.blok.forEach(b => { const m = /^HRP-(\d+)/.exec(b.nama || ''); if (m) mx = Math.max(mx, +m[1]); }); return 'HRP-' + (mx + 1); }
 
+const ppFotos = p => (p.pp?.foto || []).length ? `<div class="grid2">${p.pp.foto.map((f, i) => `<figure style="margin:0"><img data-ppfoto="${esc(f)}" alt="${esc(G.PP_FOTO[i])}" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;background:var(--sunk)"><figcaption class="small">${esc(G.PP_FOTO[i])}</figcaption></figure>`).join('')}</div>` : '';
+// ExDAS: penanaman selesai → jumlah tertanam + 4 foto kegiatan → kirim BA PP ke owner
 async function laporTanam(b, p) {
-  const stok = L.stokTampung(b.id);
-  sheet(`<form class="stack" id="lt"><h2>Lapor penanaman selesai</h2><p class="small" style="margin:0">Isi jumlah bibit yang benar-benar tertanam per jenis. Sisa yang tidak tertanam dikembalikan lewat tombol Kembalikan ke nursery.</p>
+  const stok = L.stokTampung(b.id); const foto = [null, null, null, null];
+  sheet(`<form class="stack" id="lt"><h2>BA Penyelesaian Pekerjaan</h2><p class="small" style="margin:0">Isi jumlah bibit yang benar-benar tertanam per jenis. Sisa yang tidak tertanam dikembalikan lewat tombol Kembalikan ke nursery.</p>
     ${Object.entries(stok).map(([k, v]) => `<label class="f" for="lt-${k}">${esc(S.jenisMap[k]?.nama)} <small>diterima di lapangan ${fmt(v)}</small><input type="number" min="0" max="${v}" id="lt-${k}" value="${v}" inputmode="numeric"></label>`).join('')}
-    <p class="err" id="ltErr" hidden></p><div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit">Lapor selesai</button></div></form>`, (box, close) => {
+    <div class="sec"><h3>4 foto kegiatan <small class="muted">wajib, dari kamera</small></h3><div class="grid2">${G.PP_FOTO.map((l, i) => `<button type="button" class="btn ghost" data-pf="${i}" style="flex-direction:column;min-height:110px;padding:6px"><span id="pfi-${i}" class="small muted">+ foto</span><b class="small">${esc(l)}</b></button>`).join('')}</div></div>
+    <p class="note">Peta blok dilampirkan otomatis. Setelah dikirim, owner menyetujui BA PP, lalu GL owner mengecek 7 hari kemudian.</p>
+    <p class="err" id="ltErr" hidden></p><div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit">Kirim BA PP</button></div></form>`, (box, close) => {
+    const er = box.querySelector('#ltErr'), err = m => { er.textContent = m; er.hidden = false; };
+    box.querySelectorAll('[data-pf]').forEach(btn => btn.addEventListener('click', async () => {
+      const i = +btn.dataset.pf; const blob = await pickPhoto(); if (!blob) return;
+      const path = `pp/${p.id}/${i + 1}-${Date.now()}.jpg`; const sp = box.querySelector('#pfi-' + i);
+      try { sp.textContent = 'mengunggah…'; const how = await uploadOrQueue('foto', path, blob); foto[i] = path; sp.innerHTML = `<img src="${URL.createObjectURL(blob)}" style="width:100%;max-height:80px;object-fit:cover;border-radius:6px">`; if (how === 'queued') toast('Foto disimpan di HP, diunggah otomatis saat ada sinyal.'); }
+      catch (e) { sp.textContent = '+ foto'; toast(e.message); }
+    }));
     box.querySelector('#lt').addEventListener('submit', async e => {
       e.preventDefault(); const rows = [];
-      for (const [k, v] of Object.entries(stok)) { const x = Number(box.querySelector('#lt-' + k).value); if (!(x >= 0) || x > v) { const er = box.querySelector('#ltErr'); er.textContent = `Jumlah ${S.jenisMap[k]?.nama} harus 0–${v}.`; er.hidden = false; return; } if (x > 0) rows.push({ blok_id: b.id, jenis: k, tipe: 'tanam', n: x, oleh: S.me.id }); }
-      if (!rows.length) return toast('Belum ada bibit yang tertanam.');
-      await ins('tampung_log', rows); await upd('periode', { id: p.id }, { status: 'siap_inspeksi' });
-      S.minta.filter(m => m.blok_id === b.id && m.status === 'terbuka').forEach(m => upd('minta', { id: m.id }, { status: 'selesai' }));
-      close(); toast('Penanaman dilaporkan selesai. Cek 1 GL bisa mulai 7 hari lagi.'); route();
+      for (const [k, v] of Object.entries(stok)) { const x = Number(box.querySelector('#lt-' + k).value); if (!(x >= 0) || x > v) return err(`Jumlah ${S.jenisMap[k]?.nama} harus 0–${v}.`); if (x > 0) rows.push({ blok_id: b.id, jenis: k, tipe: 'tanam', n: x, oleh: S.me.id }); }
+      if (!rows.length) return err('Belum ada bibit yang tertanam.');
+      const miss = G.PP_FOTO.filter((l, i) => !foto[i]); if (miss.length) return err('Foto belum lengkap: ' + miss.join(', ') + '.');
+      const sb = box.querySelector('button[type=submit]'); sb.disabled = true;
+      try {
+        await ins('tampung_log', rows);
+        await upd('periode', { id: p.id }, { status: 'pp_diajukan', pp: { foto, diajukan_at: new Date().toISOString(), oleh: S.me.id, lat: GPS.pos?.lat, lon: GPS.pos?.lon } });
+        S.minta.filter(m => m.blok_id === b.id && m.status === 'terbuka').forEach(m => upd('minta', { id: m.id }, { status: 'selesai' }));
+        close(); toast('BA Penyelesaian Pekerjaan dikirim ke owner.'); route();
+      } catch (x) { sb.disabled = false; err(x.message); }
     });
   });
 }
