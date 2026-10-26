@@ -198,17 +198,36 @@ function bindMat(rerender) {
   }));
 }
 // ---------- kirim bibit ----------
-async function sendFromStock(blok_id, minta_id, jk, n) {
+// nursery memilih bedengan BST asal; saran awal = lot yang paling lama mengendap
+function sendFromStock(blok_id, minta_id, jk, n) {
   const lots = L.readyLots(jk); const avail = lots.reduce((a, l) => a + l.jumlah, 0);
-  if (n > avail) { toast(`Stok siap ${jn(jk)} hanya ${fmt(avail)}.`); return false; }
-  let left = n;
-  for (const l of lots) {
-    if (left <= 0) break; const k = Math.min(l.jumlah, left); left -= k;
-    await upd('lot', { id: l.id }, { jumlah: l.jumlah - k });
-    await ins('lot_log', { lot_id: l.id, tipe: 'kirim', n: k, ket: 'ke ' + G.blokName(S.blokMap[blok_id]), oleh: S.me.id, nama_pencatat: S.me.nama });
-    await ins('kirim', { id: uid(), blok_id, minta_id, jenis: jk, n: k, lot_id: l.id, bedengan: l.bedengan, dikirim_oleh: S.me.id });
-  }
-  return true;
+  if (!avail) { toast(`Stok siap ${jn(jk)} kosong.`); return Promise.resolve(false); }
+  let left = Math.min(n, avail); const sug = lots.map(l => { const k = Math.min(l.jumlah, left); left -= k; return k; });
+  return new Promise(res => {
+    let done = false;
+    const close = sheet(`<form class="stack" id="sf"><h2>Kirim ${esc(jn(jk))} → ${esc(G.blokName(S.blokMap[blok_id]))}</h2><p class="small" style="margin:0">Pilih bedengan BST asal dan jumlah dari tiap bedengan. Saran awal: bedengan yang paling lama mengendap.</p>
+      <div class="list">${lots.map((l, i) => `<div class="item"><div class="grow"><b>${esc(l.bedengan)}</b><span>${fmt(l.jumlah)} siap · ${fmt(G.diffDays(G.today(), l.tgl_masuk))} hari di BST${l.sumber === 'beli' ? ' · bibit beli' : ''}</span></div><input type="number" min="0" max="${l.jumlah}" inputmode="numeric" data-li="${i}" value="${sug[i] || 0}" style="width:96px" aria-label="Jumlah dari ${esc(l.bedengan)}"></div>`).join('')}</div>
+      <div class="row between"><span class="small">Diminta ${fmt(n)}</span><b id="sfT"></b></div><p class="err" id="sfE" hidden></p>
+      <div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit">Kirim</button></div></form>`, (box, cl) => {
+      const ins_ = [...box.querySelectorAll('[data-li]')], tot = () => ins_.reduce((a, x) => a + (Number(x.value) || 0), 0);
+      const show = () => { box.querySelector('#sfT').textContent = 'Total dikirim ' + fmt(tot()); }; ins_.forEach(x => x.addEventListener('input', show)); show();
+      box.querySelector('#sf').addEventListener('submit', async e => {
+        e.preventDefault(); const er = box.querySelector('#sfE');
+        const bad = ins_.find(x => !(Number(x.value) >= 0) || Number(x.value) > lots[+x.dataset.li].jumlah);
+        if (bad) { er.textContent = `${lots[+bad.dataset.li].bedengan} hanya ${fmt(lots[+bad.dataset.li].jumlah)} siap kirim.`; er.hidden = false; return; }
+        if (!tot()) { er.textContent = 'Isi jumlah dari minimal satu bedengan.'; er.hidden = false; return; }
+        const sb = box.querySelector('button[type=submit]'); sb.disabled = true;
+        for (const x of ins_) {
+          const k = Number(x.value) || 0; if (!k) continue; const l = lots[+x.dataset.li];
+          await upd('lot', { id: l.id }, { jumlah: l.jumlah - k });
+          await ins('lot_log', { lot_id: l.id, tipe: 'kirim', n: k, ket: 'ke ' + G.blokName(S.blokMap[blok_id]), oleh: S.me.id, nama_pencatat: S.me.nama });
+          await ins('kirim', { id: uid(), blok_id, minta_id, jenis: jk, n: k, lot_id: l.id, bedengan: l.bedengan, dikirim_oleh: S.me.id });
+        }
+        done = true; toast(`${fmt(tot())} ${jn(jk)} dikirim dari ${ins_.filter(x => Number(x.value) > 0).map(x => lots[+x.dataset.li].bedengan).join(', ')}.`); cl(); res(true);
+      });
+    });
+    const iv = setInterval(() => { if (!document.getElementById('sf')) { clearInterval(iv); if (!done) res(false); } }, 400);
+  });
 }
 export function renderKirim(shell) {
   const nurs = isRole('admin', 'nursery');
@@ -224,7 +243,7 @@ export function renderKirim(shell) {
     <div class="card stack"><h2>Permintaan penanaman BASTL (${tanam.length})</h2>
       ${tanam.map(m => { const b = S.blokMap[m.blok_id]; const row = (lbl, t, need, got) => `<div class="sec"><div class="row between"><b>${lbl}</b><span class="small">${fmt(got)} / ${fmt(need)} ${got > need ? '· lebih ' + fmt(got - need) : got < need ? '· kurang ' + fmt(need - got) : ''}</span></div>${nurs ? `<div class="row" style="flex-wrap:nowrap">${sel(`mj-${m.id}-${t}`, t)}<input type="number" min="1" inputmode="numeric" id="mn-${m.id}-${t}" value="${Math.max(0, need - got) || ''}" style="width:96px" aria-label="Jumlah"><button class="btn sm" data-mk="${m.id}" data-t="${t}">Kirim</button></div>` : ''}</div>`;
         return `<div class="card tight"><div class="row between"><b>${esc(G.blokName(b))} · ${fmt(b.ha, 2)} Ha</b><span class="small muted">${tgl(m.created_at)}</span></div>${row('Pioneer', 'pio', m.pio, m.sent.pio - m.kembali.pio)}${row('Sisipan', 'sis', m.sis, m.sent.sis - m.kembali.sis)}${m.kembali.pio + m.kembali.sis ? `<p class="note" style="margin:0">Sudah dikurangi ${fmt(m.kembali.pio + m.kembali.sis)} bibit yang dikembalikan atau afkir di lapangan.</p>` : ''}</div>`; }).join('') || '<p class="muted small" style="margin:0">Tidak ada.</p>'}
-      <p class="note">Boleh dikirim bertahap, kurang, atau lebih. Bibit diambil dari bedengan BST yang paling lama mengendap.</p></div>
+      <p class="note">Boleh dikirim bertahap, kurang, atau lebih. Setelah menekan Kirim, pilih bedengan BST asal (saran awal: yang paling lama mengendap).</p></div>
     <div class="card stack"><h2>Permintaan sulam (${sul.length} blok)</h2>
       ${sul.map(o => { const b = S.blokMap[o.blok_id]; return `<div class="card tight stack"><div class="row between"><b>${esc(G.blokName(b))}</b><span class="pill ${o.kurang ? 's-warn' : 's-ok'}">${o.kurang ? 'kurang ' + fmt(o.kurang) : 'cukup'}</span></div><div class="chips">${Object.entries(o.perJenis).map(([k, v]) => `<span class="chip">${esc(jn(k))} mati ${v}</span>`).join('')}</div><p class="small" style="margin:0">${o.total} tag perlu disulam · ${fmt(o.tersedia)} bibit sudah di penampungan/pengiriman.</p>${nurs ? `<div class="row" style="flex-wrap:nowrap">${sel(`sj-${o.blok_id}`)}<input type="number" min="1" inputmode="numeric" id="sn-${o.blok_id}" value="${o.kurang || ''}" style="width:96px" aria-label="Jumlah"><button class="btn sm" data-sk="${esc(o.blok_id)}">Kirim</button></div>` : ''}</div>`; }).join('') || '<p class="muted small" style="margin:0">Tidak ada.</p>'}
       <p class="note">Digabung per blok dan jenis yang mati. Orang lapangan menentukan jenis yang dipakai; saat scan sulam, aplikasi hanya menawarkan jenis yang cocok untuk titik itu.</p></div>
@@ -235,8 +254,8 @@ export function renderKirim(shell) {
   bindMat(() => renderKirim(shell));
   $$('[data-sj]').forEach(b => b.addEventListener('click', () => suratJalanSheet(b.dataset.sj)));
   const sjs = $('#sjScan'); if (sjs) sjs.addEventListener('click', async () => { const t = await scanQR('Scan QR surat jalan dari HP nursery'); if (!t) return; if (!t.startsWith('HMK1')) return toast('Ini bukan QR surat jalan.'); await terimaSuratJalan(t); renderKirim(shell); });
-  $$('[data-mk]').forEach(b => b.addEventListener('click', async () => { const m = S.minta.find(x => x.id === b.dataset.mk), t = b.dataset.t; const s = $(`#mj-${m.id}-${t}`); if (!s) return; const n = Number($(`#mn-${m.id}-${t}`).value); if (!(n > 0)) return toast('Isi jumlah.'); b.disabled = true; if (await sendFromStock(m.blok_id, m.id, s.value, n)) { toast(`${fmt(n)} ${jn(s.value)} dikirim.`); renderKirim(shell); } b.disabled = false; }));
-  $$('[data-sk]').forEach(b => b.addEventListener('click', async () => { const bid = b.dataset.sk; const s = $(`#sj-${CSS.escape(bid)}`); if (!s) return; const n = Number($(`#sn-${CSS.escape(bid)}`).value); if (!(n > 0)) return toast('Isi jumlah.'); b.disabled = true; if (await sendFromStock(bid, null, s.value, n)) { toast(`${fmt(n)} ${jn(s.value)} dikirim.`); renderKirim(shell); } b.disabled = false; }));
+  $$('[data-mk]').forEach(b => b.addEventListener('click', async () => { const m = S.minta.find(x => x.id === b.dataset.mk), t = b.dataset.t; const s = $(`#mj-${m.id}-${t}`); if (!s) return; const n = Number($(`#mn-${m.id}-${t}`).value); if (!(n > 0)) return toast('Isi jumlah.'); b.disabled = true; if (await sendFromStock(m.blok_id, m.id, s.value, n)) renderKirim(shell); b.disabled = false; }));
+  $$('[data-sk]').forEach(b => b.addEventListener('click', async () => { const bid = b.dataset.sk; const s = $(`#sj-${CSS.escape(bid)}`); if (!s) return; const n = Number($(`#sn-${CSS.escape(bid)}`).value); if (!(n > 0)) return toast('Isi jumlah.'); b.disabled = true; if (await sendFromStock(bid, null, s.value, n)) renderKirim(shell); b.disabled = false; }));
   $$('[data-tr]').forEach(b => b.addEventListener('click', async () => { await upd('kirim', { id: b.dataset.tr }, { status: 'diterima' }); toast('Bibit diterima di lapangan.'); renderKirim(shell); }));
 }
 
