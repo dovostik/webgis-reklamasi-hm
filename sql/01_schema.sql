@@ -482,3 +482,10 @@ create trigger srv_time before insert on public.kembali_log for each row execute
 grant select, insert, update on public.kembali to authenticated;
 grant select, insert on public.kembali_log to authenticated;
 grant usage, select on sequence public.kembali_log_id_seq to authenticated;
+-- BASTL yang sudah closed (BA retensi) pindah ke perawatan BUMDES; ExDAS tetap bisa melihat riwayatnya
+alter table public.blok add column if not exists asal_bastl boolean not null default false;
+create or replace function public.can_see_blok(bid text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists(select 1 from public.blok b where b.id = bid and (public.can_see_layer(b.layer) or (b.asal_bastl and public.my_role() = 'exdas')))
+$$;
+alter policy r on public.blok using (public.can_see_layer(layer) or (asal_bastl and public.my_role() = 'exdas'));

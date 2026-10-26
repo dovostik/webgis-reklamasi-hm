@@ -41,7 +41,7 @@ export async function approvePeriode(p) {
   }
   await upd('periode', { id: p.id }, { status: 'selesai' }, { offline: false });
   if (p.tipe === 'cek1') await ins('periode', { id: uid(), blok_id: b.id, tipe: 'retensi', nomor: 1, vendor: 'exdas', status: 'pelaksanaan', mulai_at: new Date().toISOString() });
-  if (p.tipe === 'retensi') await upd('blok', { id: b.id }, { tgl_tanam: G.today() });
+  if (p.tipe === 'retensi') await upd('blok', { id: b.id }, { tgl_tanam: G.today(), layer: 'perawatan', asal_bastl: true }); // penanaman closed: blok diserahkan ke perawatan BUMDES
   if (p.tipe === 'rotasi') await upd('blok', { id: b.id }, { tgl_rotasi_terakhir: G.today() });
   toast(`BA terbit: ${jenis.join(' + ')}.`);
   location.hash = '#ba/' + ids[0];

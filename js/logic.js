@@ -100,7 +100,9 @@ export function makeLogic(S) {
     const ap = selesai(b.id, 'rotasi').map(p => tglWIB(p.approved_at));
     const last = [b.tgl_rotasi_terakhir, ...ap].filter(Boolean).sort().pop() || null;
     let next, perk = false;
-    if (last) next = addMonths(last, 4); else { perk = true; next = addMonths(tanam.tgl, 3); while (next < today()) next = addMonths(next, 4); }
+    if (last) next = addMonths(last, 4);
+    else if (b.asal_bastl && !tanam.perkiraan) next = addMonths(tanam.tgl, 3); // eks BASTL: rotasi 1 tepat 3 bulan setelah BA retensi
+    else { perk = true; next = addMonths(tanam.tgl, 3); while (next < today()) next = addMonths(next, 4); }
     const umur = diffDays(today(), tanam.tgl);
     const dleft = diffDays(next, today());
     let st = !perk && dleft < 0 ? ['bad', 'Lewat jadwal'] : dleft <= 30 ? ['warn', 'Rotasi ≤ 30 hari'] : ['ok', 'Terjadwal'];

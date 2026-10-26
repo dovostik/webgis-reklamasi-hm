@@ -67,7 +67,7 @@ function countBadges() {
   if (r === 'admin') { const a = S.periode.filter(p => p.status === 'menunggu_persetujuan').length; if (a) b.tugas = (b.tugas || 0); }
   return b;
 }
-export function seesBlok(b) { if (!b) return false; const r = role(); if (r === 'exdas') return b.layer === 'bastl'; if (r === 'bumdes') return b.layer === 'perawatan'; return true; }
+export function seesBlok(b) { if (!b) return false; const r = role(); if (r === 'exdas') return b.layer === 'bastl' || !!b.asal_bastl; if (r === 'bumdes') return b.layer === 'perawatan'; return true; }
 
 // ---------- login ----------
 function renderLogin(msg = '') {
@@ -111,6 +111,7 @@ export function tugasList() {
     }
     if (r === 'exdas' || r === 'bumdes') {
       if (b.layer === 'bastl' && !b.nama) continue;
+      if (r === 'exdas' && b.layer !== 'bastl') continue; // blok yang sudah diserahkan ke BUMDES: riwayat saja
       if (!p && b.layer === 'perawatan') { const ri = L.rotasiInfo(b); if (ri && ri.dleft <= 30) out.push({ b, p: null, t: `Rotasi perawatan jatuh tempo ${tgl(ri.next)}`, k: ri.dleft < 0 ? 'bad' : 'warn' }); continue; }
       if (!p) continue;
       if (p.status === 'pelaksanaan') out.push({ b, p, t: p.tipe === 'cek1' ? 'Penanaman berjalan' : p.tipe === 'retensi' ? 'Retensi berjalan' : 'Perawatan berjalan', k: 'pend' });
