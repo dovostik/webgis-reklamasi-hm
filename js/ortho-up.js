@@ -2,7 +2,7 @@
 // File GeoTIFF dipecah ±25 MB, dikirim sebagai blob Git ke cabang sementara "ortho-upload-<slot>-<waktu>".
 // GitHub Actions menyambung potongan, memotong jadi ubin, mengganti ortho lama di slot itu, lalu menghapus cabang.
 const REPO = 'dovostik/webgis-reklamasi-hm', API = 'https://api.github.com/repos/' + REPO;
-const PART = 25 * 1024 * 1024;
+const PART = 16 * 1024 * 1024;
 export const tokenGet = () => { try { return localStorage.getItem('hm-gh-token') || ''; } catch (e) { return ''; } };
 export const tokenSet = v => { try { v ? localStorage.setItem('hm-gh-token', v) : localStorage.removeItem('hm-gh-token'); } catch (e) {} };
 export const lastJob = () => { try { return JSON.parse(localStorage.getItem('hm-ortho-job') || 'null'); } catch (e) { return null; } };
@@ -27,6 +27,17 @@ export async function checkToken(token) {
   if (!r.permissions || !r.permissions.push) throw new Error('Token hanya bisa membaca. Beri izin Contents: Read and write.');
   return true;
 }
+// kirim potongan dengan kemajuan per byte (fetch tidak memberi kemajuan unggah)
+function postBlob(content, onUp, token = tokenGet()) {
+  return new Promise((ok, no) => {
+    const x = new XMLHttpRequest(); x.open('POST', API + '/git/blobs');
+    x.setRequestHeader('Accept', 'application/vnd.github+json'); x.setRequestHeader('Authorization', 'Bearer ' + token); x.setRequestHeader('X-GitHub-Api-Version', '2022-11-28'); x.setRequestHeader('Content-Type', 'application/json');
+    x.upload.onprogress = e => onUp && e.lengthComputable && onUp(e.loaded, e.total);
+    x.onload = () => { if (x.status >= 200 && x.status < 300) ok(JSON.parse(x.responseText)); else no(Object.assign(new Error(x.status === 401 ? 'Token GitHub salah atau kedaluwarsa.' : `GitHub ${x.status}: ${String(x.responseText).slice(0, 160)}`), { status: x.status })); };
+    x.onerror = () => no(Object.assign(new Error('Koneksi terputus.'), { net: true })); x.ontimeout = x.onerror; x.timeout = 30 * 60 * 1000;
+    x.send(JSON.stringify({ content, encoding: 'base64' }));
+  });
+}
 const b64 = blob => new Promise((ok, no) => { const f = new FileReader(); f.onload = () => ok(String(f.result).split(',')[1] || ''); f.onerror = () => no(f.error); f.readAsDataURL(blob); });
 
 // action: 'ganti' (unggah file) atau 'hapus' (kosongkan slot)
@@ -37,9 +48,13 @@ export async function uploadOrtho({ file, slot, tanggal, action = 'ganti' }, onP
   for (let i = 0; i < n; i++) {
     const name = `upload/part-${String(i).padStart(3, '0')}`;
     if (!done[i]) {
-      onProg && onProg({ i, n, msg: `Mengirim potongan ${i + 1} dari ${n}` });
+      onProg && onProg({ i, n, frac: i / n, msg: `Menyiapkan potongan ${i + 1} dari ${n}` });
       const content = await b64(file.slice(i * PART, Math.min(file.size, (i + 1) * PART)));
-      const r = await gh('/git/blobs', { method: 'POST', body: JSON.stringify({ content, encoding: 'base64' }) });
+      let r, t0 = Date.now();
+      for (let a = 0; ; a++) {
+        try { r = await postBlob(content, (l, tot) => { const sp = l / Math.max(1, (Date.now() - t0) / 1000); const fr = (i + l / tot) / n; const left = (n - i - l / tot) * tot / Math.max(1, sp); onProg && onProg({ i, n, frac: fr, msg: `Mengirim potongan ${i + 1} dari ${n} · ${(sp * 8 / 1e6).toFixed(1)} Mbps · sisa ±${left > 3600 ? (left / 3600).toFixed(1) + ' jam' : Math.ceil(left / 60) + ' menit'}` }); }); break; }
+        catch (e) { if ((e.net || e.status >= 500) && a < 3) { onProg && onProg({ i, n, frac: i / n, msg: `Koneksi terputus, mencoba lagi potongan ${i + 1}…` }); await new Promise(ok => setTimeout(ok, 5000 * (a + 1))); t0 = Date.now(); continue; } throw e.net ? new Error('Koneksi terputus. Ketuk Unggah lagi; potongan yang sudah terkirim tidak diulang.') : e; }
+      }
       done[i] = r.sha; try { localStorage.setItem(key, JSON.stringify(done)); } catch (e) {}
     }
     tree.push({ path: name, mode: '100644', type: 'blob', sha: done[i] });

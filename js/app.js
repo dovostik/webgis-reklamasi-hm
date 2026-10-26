@@ -390,9 +390,10 @@ function bindOrtho() {
     if (!f) return toast('Pilih file GeoTIFF.');
     if (!/\.tiff?$/i.test(f.name)) return toast('File harus GeoTIFF (.tif).');
     if (f.size > 2 * 1024 ** 3) return toast('File lebih dari 2 GB. Ekspor ulang dengan kompresi JPEG.');
+    if (f.size > 400 * 1024 ** 2 && !(await confirmSheet(`File ${fmt(f.size / 1024 ** 2, 0)} MB cukup besar. Dengan internet 5 Mbps, pengiriman butuh ±${fmt(f.size * 1.34 * 8 / 5e6 / 3600, 1)} jam dan halaman harus tetap terbuka. <br><br>Disarankan kompres dulu menjadi GeoTIFF JPEG (biasanya 10–20× lebih kecil, kualitas peta tetap baik): di QGIS → klik kanan layer → Export → Save As → GeoTIFF, Create options: COMPRESS=JPEG, JPEG_QUALITY=85, PHOTOMETRIC=YCBCR, TILED=YES. Ortho 30 cm tidak perlu resolusi lebih tajam.<br><br>Tetap kirim file ini?`, 'Tetap kirim'))) return;
     const lbl = slot === 'utama' ? 'Ortho utama' : 'Ortho mingguan';
     if (!(await confirmSheet(`Unggah <b>${esc(f.name)}</b> (${fmt(f.size / 1024 ** 2, 0)} MB) sebagai <b>${lbl}</b> tanggal ${esc(tgl(tanggal))}? ${lbl} yang lama akan diganti. Jangan tutup halaman ini sampai pengiriman selesai.`))) return;
-    const job = await uploadOrtho({ file: f, slot, tanggal }, s => prog(`${s.msg} (${Math.round(s.i / Math.max(1, s.n) * 100)}%)`));
+    const job = await uploadOrtho({ file: f, slot, tanggal }, s => prog(`${s.msg} (${Math.round((s.frac ?? s.i / Math.max(1, s.n)) * 100)}%)`));
     prog(''); toast('Terkirim. GitHub sedang memotong ubin, biasanya 15–40 menit.', 5000); renderLainnya();
   });
   on('oDel', async () => {
