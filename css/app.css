@@ -3,7 +3,7 @@
   --accent:#1D6B47; --accent-ink:#FFFFFF; --accent-soft:#D6EBDF;
   --ok:#2F8A57; --ok-soft:#DCEFE3; --warn:#B87908; --warn-soft:#F6E8C8; --bad:#B53A26; --bad-soft:#F5DCD6;
   --idle:#8C7E63; --idle-soft:#EDE7DA; --pend:#4F739A; --pend-soft:#DCE6F0; --done:#7D8A82; --done-soft:#E4E8E5;
-  --sp:#FFF2CC; --pb:#FFD966; --bf:#A9D08E; --bl:#4E7A3B;
+  --sp:#F28C1E; --pb:#2F7FD8; --bf:#2FA84F; --bl:#7B4FB8;
   --f:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif; --mono:ui-monospace,"Roboto Mono",Menlo,Consolas,monospace;
 }
 @media (prefers-color-scheme:dark){:root{
@@ -140,12 +140,12 @@ td.r,th.r{text-align:right}
 .dn-wrap{overflow:auto;height:min(64vh,560px);border:1px solid var(--line);border-radius:12px;background:#EEF0EA;-webkit-overflow-scrolling:touch}
 .dn-svg{display:block}
 .dn-b{cursor:pointer}
-.dn-b .dn-o{stroke:#333;stroke-width:1.2}
+.dn-b .dn-o{stroke-width:2}
 .dn-b.hit .dn-o{stroke:#E0473B;stroke-width:4}
 .dn-b.dim{opacity:.35}
 .dn-b.pulse .dn-o{stroke:#E0473B;stroke-width:6;animation:dnp .4s ease-in-out 4 alternate}
 @keyframes dnp{to{stroke-opacity:.2}}
-.dn-t{font-family:var(--f-mono,ui-monospace,monospace);fill:#16241C;text-anchor:middle;dominant-baseline:middle;pointer-events:none}
+.dn-t{font-family:var(--f-mono,ui-monospace,monospace);fill:#111;stroke:#fff;paint-order:stroke;stroke-linejoin:round;text-anchor:middle;dominant-baseline:middle;pointer-events:none}
 .dn-t.dk{fill:#fff}
 .dn-beli{font-family:var(--f-mono,ui-monospace,monospace);font-weight:700;fill:#4F739A;text-anchor:middle;pointer-events:none}
 .dn-fac{font-size:16px;font-weight:600;fill:#222;text-anchor:middle;dominant-baseline:middle;pointer-events:none}

@@ -3,7 +3,8 @@
 import { S, L } from './core.js';
 import * as G from './logic.js';
 const { esc, fmt } = G;
-const CLC = { SP: '#FFF2CC', PB: '#FFD966', BF: '#A9D08E', BL: '#4E7A3B' };
+// warna cluster kontras: oranye, biru, hijau, ungu
+export const CLC = { SP: '#F28C1E', PB: '#2F7FD8', BF: '#2FA84F', BL: '#7B4FB8' };
 const UNIT = 26; // satuan SVG per meter
 
 function ringsOf(g) {
@@ -59,15 +60,15 @@ export function denahSVG(q = '') {
     const match = ql && (b.kode.toLowerCase().includes(ql) || jen.some(j => j.toLowerCase().includes(ql)));
     if (match) hits.push(b.kode);
     const vert = b.h > b.w, fr = Math.min(1, n / cap);
-    const fill = vert ? `<rect x="${b.x}" y="${b.y + b.h * (1 - fr)}" width="${b.w}" height="${b.h * fr}" fill="${CLC[b.cl] || '#ccc'}"/>` : `<rect x="${b.x}" y="${b.y}" width="${b.w * fr}" height="${b.h}" fill="${CLC[b.cl] || '#ccc'}"/>`;
-    const dark = b.cl === 'BL' && fr > .55;
-    const l1 = b.kode, l2 = n ? (jen.length > 1 ? jen.length + ' jenis' : short(jen[0])) : 'kosong', l3 = n ? fmt(n) : '';
-    const cx = b.x + b.w / 2, cy = b.y + b.h / 2, len = Math.max(b.w, b.h), thick = Math.min(b.w, b.h);
+    const col = CLC[b.cl] || '#888', pct = Math.round(fr * 100);
+    const fill = vert ? `<rect x="${b.x}" y="${b.y + b.h * (1 - fr)}" width="${b.w}" height="${b.h * fr}" fill="${col}"/>` : `<rect x="${b.x}" y="${b.y}" width="${b.w * fr}" height="${b.h}" fill="${col}"/>`;
+    const l1 = b.kode + (n ? ' · ' + pct + '%' : ''), l2 = n ? (jen.length > 1 ? jen.length + ' jenis' : short(jen[0])) : 'kosong', l3 = n ? fmt(n) : '';
+    const cx = b.x + b.w / 2, cy = b.y + b.h / 2, thick = Math.min(b.w, b.h);
     const fs = Math.max(8, Math.min(thick * .36, 15));
-    const tx = `<text class="dn-t${dark ? ' dk' : ''}" font-size="${fs.toFixed(1)}" transform="translate(${cx.toFixed(1)} ${cy.toFixed(1)})${vert ? ' rotate(-90)' : ''}"><tspan x="0" dy="${(-fs * .15).toFixed(1)}" font-weight="700">${esc(l1)}</tspan><tspan x="0" dy="${(fs * 1.05).toFixed(1)}">${esc(l2)}${l3 ? ' · ' + l3 : ''}</tspan></text>`;
-    const dot = (due ? '#E0473B' : ak ? '#4F739A' : ready ? '#2F8A57' : null);
-    const dx = vert ? cx : b.x + b.w - fs * .6, dy = vert ? b.y + fs * .6 : cy;
-    return `<g class="dn-b${match ? ' hit' : ''}${ql && !match ? ' dim' : ''}" data-bed="${esc(b.kode)}" id="dn-${esc(b.kode)}" role="button" tabindex="0" aria-label="Bedengan ${esc(b.kode)}, ${esc(l2)} ${l3}"><rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="#fff"/>${fill}<rect class="dn-o" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="transparent"/>${tx}${dot ? `<circle cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="${(fs * .32).toFixed(1)}" fill="${dot}" stroke="#fff" stroke-width="1"/>` : ''}${beli ? `<text class="dn-beli" font-size="${(fs * .7).toFixed(1)}" x="${(vert ? cx : b.x + fs * .5).toFixed(1)}" y="${(vert ? b.y + b.h - fs * .4 : cy + fs * .25).toFixed(1)}">B</text>` : ''}</g>`;
+    const tx = `<text class="dn-t" font-size="${fs.toFixed(1)}" stroke-width="${(fs * .17).toFixed(1)}" transform="translate(${cx.toFixed(1)} ${cy.toFixed(1)})${vert ? ' rotate(-90)' : ''}"><tspan x="0" dy="${(-fs * .15).toFixed(1)}" font-weight="700">${esc(l1)}</tspan><tspan x="0" dy="${(fs * 1.05).toFixed(1)}">${esc(l2)}${l3 ? ' · ' + l3 : ''}</tspan></text>`;
+    const dot = (due ? '#E0473B' : ak ? '#111' : ready ? '#FFD400' : null);
+    const dx = vert ? cx : b.x + b.w - fs * .7, dy = vert ? b.y + fs * .7 : cy;
+    return `<g class="dn-b${match ? ' hit' : ''}${ql && !match ? ' dim' : ''}" data-bed="${esc(b.kode)}" id="dn-${esc(b.kode)}" role="button" tabindex="0" aria-label="Bedengan ${esc(b.kode)}, ${esc(l2)} ${l3}"><rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="#fff"/><rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="${col}" fill-opacity=".14"/>${fill}<rect class="dn-o" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="transparent" stroke="${col}"/>${tx}${dot ? `<circle cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="${(fs * .38).toFixed(1)}" fill="${dot}" stroke="#fff" stroke-width="${(fs * .16).toFixed(1)}"/>` : ''}${beli ? `<text class="dn-beli" font-size="${(fs * .7).toFixed(1)}" x="${(vert ? cx : b.x + fs * .5).toFixed(1)}" y="${(vert ? b.y + b.h - fs * .4 : cy + fs * .25).toFixed(1)}">B</text>` : ''}</g>`;
   }).join('');
   const { x, y, w, h } = f.vb;
   const facNames = f.F.filter(x => x.layer === 'fasilitas').sort((a, b) => (a.props.NO || 0) - (b.props.NO || 0)).map(x => `${x.props.NO} ${x.props.NAMA}`).join(' · ');
