@@ -59,8 +59,8 @@ export function makeLogic(S) {
   function stokTampung(bid) {
     const m = {};
     S.kirim.filter(k => k.blok_id === bid && k.status === 'diterima').forEach(k => { m[k.jenis] = (m[k.jenis] || 0) + k.n; });
-    const tagIds = new Set(tags(bid).map(t => t.id));
-    S.tag_event.filter(e => e.tipe === 'sulam' && tagIds.has(e.tag_id) && e.jenis).forEach(e => { m[e.jenis] = (m[e.jenis] || 0) - 1; });
+    // sulam dihitung sekali per titik sampai titik itu mati lagi (ketukan ganda tidak mengurangi stok dua kali)
+    tags(bid).forEach(t => { let sul = false; events(t.id).forEach(e => { if (e.tipe === 'sulam' && e.jenis) { if (!sul) m[e.jenis] = (m[e.jenis] || 0) - 1; sul = true; } else if (e.tipe === 'mati') sul = false; }); });
     S.tampung_log.filter(l => l.blok_id === bid).forEach(l => { m[l.jenis] = (m[l.jenis] || 0) - l.n; });
     (S.kembali || []).filter(k => k.blok_id === bid).forEach(k => { m[k.jenis] = (m[k.jenis] || 0) - k.n; });
     Object.keys(m).forEach(k => { if (m[k] <= 0) delete m[k]; });

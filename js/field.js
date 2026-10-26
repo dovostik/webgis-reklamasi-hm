@@ -1,6 +1,6 @@
 // Lapangan: sesi inspeksi GL (jejak GPS, scan tag, foto), scan tag umum, sulam vendor.
 import { SB } from './sb.js';
-import { S, L, ins, upd, $, $$, toast, sheet, confirmSheet, uid, nm, GPS, dist, waitGPS, scanQR, pickPhoto, newMap, locateControl, uploadOrQueue, fileUrl } from './core.js';
+import { S, L, ins, upd, $, $$, toast, sheet, confirmSheet, uid, nm, GPS, dist, waitGPS, scanQR, pickPhoto, newMap, locateControl, uploadOrQueue, fileUrl, loadAll, isOnline } from './core.js';
 import * as G from './logic.js';
 import { role, seesBlok, route, tagColor, tagItem } from './app.js';
 const { esc, fmt, tgl, jam } = G;
@@ -129,6 +129,8 @@ export function renderSesi(id, shell) {
 }
 
 // ---------- scan umum ----------
+// cegah ketukan ganda: semua tombol aksi di lembar dikunci selama proses
+function once(box, fn) { let busy = false; return async (...a) => { if (busy) return; busy = true; const bs = [...box.querySelectorAll('button.btn')], prev = bs.map(b => b.disabled); bs.forEach(b => b.disabled = true); try { await fn(...a); } finally { busy = false; if (box.isConnected) bs.forEach((b, i) => b.disabled = prev[i]); } }; }
 export function openScan(shell) {
   const r = role();
   const myOpen = S.sesi.find(x => x.oleh === S.me.id && !x.selesai_at);
@@ -140,6 +142,7 @@ export function openScan(shell) {
   $$('[data-tag]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); tagSheet(a.dataset.tag); }));
   $('#scGo').addEventListener('click', async () => {
     const id = await scanQR(); if (!id) return;
+    if (isOnline()) { try { await Promise.race([loadAll(), new Promise(ok => setTimeout(ok, 6000))]); } catch (e) {} } // stok & status terbaru sebelum mencatat
     const t = S.tag.find(x => x.id === id);
     if (t) { if (!seesBlok(S.blokMap[t.blok_id])) return toast('Tag ini bukan bagian pekerjaan akun Anda.'); return tagSheet(id, null, () => openScan(shell)); }
     if (r === 'exdas' || r === 'bumdes' || r === 'admin') {
@@ -179,23 +182,23 @@ export function tagSheet(id, sesi = null, after = null) {
     <div class="sec"><h3>Jenis yang boleh untuk titik ini</h3><div class="chips">${al.map(j => `<span class="chip yes">${esc(j.nama)}</span>`).join('')}${[...dead].map(k => `<span class="chip no">${esc(S.jenisMap[k]?.nama || k)}</span>`).join('')}</div></div>
     ${act}<button class="btn ghost block" data-close>Tutup</button></div>`, (box, close) => {
     const done = () => { close(); after ? after() : route(); };
-    const h = box.querySelector('#tHidup'); if (h) h.addEventListener('click', async () => {
+    const h = box.querySelector('#tHidup'); if (h) h.addEventListener('click', once(box, async () => {
       await ins('tag_event', { tag_id: id, periode_id: sesi.periode_id, sesi_id: sesi.id, tipe: 'hidup', oleh: S.me.id, client_at: new Date().toISOString(), lon: GPS.pos?.lon, lat: GPS.pos?.lat, acc: GPS.pos?.acc });
       await upd('tag', { id }, { status: 'closed' }); toast(id + ' hidup, titik ditutup.'); done();
-    });
-    const m = box.querySelector('#tMati'); if (m) m.addEventListener('click', async () => {
+    }));
+    const m = box.querySelector('#tMati'); if (m) m.addEventListener('click', once(box, async () => {
       const jenis = lastS?.jenis || ev.filter(e => e.tipe === 'mati').pop()?.jenis;
       await ins('tag_event', { tag_id: id, periode_id: sesi.periode_id, sesi_id: sesi.id, tipe: 'mati', jenis, oleh: S.me.id, client_at: new Date().toISOString(), lon: GPS.pos?.lon, lat: GPS.pos?.lat, acc: GPS.pos?.acc });
       const patch = { status: 'mati' }; if (t.sumber !== 'gl' || t.periode_id !== sesi.periode_id) Object.assign(patch, { sumber: 'gl', periode_id: sesi.periode_id });
       await upd('tag', { id }, patch); toast(`${id} mati. ${S.jenisMap[jenis]?.nama || ''} dikeluarkan dari pilihan titik ini.`); done();
-    });
-    const su = box.querySelector('#tSulam'); if (su) su.addEventListener('click', async () => {
+    }));
+    const su = box.querySelector('#tSulam'); if (su) su.addEventListener('click', once(box, async () => {
       const jk = box.querySelector('#tJ').value;
       let pos = GPS.pos && Date.now() - GPS.pos.t < 20000 && GPS.pos.acc <= 15 ? GPS.pos : null;
       if (!pos) { pos = await waitGPS(15, 'Cek posisi di titik tag'); if (!pos) return; }
       if (t.lat) { const d = dist({ lat: t.lat, lon: t.lon }, pos); const lim = 15 + (t.low_acc ? Number(t.acc || 0) : 0); if (d > lim) return toast(`Posisi Anda ${fmt(d)} m dari titik tag (batas ${fmt(lim)} m). Dekati ajir lalu scan lagi.`, 4500); }
       await ins('tag_event', { tag_id: id, periode_id: p.id, tipe: 'sulam', jenis: jk, lon: pos.lon, lat: pos.lat, acc: pos.acc, oleh: S.me.id, client_at: new Date().toISOString() });
       await upd('tag', { id }, { status: 'disulam' }); toast(`${id} disulam ${S.jenisMap[jk]?.nama}. Bisa dinilai 7 hari lagi.`); done();
-    });
+    }));
   });
 }

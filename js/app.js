@@ -227,7 +227,7 @@ function renderBlok(id) {
     }
     if (p && p.status === 'sulam_gl') {
       const og = L.openGL(p);
-      act += `<div class="card stack"><h2>Sulam tag GL (${og.length})</h2><p class="small" style="margin:0">Semua tag GL wajib disulam lalu discan. ${p.hasil?.final ? 'Setelah semua selesai, BA menunggu persetujuan owner.' : 'Setelah semua selesai, GL melakukan verifikasi.'}</p><a class="btn ghost block" href="#scan">Scan sulam</a><button class="btn block" id="vSulamDone" ${og.length ? 'disabled' : ''}>Konfirmasi sulam selesai</button></div>`;
+      act += `<div class="card stack"><h2>Sulam tag GL (${og.length})</h2><p class="small" style="margin:0">Semua tag GL wajib disulam lalu discan. ${p.hasil?.final ? 'Setelah semua selesai, BA menunggu persetujuan owner.' : 'Setelah semua selesai, GL melakukan verifikasi.'}</p><a class="btn ghost block" href="#scan">Scan sulam</a><button class="btn block" id="vSulamDone" ${og.length ? 'disabled' : ''}>Konfirmasi sulam selesai</button>${og.length ? `<p class="note">Terkunci: ${og.length} tag GL belum disulam (${og.map(t => esc(t.id.slice(-6))).join(', ')}). Tombol aktif setelah semua tag discan sulam.</p>` : ''}</div>`;
     }
   }
   // --- GL owner ---
