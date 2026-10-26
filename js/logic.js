@@ -189,5 +189,22 @@ export function makeLogic(S) {
     const rows = [['Pioneer', rl.pio, mp], ['Sisipan', rl.sis, ms], ['Jumlah', rl.pio + rl.sis, mp + ms]].map(([n, r, m]) => ({ n, r, m, h: r - m, p: r ? (r - m) / r * 100 : 0 }));
     return { rows, pct: rows[2].p, aktual: rl.aktual };
   }
-  return { periodes, aktif, selesai, tags, events, deadAt, allowed, stokTampung, dalamKirim, realisasi, lastSulam, lockInfo, retensiInfo, rotasiInfo, blokStatus, openGL, openVendor, sulamDemand, tanamDemand, bed, lotsIn, fill, stage, readyStock, readyLots, suggestTargets, sensus };
+  // kebutuhan material per pekerjaan aktif: BASTL (penanaman) = pupuk kandang + LCC; retensi yang sudah mulai & rotasi = NPK seluruh luas
+  const MAT = { kohe: { lbl: 'Pupuk kandang (kohe)', sat: 'sak', match: b => /kohe|kandang/i.test(b.nama) }, lcc: { lbl: 'LCC / cover crop', sat: 'kg', match: b => (b.kategori || '').toUpperCase() === 'LCC' }, npk: { lbl: 'Pupuk NPK', sat: 'kg', match: b => /npk/i.test(b.nama) } };
+  const unitK = (sat, to) => { const s = String(sat || '').toLowerCase(); if (to === 'kg') return s === 'gr' || s === 'g' || s === 'gram' ? 0.001 : 1; return 1; };
+  function matDemand() {
+    const out = [];
+    S.periode.filter(p => p.status === 'pelaksanaan').forEach(p => {
+      const b = S.blokMap[p.blok_id]; if (!b) return; const n = needs(b.ha); const want = [];
+      if (p.tipe === 'cek1') want.push(['kohe', n.sakKohe], ['lcc', n.lcc]);
+      else if (p.tipe === 'rotasi' || (p.tipe === 'retensi' && !(retensiInfo(p)?.left > 0))) want.push(['npk', n.npk]);
+      want.forEach(([kel, need]) => {
+        const rows = (S.kirim_mat || []).filter(k => k.periode_id === p.id && k.kel === kel);
+        const sent = rows.reduce((a, k) => a + Number(k.n) * unitK(S.barang.find(x => x.nama === k.barang)?.satuan, MAT[kel].sat), 0); // sisa yang kembali tidak membuka permintaan lagi
+        out.push({ p, b, kel, need, sent, kurang: Math.max(0, need - sent), ...MAT[kel] });
+      });
+    });
+    return out;
+  }
+  return { MAT, unitK, matDemand, periodes, aktif, selesai, tags, events, deadAt, allowed, stokTampung, dalamKirim, realisasi, lastSulam, lockInfo, retensiInfo, rotasiInfo, blokStatus, openGL, openVendor, sulamDemand, tanamDemand, bed, lotsIn, fill, stage, readyStock, readyLots, suggestTargets, sensus };
 }

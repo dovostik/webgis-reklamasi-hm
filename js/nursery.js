@@ -123,8 +123,51 @@ function riwayatBibit() {
   const ev = [
     ...S.kirim.filter(k => seesBlok(S.blokMap[k.blok_id])).map(k => ({ at: k.diterima_at || k.dikirim_at, t: `Kirim ${jn(k.jenis)} ${fmt(k.n)} → ${G.blokName(S.blokMap[k.blok_id])}`, s: k.status === 'diterima' ? `diterima ${nm(k.diterima_oleh)} ${tgl(k.diterima_at)} ${jam(k.diterima_at)}` : `dikirim ${nm(k.dikirim_oleh)} ${tgl(k.dikirim_at)} ${jam(k.dikirim_at)} · belum diterima`, k: k.status === 'diterima' ? 's-ok' : 's-warn' })),
     ...(S.kembali || []).filter(k => seesBlok(S.blokMap[k.blok_id])).map(k => ({ at: k.diterima_at || k.dikirim_at, t: `Kembali ${jn(k.jenis)} ${fmt(k.n)} (${k.kondisi === 'afkir' ? 'afkir' : 'sisa sehat'}) ← ${G.blokName(S.blokMap[k.blok_id])}`, s: k.status === 'diterima' ? `diterima nursery ${nm(k.diterima_oleh)} ${tgl(k.diterima_at)} ${jam(k.diterima_at)}` : `dikirim ${nm(k.dikirim_oleh)} ${tgl(k.dikirim_at)} ${jam(k.dikirim_at)} · belum diterima nursery`, k: k.status === 'diterima' ? 's-ok' : 's-warn' })),
+    ...(S.kirim_mat || []).filter(k => seesBlok(S.blokMap[k.blok_id])).map(k => ({ at: k.diterima_at || k.dikirim_at, t: `Material ${k.barang} ${fmt(k.n, 1)} ${satB(k.barang)} → ${G.blokName(S.blokMap[k.blok_id])}${Number(k.sisa) ? ` (sisa kembali ${fmt(k.sisa, 1)})` : ''}`, s: k.status === 'diterima' ? `diterima ${nm(k.diterima_oleh)} ${tgl(k.diterima_at)} ${jam(k.diterima_at)}` : `dikirim ${nm(k.dikirim_oleh)} ${tgl(k.dikirim_at)} ${jam(k.dikirim_at)} · belum diterima`, k: k.status === 'diterima' ? 's-ok' : 's-warn' })),
   ].sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 40);
   return `<div class="card stack"><h2>Riwayat kirim & kembali</h2>${ev.length ? `<div class="list">${ev.map(e => `<div class="item"><div class="grow"><b>${esc(e.t)}</b><span>${esc(e.s)}</span></div><span class="pill ${e.k}">${e.k === 's-ok' ? 'Diterima' : 'Dalam perjalanan'}</span></div>`).join('')}</div>` : '<p class="muted small" style="margin:0">Belum ada.</p>'}</div>`;
+}
+// ---------- material ke lapangan ----------
+const satB = nama => S.barang.find(x => x.nama === nama)?.satuan || '';
+function matSection() {
+  const nurs = isRole('admin', 'nursery', 'crew');
+  const dem = L.matDemand().filter(x => seesBlok(x.b));
+  const jalan = (S.kirim_mat || []).filter(k => k.status === 'dikirim' && seesBlok(S.blokMap[k.blok_id]));
+  const sisaOk = (S.kirim_mat || []).filter(k => k.status === 'diterima' && seesBlok(S.blokMap[k.blok_id]) && !k.sisa_at);
+  return `<div class="card stack"><h2>Permintaan material (${dem.filter(x => x.kurang > 0).length})</h2>
+    ${dem.map(x => { const opts = S.barang.filter(bg => bg.aktif !== false && x.match(bg)); const key = x.p.id + '-' + x.kel;
+      return `<div class="sec"><div class="row between"><b>${esc(G.blokName(x.b))} · ${esc(x.lbl)}</b><span class="small ${x.kurang > 0 ? '' : 'muted'}">${fmt(x.sent, 1)} / ${fmt(x.need, x.sat === 'kg' ? 0 : 0)} ${x.sat}${x.kurang > 0 ? ' · kurang ' + fmt(x.kurang, 1) : ' · cukup'}</span></div>
+      <p class="small muted" style="margin:0">${esc(G.TIPE_LBL[x.p.tipe])}${x.p.tipe === 'rotasi' ? ' ' + x.p.nomor : ''} · ${fmt(x.b.ha, 2)} Ha</p>
+      ${nurs && x.kurang > 0 ? (opts.length ? `<div class="row" style="flex-wrap:nowrap"><select id="mb-${key}" aria-label="Barang">${opts.map(bg => `<option value="${esc(bg.nama)}">${esc(bg.nama)} (stok ${bg.stok == null ? '–' : fmt(bg.stok, 1)} ${esc(bg.satuan)})</option>`).join('')}</select><input type="number" min="0" step="any" inputmode="decimal" id="mn-${key}" value="${x.kurang ? +(x.kurang / L.unitK(opts[0].satuan, x.sat)).toFixed(2) : ''}" style="width:96px" aria-label="Jumlah"><button class="btn sm" data-mm="${key}">Kirim</button></div>` : `<p class="err" style="margin:0">Belum ada barang ${x.kel === 'lcc' ? 'berkategori LCC' : 'yang cocok'} di master gudang.</p>`) : ''}</div>`; }).join('') || '<p class="muted small" style="margin:0">Tidak ada.</p>'}
+    <p class="note">Otomatis: petak BASTL diberi nama → pupuk kandang 2 kg/lubang & LCC 15 kg/Ha; retensi ExDAS mulai dan rotasi BUMDES → NPK 50 g/pohon untuk seluruh luas. Stok gudang berkurang saat dikirim.</p></div>
+    <div class="card stack"><h2>Material dalam pengiriman (${jalan.length})</h2>${jalan.map(k => `<div class="row between"><span class="small"><b>${esc(k.barang)} ${fmt(k.n, 1)} ${esc(satB(k.barang))}</b> → ${esc(G.blokName(S.blokMap[k.blok_id]))}</span>${isRole('admin', 'owner', 'exdas', 'bumdes') ? `<button class="btn sm" data-mt="${k.id}">Terima</button>` : '<span class="small muted">menunggu lapangan</span>'}</div>`).join('') || '<p class="muted small" style="margin:0">Tidak ada.</p>'}</div>
+    ${nurs && sisaOk.length ? `<div class="card stack"><h2>Sisa material kembali ke gudang</h2><p class="note" style="margin:0">Timbang sisa yang dibawa kembali dari lapangan, lalu catat. Stok gudang bertambah sesuai sisa.</p>${sisaOk.map(k => `<div class="row between"><span class="small"><b>${esc(k.barang)}</b> ${fmt(k.n, 1)} ${esc(satB(k.barang))} · ${esc(G.blokName(S.blokMap[k.blok_id]))} · diterima ${tgl(k.diterima_at)}</span><button class="btn ghost sm" data-ms="${k.id}">Catat sisa</button></div>`).join('')}</div>` : ''}`;
+}
+function bindMat(rerender) {
+  $$('[data-mm]').forEach(b => b.addEventListener('click', async () => {
+    const key = b.dataset.mm, x = L.matDemand().find(d => d.p.id + '-' + d.kel === key); if (!x) return;
+    const nama = $('#mb-' + CSS.escape(key)).value, n = Number($('#mn-' + CSS.escape(key)).value); const bg = S.barang.find(z => z.nama === nama);
+    if (!(n > 0)) return toast('Isi jumlah.');
+    if (bg.stok == null) return toast(`Stok ${nama} belum valid. Lakukan opname di Gudang dulu.`, 4000);
+    if (n > Number(bg.stok)) return toast(`Stok ${nama} hanya ${fmt(bg.stok, 1)} ${bg.satuan}.`);
+    b.disabled = true;
+    await ins('kirim_mat', { id: uid(), periode_id: x.p.id, blok_id: x.b.id, kel: x.kel, barang: nama, n, dikirim_oleh: S.me.id });
+    await upd('barang', { nama }, { stok: Number(bg.stok) - n });
+    await ins('barang_tx', { barang: nama, tipe: 'keluar', n, keperluan: x.kel === 'npk' ? 'Pemupukan' : 'Penanaman', lokasi: G.blokName(x.b), oleh: S.me.id });
+    toast(`${nama} ${fmt(n, 1)} ${bg.satuan} dikirim ke ${G.blokName(x.b)}.`); rerender();
+  }));
+  $$('[data-mt]').forEach(b => b.addEventListener('click', async () => { b.disabled = true; await upd('kirim_mat', { id: b.dataset.mt }, { status: 'diterima', diterima_oleh: S.me.id, diterima_at: new Date().toISOString() }); toast('Material diterima di lapangan.'); rerender(); }));
+  $$('[data-ms]').forEach(b => b.addEventListener('click', () => {
+    const k = S.kirim_mat.find(x => x.id === b.dataset.ms); const sat = satB(k.barang);
+    sheet(`<form class="stack" id="msf"><h2>Sisa ${esc(k.barang)}</h2><p class="small" style="margin:0">Dikirim ${fmt(k.n, 1)} ${esc(sat)} ke ${esc(G.blokName(S.blokMap[k.blok_id]))}. Isi hasil timbang sisa (0 bila habis terpakai).</p><label class="f" for="msN">Sisa ditimbang (${esc(sat)})<input id="msN" type="number" min="0" max="${k.n}" step="any" inputmode="decimal" value="0"></label><div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit">Simpan</button></div></form>`, (box, close) => {
+      box.querySelector('#msf').addEventListener('submit', async e => {
+        e.preventDefault(); const n = Number(box.querySelector('#msN').value); if (!(n >= 0) || n > Number(k.n)) return toast(`Isi 0–${fmt(k.n, 1)}.`);
+        await upd('kirim_mat', { id: k.id }, { sisa: n, sisa_oleh: S.me.id, sisa_at: new Date().toISOString() });
+        if (n > 0) { const bg = S.barang.find(z => z.nama === k.barang); await upd('barang', { nama: k.barang }, { stok: Number(bg?.stok || 0) + n }); await ins('barang_tx', { barang: k.barang, tipe: 'masuk', n, keperluan: 'Sisa dari lapangan', lokasi: G.blokName(S.blokMap[k.blok_id]), oleh: S.me.id }); }
+        close(); toast(n > 0 ? `Sisa ${fmt(n, 1)} ${sat} masuk gudang.` : 'Tercatat habis terpakai.'); rerender();
+      });
+    });
+  }));
 }
 // ---------- kirim bibit ----------
 async function sendFromStock(blok_id, minta_id, jk, n) {
@@ -148,7 +191,7 @@ export function renderKirim(shell) {
   const sul = L.sulamDemand().filter(o => seesBlok(S.blokMap[o.blok_id]));
   const sent = S.kirim.filter(k => k.status === 'dikirim' && seesBlok(S.blokMap[k.blok_id]));
   const hourWIB = new Date(Date.now() + 7 * 3600e3).getUTCHours();
-  shell('Kirim bibit', null, `<div class="stack">
+  shell('Kirim bibit & material', null, `<div class="stack">
     ${nurs ? `<div class="alert">${hourWIB >= 18 ? 'Ringkasan permintaan hari ini sudah terkirim pukul 18.00 WIB.' : 'Ringkasan permintaan sulam dikumpulkan sepanjang hari dan dikirim pukul 18.00 WIB.'}</div>` : ''}
     <div class="card stack"><h2>Permintaan penanaman BASTL (${tanam.length})</h2>
       ${tanam.map(m => { const b = S.blokMap[m.blok_id]; const row = (lbl, t, need, got) => `<div class="sec"><div class="row between"><b>${lbl}</b><span class="small">${fmt(got)} / ${fmt(need)} ${got > need ? '· lebih ' + fmt(got - need) : got < need ? '· kurang ' + fmt(need - got) : ''}</span></div>${nurs ? `<div class="row" style="flex-wrap:nowrap">${sel(`mj-${m.id}-${t}`, t)}<input type="number" min="1" inputmode="numeric" id="mn-${m.id}-${t}" value="${Math.max(0, need - got) || ''}" style="width:96px" aria-label="Jumlah"><button class="btn sm" data-mk="${m.id}" data-t="${t}">Kirim</button></div>` : ''}</div>`;
@@ -158,7 +201,8 @@ export function renderKirim(shell) {
       ${sul.map(o => { const b = S.blokMap[o.blok_id]; return `<div class="card tight stack"><div class="row between"><b>${esc(G.blokName(b))}</b><span class="pill ${o.kurang ? 's-warn' : 's-ok'}">${o.kurang ? 'kurang ' + fmt(o.kurang) : 'cukup'}</span></div><div class="chips">${Object.entries(o.perJenis).map(([k, v]) => `<span class="chip">${esc(jn(k))} mati ${v}</span>`).join('')}</div><p class="small" style="margin:0">${o.total} tag perlu disulam · ${fmt(o.tersedia)} bibit sudah di penampungan/pengiriman.</p>${nurs ? `<div class="row" style="flex-wrap:nowrap">${sel(`sj-${o.blok_id}`)}<input type="number" min="1" inputmode="numeric" id="sn-${o.blok_id}" value="${o.kurang || ''}" style="width:96px" aria-label="Jumlah"><button class="btn sm" data-sk="${esc(o.blok_id)}">Kirim</button></div>` : ''}</div>`; }).join('') || '<p class="muted small" style="margin:0">Tidak ada.</p>'}
       <p class="note">Digabung per blok dan jenis yang mati. Orang lapangan menentukan jenis yang dipakai; saat scan sulam, aplikasi hanya menawarkan jenis yang cocok untuk titik itu.</p></div>
     <div class="card stack"><h2>Dalam pengiriman (${sent.length})</h2>${sent.length ? `<div class="tbl"><table><thead><tr><th>Blok</th><th>Jenis</th><th class="r">Jml</th><th>Dari</th><th></th></tr></thead><tbody>${sent.map(k => `<tr><td>${esc(G.blokName(S.blokMap[k.blok_id]))}</td><td>${esc(jn(k.jenis))}</td><td class="r">${fmt(k.n)}</td><td>${esc(k.bedengan || '')}</td><td>${isRole('admin', 'owner', 'exdas', 'bumdes') ? `<button class="btn sm" data-tr="${k.id}">Terima</button>` : '<span class="small muted">menunggu</span>'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted small" style="margin:0">Tidak ada.</p>'}<p class="note">Serah terima di aplikasi: nursery menekan Kirim, lapangan menekan Terima.</p></div>
-    ${riwayatBibit()}</div>`);
+    ${matSection()}${riwayatBibit()}</div>`);
+  bindMat(() => renderKirim(shell));
   $$('[data-mk]').forEach(b => b.addEventListener('click', async () => { const m = S.minta.find(x => x.id === b.dataset.mk), t = b.dataset.t; const s = $(`#mj-${m.id}-${t}`); if (!s) return; const n = Number($(`#mn-${m.id}-${t}`).value); if (!(n > 0)) return toast('Isi jumlah.'); b.disabled = true; if (await sendFromStock(m.blok_id, m.id, s.value, n)) { toast(`${fmt(n)} ${jn(s.value)} dikirim.`); renderKirim(shell); } b.disabled = false; }));
   $$('[data-sk]').forEach(b => b.addEventListener('click', async () => { const bid = b.dataset.sk; const s = $(`#sj-${CSS.escape(bid)}`); if (!s) return; const n = Number($(`#sn-${CSS.escape(bid)}`).value); if (!(n > 0)) return toast('Isi jumlah.'); b.disabled = true; if (await sendFromStock(bid, null, s.value, n)) { toast(`${fmt(n)} ${jn(s.value)} dikirim.`); renderKirim(shell); } b.disabled = false; }));
   $$('[data-tr]').forEach(b => b.addEventListener('click', async () => { await upd('kirim', { id: b.dataset.tr }, { status: 'diterima' }); toast('Bibit diterima di lapangan.'); renderKirim(shell); }));

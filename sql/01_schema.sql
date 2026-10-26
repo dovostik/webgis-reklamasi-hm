@@ -493,3 +493,22 @@ alter policy r on public.blok using (public.can_see_layer(layer) or (asal_bastl 
 alter table public.periode drop constraint if exists periode_status_check;
 alter table public.periode add constraint periode_status_check check (status in ('pelaksanaan','pp_diajukan','siap_inspeksi','inspeksi','sulam_gl','verifikasi','ajukan_ba','menunggu_persetujuan','selesai'));
 alter table public.periode add column if not exists pp jsonb;
+-- kiriman material ke lapangan (pupuk kandang & LCC saat penanaman BASTL, NPK saat retensi/rotasi); sisa ditimbang lalu masuk gudang
+create table if not exists public.kirim_mat (
+  id uuid primary key default gen_random_uuid(),
+  periode_id uuid references public.periode(id), blok_id text not null references public.blok(id),
+  kel text not null check (kel in ('kohe','lcc','npk')),
+  barang text not null references public.barang(nama) on update cascade,
+  n numeric not null check (n > 0),
+  status text not null default 'dikirim' check (status in ('dikirim','diterima')),
+  dikirim_oleh uuid references public.profiles(id), dikirim_at timestamptz not null default now(),
+  diterima_oleh uuid references public.profiles(id), diterima_at timestamptz,
+  sisa numeric not null default 0, sisa_oleh uuid references public.profiles(id), sisa_at timestamptz
+);
+alter table public.kirim_mat enable row level security;
+create policy r on public.kirim_mat for select to authenticated using (public.can_see_blok(blok_id));
+create policy wi on public.kirim_mat for insert to authenticated with check (public.has_role('admin','nursery','crew'));
+create policy wu on public.kirim_mat for update to authenticated using (public.has_role('admin','nursery','crew','owner','exdas','bumdes') and public.can_see_blok(blok_id));
+create trigger srv_time before insert on public.kirim_mat for each row execute function public.set_server_time('dikirim_at');
+grant select, insert, update on public.kirim_mat to authenticated;
+update public.barang set kategori = 'LCC' where nama in ('Biji CP','Biji CM','Koro');

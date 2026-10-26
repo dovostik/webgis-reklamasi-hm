@@ -53,7 +53,8 @@ function baseData(p, b) {
     blok: { id: b.id, nama: G.blokName(b), ha: b.ha, pit: b.pit, kode_bastl: b.kode_bastl, no_bastl: b.no_bastl, geom: b.geom },
     periode: { tipe: p.tipe, nomor: p.nomor, vendor: p.vendor, mulai_at: p.mulai_at, vendor_selesai_at: p.vendor_selesai_at || p.pp?.diajukan_at },
     pct: p.pct, rows: p.hasil?.rows, tanggal: G.today(), tanam, sulam, realisasi: L.realisasi(b),
-    umur: b.tgl_tanam ? G.diffDays(G.today(), b.tgl_tanam) : null, esign: true
+    umur: b.tgl_tanam ? G.diffDays(G.today(), b.tgl_tanam) : null, esign: true,
+    mat: (() => { const m = {}; (S.kirim_mat || []).filter(k => k.periode_id === p.id && k.status === 'diterima').forEach(k => { const sat = L.MAT[k.kel].sat; const v = (Number(k.n) - Number(k.sisa || 0)) * L.unitK(S.barang.find(x => x.nama === k.barang)?.satuan, sat); m[k.kel] = (m[k.kel] || 0) + v; }); return m; })()
   };
 }
 // ExDAS: BA Penyelesaian Pekerjaan diajukan vendor dengan 4 foto kegiatan
@@ -119,7 +120,7 @@ function bodyPP(a) {
   const d = a.data;
   if (d.periode.vendor === 'exdas') {
     const ha = d.blok.ha, n = G.needs(ha), rl = d.realisasi;
-    const keg = [['Pemasangan ajir', fmt(n.lubang), 'batang'], ['Pembuatan lubang tanam', fmt(n.lubang), 'lubang'], ['Pemberian pupuk dasar (kohe 2 kg/lubang)', fmt(n.pupuk), 'kg'], ['Penanaman tanaman pioneer (4×4 m)', fmt(rl.pio), 'pohon'], ['Penanaman tanaman sisipan (6×8 m)', fmt(rl.sis), 'pohon'], ['Pemupukan NPK (50 g/pohon)', fmt(n.npk), 'kg'], ['Penaburan LCC / cover crop', fmt(n.lcc), 'kg']];
+    const keg = [['Pemasangan ajir', fmt(n.lubang), 'batang'], ['Pembuatan lubang tanam', fmt(n.lubang), 'lubang'], ['Pemberian pupuk dasar (kohe 2 kg/lubang)', fmt(d.mat?.kohe != null ? d.mat.kohe * G.STD.kohe : n.pupuk), 'kg'], ['Penanaman tanaman pioneer (4×4 m)', fmt(rl.pio), 'pohon'], ['Penanaman tanaman sisipan (6×8 m)', fmt(rl.sis), 'pohon'], ['Pemupukan NPK (50 g/pohon)', fmt(n.npk), 'kg'], ['Penaburan LCC / cover crop', fmt(d.mat?.lcc != null ? d.mat.lcc : n.lcc, 1), 'kg']];
     return `<p>Pada hari ini ${hariTgl(d.tanggal)}, telah diselesaikan pekerjaan penanaman reklamasi dengan rincian:</p>${idTbl(d, [['Mulai', tgl(d.periode.mulai_at)], ['Lapor selesai', tgl(d.periode.vendor_selesai_at)]])}
       <table class="g" style="margin-top:10px"><thead><tr><th>No</th><th>Kegiatan</th><th>Volume</th><th>Satuan</th></tr></thead><tbody>${keg.map((k, i) => `<tr><td>${i + 1}</td><td>${k[0]}</td><td style="text-align:right">${k[1]}</td><td>${k[2]}</td></tr>`).join('')}</tbody></table>
       ${Object.keys(d.tanam || {}).length ? `<p style="margin-bottom:4px">Rincian jenis tertanam:</p><table class="g"><thead><tr><th>Jenis</th><th>Jumlah</th></tr></thead><tbody>${Object.entries(d.tanam).map(([k, v]) => `<tr><td>${esc(S.jenisMap[k]?.nama || k)}</td><td style="text-align:right">${fmt(v)}</td></tr>`).join('')}</tbody></table>` : ''}
@@ -127,7 +128,7 @@ function bodyPP(a) {
   }
   const n = G.needs(d.blok.ha); const keg = d.umur != null && d.umur >= 365 ? 'Penyiangan' : 'Pendangiran';
   return `<p>Pada hari ini ${hariTgl(d.tanggal)}, telah diselesaikan pekerjaan perawatan tanaman reklamasi rotasi ke-${d.periode.nomor} dengan rincian:</p>${idTbl(d, [['Rotasi ke', String(d.periode.nomor)], ['Mulai', tgl(d.periode.mulai_at)], ['Lapor selesai', tgl(d.periode.vendor_selesai_at)]])}
-    <table class="g" style="margin-top:10px"><thead><tr><th>No</th><th>Kegiatan</th><th>Volume</th><th>Satuan</th></tr></thead><tbody><tr><td>1</td><td>${keg}</td><td style="text-align:right">${fmt(d.blok.ha, 2)}</td><td>Ha</td></tr><tr><td>2</td><td>Pemupukan NPK (50 g/pohon)</td><td style="text-align:right">${fmt(n.npk)}</td><td>kg</td></tr><tr><td>3</td><td>Penyulaman</td><td style="text-align:right">${fmt(Object.values(d.sulam || {}).reduce((x, y) => x + y, 0))}</td><td>pohon</td></tr></tbody></table>
+    <table class="g" style="margin-top:10px"><thead><tr><th>No</th><th>Kegiatan</th><th>Volume</th><th>Satuan</th></tr></thead><tbody><tr><td>1</td><td>${keg}</td><td style="text-align:right">${fmt(d.blok.ha, 2)}</td><td>Ha</td></tr><tr><td>2</td><td>Pemupukan NPK (50 g/pohon)</td><td style="text-align:right">${fmt(d.mat?.npk != null ? d.mat.npk : n.npk, 1)}</td><td>kg</td></tr><tr><td>3</td><td>Penyulaman</td><td style="text-align:right">${fmt(Object.values(d.sulam || {}).reduce((x, y) => x + y, 0))}</td><td>pohon</td></tr></tbody></table>
     ${Object.keys(d.sulam || {}).length ? `<p style="margin-bottom:4px">Rincian sulam per jenis:</p><table class="g"><thead><tr><th>Jenis</th><th>Jumlah</th></tr></thead><tbody>${Object.entries(d.sulam).map(([k, v]) => `<tr><td>${esc(S.jenisMap[k]?.nama || k)}</td><td style="text-align:right">${fmt(v)}</td></tr>`).join('')}</tbody></table>` : ''}
     <p>Demikian berita acara ini dibuat untuk dipergunakan sebagaimana mestinya.</p>${ttdBox(2, [['Dibuat oleh,', d.ttd.dibuat], ['Pelaksana,', d.ttd.vendor]])}${ttdBox(2, [['Mengetahui,', d.ttd.rs], ['Mengetahui,', d.ttd.ktt]])}`;
 }
