@@ -191,7 +191,7 @@ export function scanQR(title = 'Arahkan kamera ke QR tag') {
           ctx.drawImage(video, (vw - sz) / 2, (vh - sz) / 2, sz, sz, 0, 0, 480, 480);
           const img = ctx.getImageData(0, 0, 480, 480);
           const code = window.jsQR && window.jsQR(img.data, 480, 480, { inversionAttempts: 'attemptBoth' });
-          if (code && code.data) { if (navigator.vibrate) navigator.vibrate(80); return done(normTag(code.data.trim())); }
+          if (code && code.data) { if (navigator.vibrate) navigator.vibrate(80); const t = code.data.trim(); return done(t.startsWith('HMK1') ? t : normTag(t)); }
         }
         requestAnimationFrame(tick);
       };

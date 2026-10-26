@@ -142,6 +142,7 @@ export function openScan(shell) {
   $$('[data-tag]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); tagSheet(a.dataset.tag); }));
   $('#scGo').addEventListener('click', async () => {
     const id = await scanQR(); if (!id) return;
+    if (id.startsWith('HMK1')) { const { terimaSuratJalan } = await import('./nursery.js'); await terimaSuratJalan(id); return openScan(shell); }
     if (isOnline()) { try { await Promise.race([loadAll(), new Promise(ok => setTimeout(ok, 6000))]); } catch (e) {} } // stok & status terbaru sebelum mencatat
     const t = S.tag.find(x => x.id === id);
     if (t) { if (!seesBlok(S.blokMap[t.blok_id])) return toast('Tag ini bukan bagian pekerjaan akun Anda.'); return tagSheet(id, null, () => openScan(shell)); }

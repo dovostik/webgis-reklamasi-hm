@@ -2,7 +2,7 @@
 import { SB } from './sb.js';
 import { S, L, ins, upd, $, $$, toast, confirmSheet, uid, nm, pickFile, fileUrl } from './core.js';
 import * as G from './logic.js';
-import { isRole, seesBlok } from './app.js';
+import { isRole, seesBlok, seesBA } from './app.js';
 const { esc, fmt, tgl, jam } = G;
 
 const JUDUL = { PP: 'BERITA ACARA PENYELESAIAN PEKERJAAN', KP: 'BERITA ACARA KEBERHASILAN PENILAIAN', KPR: 'BERITA ACARA KEBERHASILAN PENILAIAN RETENSI', SO: 'BERITA ACARA STOCK OPNAME' };
@@ -97,8 +97,8 @@ export async function approvePeriode(p) {
 
 // ---------- daftar BA ----------
 export function renderBAList(shell) {
-  const wait = S.periode.filter(p => ['menunggu_persetujuan', 'pp_diajukan'].includes(p.status) && seesBlok(S.blokMap[p.blok_id]));
-  const list = S.ba.filter(a => !a.blok_id || seesBlok(S.blokMap[a.blok_id])).slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  const wait = S.periode.filter(p => ['menunggu_persetujuan', 'pp_diajukan'].includes(p.status) && seesBlok(S.blokMap[p.blok_id]) && (!isRole('exdas', 'bumdes') || isRole(p.vendor)));
+  const list = S.ba.filter(seesBA).slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
   shell('Berita acara', null, `<div class="stack">
     ${wait.length ? `<div class="card stack"><h2>Menunggu persetujuan owner (${wait.length})</h2><div class="list">${wait.map(p => `<a class="item" href="#blok/${encodeURIComponent(p.blok_id)}"><div class="grow"><b>${esc(G.blokName(S.blokMap[p.blok_id]))} · ${p.status === 'pp_diajukan' ? 'BA Penyelesaian Pekerjaan' : G.TIPE_LBL[p.tipe]}</b><span>${p.status === 'pp_diajukan' ? 'Diajukan ExDAS ' + tgl(p.pp?.diajukan_at) : `Hasil ${fmt(p.pct, 2)}% ${p.hasil?.final ? '· siap disetujui' : ''}`}</span></div>${isRole('admin') ? '<span class="pill s-warn">Setujui</span>' : ''}</a>`).join('')}</div></div>` : ''}
     <div class="card stack"><h2>Arsip BA (${list.length})</h2>${list.length ? `<div class="list">${list.map(a => `<a class="item" href="#ba/${a.id}"><div class="grow"><b>BA ${esc(a.jenis)} · ${esc(a.data?.blok?.nama || '')}</b><span class="mono">${esc(a.nomor)}</span><span>${tgl(a.created_at)}</span></div><span class="pill ${a.data?.esign || a.confirmed_at ? 's-ok' : a.scan_path ? 's-pend' : 's-idle'}">${a.data?.esign ? 'Final · TTE' : a.confirmed_at ? 'Final' : a.scan_path ? 'Scan diunggah' : 'Perlu ttd'}</span></a>`).join('')}</div>` : '<p class="muted small" style="margin:0">Belum ada BA. BA terbit setelah hasil ≥ 90%, semua tag GL disulam, dan disetujui owner.</p>'}</div></div>`);
@@ -190,7 +190,7 @@ function lampiran(a) {
     <div style="display:flex;gap:12px;align-items:center;margin-top:12px"><div id="baqr" data-qr="${esc(qrTxt)}"></div><p class="small" style="font-family:Arial;font-size:10px;margin:0">Kode verifikasi dokumen<br>${esc(a.nomor)}<br>ID ${esc(a.id)}</p></div></div>`;
 }
 export function renderBA(id, shell) {
-  const a = S.ba.find(x => x.id === id);
+  const a = S.ba.find(x => x.id === id && seesBA(x));
   if (!a) return shell('BA', null, '<div class="card"><p>BA tidak ditemukan.</p></div>');
   const d = a.data; const kp = a.jenis === 'KP' || a.jenis === 'KPR';
   const sib = S.ba.filter(x => x.periode_id && x.periode_id === a.periode_id && x.id !== a.id);

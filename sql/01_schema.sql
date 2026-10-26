@@ -512,3 +512,9 @@ create policy wu on public.kirim_mat for update to authenticated using (public.h
 create trigger srv_time before insert on public.kirim_mat for each row execute function public.set_server_time('dikirim_at');
 grant select, insert, update on public.kirim_mat to authenticated;
 update public.barang set kategori = 'LCC' where nama in ('Biji CP','Biji CM','Koro');
+-- BA: ExDAS hanya melihat BA ExDAS (TEWEH), BUMDES hanya BA BUMDES
+alter policy r on public.ba using (
+  case public.my_role()
+    when 'exdas' then unit = 'TEWEH' and public.can_see_blok(blok_id)
+    when 'bumdes' then unit = 'BUMDES' and public.can_see_blok(blok_id)
+    else (blok_id is null and public.my_role() <> 'none') or public.can_see_blok(blok_id) end);

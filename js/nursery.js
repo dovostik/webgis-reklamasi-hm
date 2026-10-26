@@ -1,6 +1,6 @@
 // Nursery (bedengan & lot), kirim bibit, penampungan lapangan, gudang.
 import { SB } from './sb.js';
-import { S, L, ins, upd, $, $$, toast, sheet, confirmSheet, uid, nm, newMap, pickPhoto } from './core.js';
+import { S, L, ins, upd, $, $$, toast, sheet, confirmSheet, uid, nm, newMap, pickPhoto, scanQR } from './core.js';
 import * as G from './logic.js';
 import { role, isRole, seesBlok } from './app.js';
 import { beliCard, afkirCard, bindBeli, aklimDue } from './beli.js';
@@ -127,6 +127,34 @@ function riwayatBibit() {
   ].sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 40);
   return `<div class="card stack"><h2>Riwayat kirim & kembali</h2>${ev.length ? `<div class="list">${ev.map(e => `<div class="item"><div class="grow"><b>${esc(e.t)}</b><span>${esc(e.s)}</span></div><span class="pill ${e.k}">${e.k === 's-ok' ? 'Diterima' : 'Dalam perjalanan'}</span></div>`).join('')}</div>` : '<p class="muted small" style="margin:0">Belum ada.</p>'}</div>`;
 }
+// ---------- surat jalan QR: serah terima bibit & material tanpa sinyal ----------
+export function suratJalanSheet(bid) {
+  const ks = S.kirim.filter(k => k.blok_id === bid && k.status === 'dikirim'), ms = (S.kirim_mat || []).filter(k => k.blok_id === bid && k.status === 'dikirim');
+  if (!ks.length && !ms.length) return toast('Tidak ada kiriman yang belum diterima untuk blok ini.');
+  const data = 'HMK1' + JSON.stringify({ b: bid, k: ks.map(k => [k.id, k.jenis, k.n, k.bedengan || '', k.minta_id || '', k.lot_id || '']), m: ms.map(k => [k.id, k.barang, Number(k.n), k.kel, k.periode_id || '']) });
+  sheet(`<div class="stack"><h2>Surat jalan · ${esc(G.blokName(S.blokMap[bid]))}</h2><div id="sjqr" style="background:#fff;padding:12px;border-radius:12px;align-self:center"></div>
+    <div class="small">${ks.map(k => `<div>• ${esc(jn(k.jenis))} ${fmt(k.n)} bibit dari ${esc(k.bedengan || '')}</div>`).join('')}${ms.map(k => `<div>• ${esc(k.barang)} ${fmt(k.n, 1)} ${esc(satB(k.barang))}</div>`).join('')}</div>
+    <p class="note">Penerima (ExDAS/BUMDES/GL) membuka menu Kirim → <b>Scan QR surat jalan</b>, lalu scan kode ini. Bisa tanpa sinyal; data terkirim otomatis begitu ada sinyal.</p><button class="btn ghost block" data-close>Tutup</button></div>`, box => {
+    try { new window.QRCode(box.querySelector('#sjqr'), { text: data, width: 260, height: 260, correctLevel: window.QRCode.CorrectLevel.L }); } catch (e) { box.querySelector('#sjqr').textContent = 'QR gagal dibuat: ' + e.message; }
+  });
+}
+export async function terimaSuratJalan(text) {
+  let d; try { d = JSON.parse(text.slice(4)); } catch (e) { return toast('QR surat jalan tidak terbaca.'); }
+  const b = S.blokMap[d.b]; if (!b || !seesBlok(b)) return toast('Surat jalan ini bukan untuk blok pekerjaan akun Anda.');
+  let nb = 0, nm2 = 0;
+  for (const [id, jenis, n, bedengan, minta_id, lot_id] of d.k || []) {
+    const ex = S.kirim.find(k => k.id === id); if (ex && ex.status === 'diterima') continue;
+    if (!ex) S.kirim.push({ id, blok_id: d.b, jenis, n, bedengan, minta_id: minta_id || null, lot_id: lot_id || null, status: 'dikirim', dikirim_at: new Date().toISOString() });
+    await upd('kirim', { id }, { status: 'diterima' }); nb += n;
+  }
+  S.kirim_mat = S.kirim_mat || [];
+  for (const [id, barang, n, kel, periode_id] of d.m || []) {
+    const ex = S.kirim_mat.find(k => k.id === id); if (ex && ex.status === 'diterima') continue;
+    if (!ex) S.kirim_mat.push({ id, blok_id: d.b, barang, n, kel, periode_id: periode_id || null, status: 'dikirim', sisa: 0, dikirim_at: new Date().toISOString() });
+    await upd('kirim_mat', { id }, { status: 'diterima', diterima_oleh: S.me.id, diterima_at: new Date().toISOString() }); nm2++;
+  }
+  toast(nb || nm2 ? `Diterima di ${G.blokName(b)}: ${nb ? fmt(nb) + ' bibit' : ''}${nb && nm2 ? ' + ' : ''}${nm2 ? nm2 + ' material' : ''}. ${navigator.onLine ? '' : 'Tersimpan di HP, terkirim saat ada sinyal.'}` : 'Kiriman di surat jalan ini sudah diterima sebelumnya.', 4500);
+}
 // ---------- material ke lapangan ----------
 const satB = nama => S.barang.find(x => x.nama === nama)?.satuan || '';
 function matSection() {
@@ -200,9 +228,13 @@ export function renderKirim(shell) {
     <div class="card stack"><h2>Permintaan sulam (${sul.length} blok)</h2>
       ${sul.map(o => { const b = S.blokMap[o.blok_id]; return `<div class="card tight stack"><div class="row between"><b>${esc(G.blokName(b))}</b><span class="pill ${o.kurang ? 's-warn' : 's-ok'}">${o.kurang ? 'kurang ' + fmt(o.kurang) : 'cukup'}</span></div><div class="chips">${Object.entries(o.perJenis).map(([k, v]) => `<span class="chip">${esc(jn(k))} mati ${v}</span>`).join('')}</div><p class="small" style="margin:0">${o.total} tag perlu disulam · ${fmt(o.tersedia)} bibit sudah di penampungan/pengiriman.</p>${nurs ? `<div class="row" style="flex-wrap:nowrap">${sel(`sj-${o.blok_id}`)}<input type="number" min="1" inputmode="numeric" id="sn-${o.blok_id}" value="${o.kurang || ''}" style="width:96px" aria-label="Jumlah"><button class="btn sm" data-sk="${esc(o.blok_id)}">Kirim</button></div>` : ''}</div>`; }).join('') || '<p class="muted small" style="margin:0">Tidak ada.</p>'}
       <p class="note">Digabung per blok dan jenis yang mati. Orang lapangan menentukan jenis yang dipakai; saat scan sulam, aplikasi hanya menawarkan jenis yang cocok untuk titik itu.</p></div>
+    ${isRole('admin', 'owner', 'exdas', 'bumdes') ? '<button class="btn block" id="sjScan">Scan QR surat jalan (terima bibit & material)</button>' : ''}
+    ${nurs && [...new Set([...sent.map(k => k.blok_id), ...(S.kirim_mat || []).filter(k => k.status === 'dikirim').map(k => k.blok_id)])].length ? `<div class="card stack"><h2>Surat jalan QR</h2><p class="note" style="margin:0">Tunjukkan QR saat serah terima. Penerima cukup scan, tanpa perlu sinyal.</p><div class="chips">${[...new Set([...sent.map(k => k.blok_id), ...(S.kirim_mat || []).filter(k => k.status === 'dikirim').map(k => k.blok_id)])].map(bid => `<button type="button" class="chip" data-sj="${esc(bid)}">QR ${esc(G.blokName(S.blokMap[bid]))}</button>`).join('')}</div></div>` : ''}
     <div class="card stack"><h2>Dalam pengiriman (${sent.length})</h2>${sent.length ? `<div class="tbl"><table><thead><tr><th>Blok</th><th>Jenis</th><th class="r">Jml</th><th>Dari</th><th></th></tr></thead><tbody>${sent.map(k => `<tr><td>${esc(G.blokName(S.blokMap[k.blok_id]))}</td><td>${esc(jn(k.jenis))}</td><td class="r">${fmt(k.n)}</td><td>${esc(k.bedengan || '')}</td><td>${isRole('admin', 'owner', 'exdas', 'bumdes') ? `<button class="btn sm" data-tr="${k.id}">Terima</button>` : '<span class="small muted">menunggu</span>'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted small" style="margin:0">Tidak ada.</p>'}<p class="note">Serah terima di aplikasi: nursery menekan Kirim, lapangan menekan Terima.</p></div>
     ${matSection()}${riwayatBibit()}</div>`);
   bindMat(() => renderKirim(shell));
+  $$('[data-sj]').forEach(b => b.addEventListener('click', () => suratJalanSheet(b.dataset.sj)));
+  const sjs = $('#sjScan'); if (sjs) sjs.addEventListener('click', async () => { const t = await scanQR('Scan QR surat jalan dari HP nursery'); if (!t) return; if (!t.startsWith('HMK1')) return toast('Ini bukan QR surat jalan.'); await terimaSuratJalan(t); renderKirim(shell); });
   $$('[data-mk]').forEach(b => b.addEventListener('click', async () => { const m = S.minta.find(x => x.id === b.dataset.mk), t = b.dataset.t; const s = $(`#mj-${m.id}-${t}`); if (!s) return; const n = Number($(`#mn-${m.id}-${t}`).value); if (!(n > 0)) return toast('Isi jumlah.'); b.disabled = true; if (await sendFromStock(m.blok_id, m.id, s.value, n)) { toast(`${fmt(n)} ${jn(s.value)} dikirim.`); renderKirim(shell); } b.disabled = false; }));
   $$('[data-sk]').forEach(b => b.addEventListener('click', async () => { const bid = b.dataset.sk; const s = $(`#sj-${CSS.escape(bid)}`); if (!s) return; const n = Number($(`#sn-${CSS.escape(bid)}`).value); if (!(n > 0)) return toast('Isi jumlah.'); b.disabled = true; if (await sendFromStock(bid, null, s.value, n)) { toast(`${fmt(n)} ${jn(s.value)} dikirim.`); renderKirim(shell); } b.disabled = false; }));
   $$('[data-tr]').forEach(b => b.addEventListener('click', async () => { await upd('kirim', { id: b.dataset.tr }, { status: 'diterima' }); toast('Bibit diterima di lapangan.'); renderKirim(shell); }));
