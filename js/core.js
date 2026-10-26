@@ -209,6 +209,14 @@ export function pickPhoto() {
     i.click();
   });
 }
+// foto dari galeri (boleh foto lama) beserta lokasi & waktu ambil dari EXIF
+export function pickPhotoGeo() {
+  return new Promise(res => {
+    const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/jpeg,image/*';
+    i.onchange = async () => { const f = i.files && i.files[0]; if (!f) return res(null); const { readExif } = await import('./exif.js'); const exif = await readExif(f); res({ blob: await compress(f), exif }); };
+    i.click();
+  });
+}
 export async function compress(file, max = 1600, q = 0.72) {
   const url = URL.createObjectURL(file);
   try {

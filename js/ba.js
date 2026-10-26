@@ -62,7 +62,7 @@ export async function approvePP(p) {
   if (!(await confirmSheet(`Setujui BA Penyelesaian Pekerjaan ${esc(G.blokName(b))}? BA terbit dengan tanda tangan elektronik semua pihak. Foto asli diarsipkan ringkas di BA lalu dihapus dari penyimpanan.`, 'Setujui & terbitkan'))) return;
   try {
     toast('Menerbitkan BA…', 8000);
-    const fotos = await archivePhotos((p.pp?.foto || []).map((path, i) => ({ path, label: G.PP_FOTO[i] })));
+    const fotos = await archivePhotos((p.pp?.foto || []).map((path, i) => ({ path, label: G.PP_FOTO[i], ...(p.pp?.meta?.[i] || {}) })));
     const base = { ...baseData(p, b), ...signers(p, { vendorAt: p.pp?.diajukan_at }), foto: fotos.map(({ path, ...x }) => x), periode: { ...baseData(p, b).periode, vendor_selesai_at: p.pp?.diajukan_at } };
     const ids = await issue(p, b, ['PP'], base);
     await upd('periode', { id: p.id }, { status: 'siap_inspeksi', pp: { ...p.pp, approved_at: new Date().toISOString(), approved_by: S.me.id, ba_id: ids[0] } }, { offline: false });
@@ -153,7 +153,7 @@ function mapSVG(d, tags, tracks) {
   const W = 700, H = 460, pad = 16, s = Math.min((W - 2 * pad) / (x1 - x0 || 1e-6), (H - 2 * pad) / (y1 - y0 || 1e-6));
   const P = p => [(pad + (p[0] * k - x0) * s).toFixed(1), (pad + (y1 - p[1]) * s).toFixed(1)];
   const mPer = 111320 * k; const bar = [10, 20, 50, 100, 200, 500].find(q => q * s / mPer > 60) || 500;
-  const col = { mati: '#E0473B', disulam: '#4F86C6', closed: '#2F8A57' };
+  const col = { mati: '#E0473B', disulam: '#4F86C6', closed: '#2F8A57', foto: '#7B3FA0' };
   const inView = p => { const [x, y] = P(p).map(Number); return x > -60 && x < W + 60 && y > -60 && y < H + 60; };
   return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;border:1px solid #999;background:#fafaf7" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="cpm"><rect width="${W}" height="${H}"/></clipPath></defs><g clip-path="url(#cpm)">
     ${rings.map(r => `<polygon points="${r.map(p => P(p).join(',')).join(' ')}" fill="#E8F0DC" stroke="#111" stroke-width="1.5"/>`).join('')}
@@ -166,7 +166,7 @@ const fotoGrid = list => `<div class="fotos">${list.map(f => `<figure>${f.src ? 
 function lampiranPP(a) {
   const d = a.data; const qrTxt = `${a.nomor}|${d.blok.nama}|PP|${a.id}`;
   return `<div class="doc pgbreak">${kop()}<h4>LAMPIRAN</h4><p class="nomor">${esc(a.nomor)}</p>
-    <p style="margin:0 0 6px"><b>1. Peta blok</b></p>${mapSVG(d, [], [])}
+    <p style="margin:0 0 6px"><b>1. Peta blok dan lokasi foto</b></p>${mapSVG(d, (d.foto || []).filter(f => f.lon).map(f => ({ lon: f.lon, lat: f.lat, status: 'foto' })), [])}${(d.foto || []).some(f => f.lon) ? '<p class="small" style="font-family:Arial;font-size:10px;margin:4px 0"><span style="color:#7B3FA0">●</span> lokasi foto kegiatan (GPS foto)</p>' : ''}
     <p style="margin:10px 0 4px"><b>2. Foto kegiatan penanaman</b></p>${d.foto?.length ? fotoGrid(d.foto) : '<p class="small">Tidak ada foto.</p>'}
     <div style="display:flex;gap:12px;align-items:center;margin-top:12px"><div id="baqr" data-qr="${esc(qrTxt)}"></div><p class="small" style="font-family:Arial;font-size:10px;margin:0">Kode verifikasi dokumen<br>${esc(a.nomor)}<br>ID ${esc(a.id)}</p></div></div>`;
 }

@@ -1,7 +1,7 @@
 // Service worker: simpan kerangka aplikasi agar bisa dibuka tanpa sinyal.
-const V = 'hm-v24';
+const V = 'hm-v25';
 const CORE = ['./', 'index.html', 'config.js', 'manifest.webmanifest', 'css/app.css',
-  'js/app.js', 'js/core.js', 'js/sb.js', 'js/logic.js', 'js/field.js', 'js/nursery.js', 'js/ba.js', 'js/offline.js', 'js/master.js', 'js/ortho-up.js', 'js/beli.js', 'js/denah.js',
+  'js/app.js', 'js/core.js', 'js/sb.js', 'js/logic.js', 'js/field.js', 'js/nursery.js', 'js/ba.js', 'js/offline.js', 'js/master.js', 'js/ortho-up.js', 'js/beli.js', 'js/denah.js', 'js/exif.js',
   'lib/leaflet/leaflet.js', 'lib/leaflet/leaflet.css', 'lib/jsQR.js', 'lib/qrcode.min.js',
   'img/logo.svg', 'img/mark.svg', 'img/icon-192.png', 'img/icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => c.addAll(CORE)).then(() => self.skipWaiting())); });

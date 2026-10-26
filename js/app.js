@@ -1,6 +1,7 @@
 // Shell aplikasi: login, menu per peran, router, beranda, peta, detail blok, admin.
 import { SB } from './sb.js';
-import { S, L, loadAll, derive, ins, upd, flush, pending, netState, isOnline, $, $$, toast, sheet, confirmSheet, uid, nm, newMap, locateControl, fileUrl, uploadOrQueue, pickPhoto, GPS } from './core.js';
+import { S, L, loadAll, derive, ins, upd, flush, pending, netState, isOnline, $, $$, toast, sheet, confirmSheet, uid, nm, newMap, locateControl, fileUrl, uploadOrQueue, pickPhoto, pickPhotoGeo, GPS } from './core.js';
+import { inBlok } from './exif.js';
 import * as G from './logic.js';
 import { downloadTiles, tileList, tileInfo, tileJob, canInstall, isInstalled, promptInstall, persist, loadOrtho, ORTHO, SLOTS, orthoKey } from './offline.js';
 import { tokenGet, tokenSet, checkToken, uploadOrtho, jobStatus, lastJob } from './ortho-up.js';
@@ -314,17 +315,20 @@ function nextHRP() { let mx = 0; S.blok.forEach(b => { const m = /^HRP-(\d+)/.ex
 const ppFotos = p => (p.pp?.foto || []).length ? `<div class="grid2">${p.pp.foto.map((f, i) => `<figure style="margin:0"><img data-ppfoto="${esc(f)}" alt="${esc(G.PP_FOTO[i])}" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;background:var(--sunk)"><figcaption class="small">${esc(G.PP_FOTO[i])}</figcaption></figure>`).join('')}</div>` : '';
 // ExDAS: penanaman selesai → jumlah tertanam + 4 foto kegiatan → kirim BA PP ke owner
 async function laporTanam(b, p) {
-  const stok = L.stokTampung(b.id); const foto = [null, null, null, null];
+  const stok = L.stokTampung(b.id); const foto = [null, null, null, null], meta = [null, null, null, null];
   sheet(`<form class="stack" id="lt"><h2>BA Penyelesaian Pekerjaan</h2><p class="small" style="margin:0">Isi jumlah bibit yang benar-benar tertanam per jenis. Sisa yang tidak tertanam dikembalikan lewat tombol Kembalikan ke nursery.</p>
     ${Object.entries(stok).map(([k, v]) => `<label class="f" for="lt-${k}">${esc(S.jenisMap[k]?.nama)} <small>diterima di lapangan ${fmt(v)}</small><input type="number" min="0" max="${v}" id="lt-${k}" value="${v}" inputmode="numeric"></label>`).join('')}
-    <div class="sec"><h3>4 foto kegiatan <small class="muted">wajib, dari kamera</small></h3><div class="grid2">${G.PP_FOTO.map((l, i) => `<button type="button" class="btn ghost" data-pf="${i}" style="flex-direction:column;min-height:110px;padding:6px"><span id="pfi-${i}" class="small muted">+ foto</span><b class="small">${esc(l)}</b></button>`).join('')}</div></div>
+    <div class="sec"><h3>4 foto kegiatan <small class="muted">wajib, dari galeri, harus ada lokasi GPS di dalam blok</small></h3><p class="note" style="margin:0">Pilih foto saat pekerjaan berlangsung. Foto harus tersimpan dengan lokasi (aktifkan "Simpan lokasi / Tag lokasi" di kamera HP). Foto kiriman WhatsApp biasanya tidak menyimpan lokasi.</p><div class="grid2">${G.PP_FOTO.map((l, i) => `<button type="button" class="btn ghost" data-pf="${i}" style="flex-direction:column;min-height:110px;padding:6px"><span id="pfi-${i}" class="small muted">+ foto</span><b class="small">${esc(l)}</b></button>`).join('')}</div></div>
     <p class="note">Peta blok dilampirkan otomatis. Setelah dikirim, owner menyetujui BA PP, lalu GL owner mengecek 7 hari kemudian.</p>
     <p class="err" id="ltErr" hidden></p><div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit">Kirim BA PP</button></div></form>`, (box, close) => {
     const er = box.querySelector('#ltErr'), err = m => { er.textContent = m; er.hidden = false; };
     box.querySelectorAll('[data-pf]').forEach(btn => btn.addEventListener('click', async () => {
-      const i = +btn.dataset.pf; const blob = await pickPhoto(); if (!blob) return;
+      const i = +btn.dataset.pf; const got = await pickPhotoGeo(); if (!got) return; const { blob, exif } = got;
+      if (exif.lat == null) return toast('Foto ini tidak punya lokasi GPS. Pilih foto yang diambil dengan lokasi aktif di kamera HP.', 5500);
+      if (!inBlok(b.geom, exif.lon, exif.lat, 30)) return toast(`Lokasi foto (${exif.lat.toFixed(5)}, ${exif.lon.toFixed(5)}) di luar blok ${G.blokName(b)}. Pilih foto yang diambil di dalam blok.`, 5500);
+      if (exif.time && p.mulai_at && exif.time.slice(0, 10) < G.tglWIB(p.mulai_at)) return toast(`Foto diambil ${tgl(exif.time)}, sebelum pekerjaan blok ini dimulai (${tgl(p.mulai_at)}).`, 5500);
       const path = `pp/${p.id}/${i + 1}-${Date.now()}.jpg`; const sp = box.querySelector('#pfi-' + i);
-      try { sp.textContent = 'mengunggah…'; const how = await uploadOrQueue('foto', path, blob); foto[i] = path; sp.innerHTML = `<img src="${URL.createObjectURL(blob)}" style="width:100%;max-height:80px;object-fit:cover;border-radius:6px">`; if (how === 'queued') toast('Foto disimpan di HP, diunggah otomatis saat ada sinyal.'); }
+      try { sp.textContent = 'mengunggah…'; const how = await uploadOrQueue('foto', path, blob); foto[i] = path; meta[i] = { lat: exif.lat, lon: exif.lon, at: exif.time || null }; sp.innerHTML = `<img src="${URL.createObjectURL(blob)}" style="width:100%;max-height:80px;object-fit:cover;border-radius:6px"><span class="small">${exif.time ? tgl(exif.time) + ' ' + jam(exif.time) : ''} ✓ dalam blok</span>`; if (how === 'queued') toast('Foto disimpan di HP, diunggah otomatis saat ada sinyal.'); }
       catch (e) { sp.textContent = '+ foto'; toast(e.message); }
     }));
     box.querySelector('#lt').addEventListener('submit', async e => {
@@ -335,7 +339,7 @@ async function laporTanam(b, p) {
       const sb = box.querySelector('button[type=submit]'); sb.disabled = true;
       try {
         await ins('tampung_log', rows);
-        await upd('periode', { id: p.id }, { status: 'pp_diajukan', pp: { foto, diajukan_at: new Date().toISOString(), oleh: S.me.id, lat: GPS.pos?.lat, lon: GPS.pos?.lon } });
+        await upd('periode', { id: p.id }, { status: 'pp_diajukan', pp: { foto, meta, diajukan_at: new Date().toISOString(), oleh: S.me.id } });
         S.minta.filter(m => m.blok_id === b.id && m.status === 'terbuka').forEach(m => upd('minta', { id: m.id }, { status: 'selesai' }));
         close(); toast('BA Penyelesaian Pekerjaan dikirim ke owner.'); route();
       } catch (x) { sb.disabled = false; err(x.message); }
