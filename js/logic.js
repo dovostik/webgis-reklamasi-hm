@@ -143,7 +143,7 @@ export function makeLogic(S) {
       const sent = { pio: 0, sis: 0 };
       S.kirim.filter(k => k.minta_id === m.id).forEach(k => { const j = J()[k.jenis]; sent[j && j.tipe === 'pionir' ? 'pio' : 'sis'] += k.n; });
       const kembali = { pio: 0, sis: 0 };
-      [...S.tampung_log.filter(l => l.blok_id === m.blok_id && l.tipe === 'kembali'), ...(S.kembali || []).filter(k => k.blok_id === m.blok_id)].forEach(l => { const j = J()[l.jenis]; kembali[j && j.tipe === 'pionir' ? 'pio' : 'sis'] += l.n; });
+      [...S.tampung_log.filter(l => l.blok_id === m.blok_id && (l.tipe === 'kembali' || l.tipe === 'afkir')), ...(S.kembali || []).filter(k => k.blok_id === m.blok_id)].forEach(l => { const j = J()[l.jenis]; kembali[j && j.tipe === 'pionir' ? 'pio' : 'sis'] += l.n; });
       return { ...m, sent, kembali };
     });
   }
