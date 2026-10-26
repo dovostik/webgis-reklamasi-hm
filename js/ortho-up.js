@@ -17,14 +17,16 @@ async function gh(path, opt = {}, token = tokenGet()) {
     if (r.ok) return r.status === 204 ? null : r.json();
     if (r.status >= 500 && i < 3) { await new Promise(ok => setTimeout(ok, 3000 * (i + 1))); continue; }
     const t = await r.text().catch(() => '');
-    if (r.status === 401) throw new Error('Token GitHub salah atau kedaluwarsa.');
-    if (r.status === 403 || r.status === 404) throw new Error('Token tidak punya izin ke repo ' + REPO + ' (butuh Contents: Read and write, Actions: Read).');
+    let msg = ''; try { msg = JSON.parse(t).message || ''; } catch (e) {}
+    if (r.status === 401) throw new Error(`Token GitHub ditolak (${msg || 'Bad credentials'}): salah ketik, sudah kedaluwarsa, atau sudah dihapus. Buat token baru lalu ketuk Ganti token.`);
+    if (r.status === 403 || r.status === 404) throw new Error(`Token tidak punya izin yang cukup ke repo ${REPO} (${msg || r.status}). Pastikan Repository access memilih webgis-reklamasi-hm, dan Permissions: Contents = Read and write, Actions = Read.`);
     throw new Error(`GitHub ${r.status}: ${t.slice(0, 160)}`);
   }
 }
 export async function checkToken(token) {
-  const r = await gh('', {}, token);
-  if (!r.permissions || !r.permissions.push) throw new Error('Token hanya bisa membaca. Beri izin Contents: Read and write.');
+  await gh('', {}, token);                                                        // akses repo
+  await gh('/git/blobs', { method: 'POST', body: JSON.stringify({ content: 'cek', encoding: 'utf-8' }) }, token); // izin tulis (Contents)
+  await gh('/actions/runs?per_page=1', {}, token);                               // izin baca Actions
   return true;
 }
 // kirim potongan dengan kemajuan per byte (fetch tidak memberi kemajuan unggah)
@@ -33,7 +35,7 @@ function postBlob(content, onUp, token = tokenGet()) {
     const x = new XMLHttpRequest(); x.open('POST', API + '/git/blobs');
     x.setRequestHeader('Accept', 'application/vnd.github+json'); x.setRequestHeader('Authorization', 'Bearer ' + token); x.setRequestHeader('X-GitHub-Api-Version', '2022-11-28'); x.setRequestHeader('Content-Type', 'application/json');
     x.upload.onprogress = e => onUp && e.lengthComputable && onUp(e.loaded, e.total);
-    x.onload = () => { if (x.status >= 200 && x.status < 300) ok(JSON.parse(x.responseText)); else no(Object.assign(new Error(x.status === 401 ? 'Token GitHub salah atau kedaluwarsa.' : `GitHub ${x.status}: ${String(x.responseText).slice(0, 160)}`), { status: x.status })); };
+    x.onload = () => { if (x.status >= 200 && x.status < 300) return ok(JSON.parse(x.responseText)); let m = ''; try { m = JSON.parse(x.responseText).message || ''; } catch (e) {} no(Object.assign(new Error(x.status === 401 ? `Token GitHub ditolak (${m || 'Bad credentials'}). Buat token baru lalu ketuk Ganti token.` : x.status === 403 || x.status === 404 ? `Token tidak punya izin tulis (${m || x.status}). Permissions: Contents = Read and write.` : `GitHub ${x.status}: ${m || String(x.responseText).slice(0, 160)}`), { status: x.status })); };
     x.onerror = () => no(Object.assign(new Error('Koneksi terputus.'), { net: true })); x.ontimeout = x.onerror; x.timeout = 30 * 60 * 1000;
     x.send(JSON.stringify({ content, encoding: 'base64' }));
   });

@@ -383,7 +383,7 @@ function bindOrtho() {
   const prog = m => { const p = document.getElementById('oProg'); if (p) p.textContent = m; };
   const refresh = async () => { const el = document.getElementById('oJobSt'); if (!el) return; try { const r = await jobStatus(); el.textContent = r ? r.teks : '–'; if (r && r.tahap !== 'selesai' && r.tahap !== 'gagal') setTimeout(() => location.hash === '#lainnya' && refresh(), 20000); } catch (e) { el.textContent = e.message; } };
   refresh(); on('oJobRf', refresh);
-  on('ghTokSave', async () => { const v = $('#ghTok').value.trim(); if (!v) return toast('Tempel token dulu.'); await checkToken(v); tokenSet(v); toast('Token tersimpan di perangkat ini.'); renderLainnya(); });
+  on('ghTokSave', async () => { const v = $('#ghTok').value.replace(/\s+/g, ''); if (!v) return toast('Tempel token dulu.'); await checkToken(v); tokenSet(v); toast('Token tersimpan di perangkat ini.'); renderLainnya(); });
   on('ghTokDel', async () => { if (!(await confirmSheet('Hapus token dari perangkat ini? Anda perlu menempel token lagi untuk mengunggah.'))) return; tokenSet(''); renderLainnya(); });
   on('oUp', async () => {
     const f = $('#oFile').files[0], slot = $('#oSlot').value, tanggal = $('#oTgl').value;
