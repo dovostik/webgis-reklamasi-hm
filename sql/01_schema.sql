@@ -452,3 +452,33 @@ grant select, insert on public.beli_log to authenticated;
 grant usage, select on sequence public.beli_log_id_seq to authenticated;
 create trigger srv_time before insert on public.beli for each row execute function public.set_server_time('created_at');
 create trigger srv_time before insert on public.beli_log for each row execute function public.set_server_time('at');
+-- bibit kembali dari lapangan (sisa sehat / afkir): vendor mengembalikan, nursery menerima ke penampungan,
+-- GL Nursery menyetujui sisa sehat masuk BST; afkir dirawat (pulih → BST) atau dibuang bila mati
+create table if not exists public.kembali (
+  id uuid primary key default gen_random_uuid(),
+  blok_id text not null references public.blok(id),
+  jenis text not null references public.jenis(kode),
+  n int not null check (n > 0),
+  kondisi text not null check (kondisi in ('sehat','afkir')),
+  status text not null default 'dikirim' check (status in ('dikirim','diterima')),
+  lot_src uuid, dikirim_oleh uuid references public.profiles(id), dikirim_at timestamptz not null default now(),
+  diterima_oleh uuid references public.profiles(id), diterima_at timestamptz
+);
+alter table public.kembali enable row level security;
+create table if not exists public.kembali_log (
+  id bigserial primary key, kembali_id uuid not null references public.kembali(id),
+  tipe text not null check (tipe in ('masuk_bst','mati')), n int not null check (n > 0),
+  bedengan text, lot_id uuid, oleh uuid references public.profiles(id), nama_pencatat text,
+  at timestamptz not null default now()
+);
+alter table public.kembali_log enable row level security;
+create policy r on public.kembali for select to authenticated using (public.can_see_blok(blok_id));
+create policy wi on public.kembali for insert to authenticated with check (public.has_role('admin','owner','exdas','bumdes') and public.can_see_blok(blok_id));
+create policy wu on public.kembali for update to authenticated using (public.has_role('admin','nursery'));
+create policy r on public.kembali_log for select to authenticated using (public.my_role() <> 'none');
+create policy w on public.kembali_log for insert to authenticated with check (public.has_role('admin','nursery','crew'));
+create trigger srv_time before insert on public.kembali for each row execute function public.set_server_time('dikirim_at');
+create trigger srv_time before insert on public.kembali_log for each row execute function public.set_server_time('at');
+grant select, insert, update on public.kembali to authenticated;
+grant select, insert on public.kembali_log to authenticated;
+grant usage, select on sequence public.kembali_log_id_seq to authenticated;

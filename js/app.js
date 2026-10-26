@@ -5,7 +5,7 @@ import * as G from './logic.js';
 import { downloadTiles, tileList, tileInfo, tileJob, canInstall, isInstalled, promptInstall, persist, loadOrtho, ORTHO, SLOTS, orthoKey } from './offline.js';
 import { tokenGet, tokenSet, checkToken, uploadOrtho, jobStatus, lastJob } from './ortho-up.js';
 import { renderSesi, openScan, tagSheet, vendorNewTag } from './field.js';
-import { renderNursery, renderKirim, renderTampung, renderGudang } from './nursery.js';
+import { renderNursery, renderKirim, renderTampung, renderGudang, kembaliSheet, kembaliDue } from './nursery.js';
 import { renderBAList, renderBA, approvePeriode, renderCetakTag } from './ba.js';
 import { renderMaster } from './master.js';
 const { esc, fmt, tgl, jam } = G;
@@ -215,7 +215,7 @@ function renderBlok(id) {
     if (p && p.status === 'pelaksanaan') {
       if (p.tipe === 'cek1') {
         const tot = Object.values(stok).reduce((a, x) => a + x, 0);
-        act += `<div class="card stack"><h2>Penanaman ExDAS</h2><p class="small" style="margin:0">Bibit di penampungan blok ini: <b>${fmt(tot)}</b>${dk.length ? ` · ${fmt(dk.reduce((a, k) => a + k.n, 0))} dalam pengiriman` : ''}.</p><button class="btn block" id="vLapor" ${tot > 0 && !dk.length ? '' : 'disabled'}>Lapor penanaman selesai</button>${dk.length ? '<p class="note">Terima dulu semua kiriman bibit.</p>' : tot ? '' : '<p class="note">Menunggu bibit dari nursery.</p>'}</div>`;
+        act += `<div class="card stack"><h2>Penanaman ExDAS</h2><p class="small" style="margin:0">Bibit diterima di lapangan (blok ini): <b>${fmt(tot)}</b>${dk.length ? ` · ${fmt(dk.reduce((a, k) => a + k.n, 0))} dalam pengiriman` : ''}.</p><button class="btn block" id="vLapor" ${tot > 0 && !dk.length ? '' : 'disabled'}>Lapor penanaman selesai</button>${dk.length ? '<p class="note">Terima dulu semua kiriman bibit.</p>' : tot ? '' : '<p class="note">Menunggu bibit dari nursery.</p>'}</div>`;
       } else {
         const ov = L.openVendor(p); const ret = L.retensiInfo(p);
         act += `<div class="card stack"><h2>${p.tipe === 'retensi' ? 'Retensi ExDAS (30 hari)' : 'Perawatan rotasi ' + p.nomor}</h2>
@@ -248,7 +248,7 @@ function renderBlok(id) {
   const info = `<dl class="kv"><dt>Luas</dt><dd>${fmt(b.ha, 2)} Ha</dd>${b.kode_bastl ? `<dt>Kode BASTL</dt><dd class="mono">${esc(b.kode_bastl)}</dd>` : ''}${b.no_bastl ? `<dt>No. BASTL</dt><dd>${esc(b.no_bastl)}</dd>` : ''}
     ${ri ? `<dt>Tanggal tanam</dt><dd>${tgl(ri.tanam.tgl)}${ri.tanam.perkiraan ? ' *' : ''}</dd><dt>Umur</dt><dd>${fmt(ri.umur / 30.4)} bulan</dd><dt>Kegiatan</dt><dd>${ri.kegiatan}</dd><dt>Rotasi terakhir</dt><dd>${ri.last ? tgl(ri.last) : 'belum diisi'}</dd><dt>Rotasi berikutnya</dt><dd>${tgl(ri.next)}</dd>` : ''}</dl>${ri?.tanam.perkiraan ? '<p class="note">* Perkiraan dari bulan tanam di shapefile.</p>' : ''}`;
   const need = b.layer === 'bastl' ? `<div class="sec"><h3>Kebutuhan penanaman</h3><dl class="kv"><dt>Ajir & lubang</dt><dd>${fmt(n.lubang)}</dd><dt>Pupuk dasar</dt><dd>${fmt(n.pupuk)} kg · ${fmt(n.sakKohe)} sak</dd><dt>NPK</dt><dd>${fmt(n.npk)} kg</dd><dt>Pioneer / sisipan</dt><dd>${fmt(n.pio)} / ${fmt(n.sis)}</dd><dt>LCC (ditabur)</dt><dd>${fmt(n.lcc)} kg</dd><dt>Perkiraan durasi</dt><dd>${n.hariKerja} hari</dd></dl></div>` : `<div class="sec"><h3>Kebutuhan per rotasi</h3><dl class="kv"><dt>Populasi</dt><dd>${fmt(G.STD.lubang * b.ha)} pohon</dd><dt>NPK 50 g/pohon</dt><dd>${fmt(G.STD.npk * b.ha)} kg</dd></dl></div>`;
-  const stokHtml = Object.keys(stok).length || dk.length ? `<div class="sec"><h3>Penampungan blok ini</h3><div class="chips">${Object.entries(stok).map(([k, v]) => `<span class="chip">${esc(S.jenisMap[k]?.nama || k)} ${fmt(v)}</span>`).join('')}${dk.map(k => `<span class="chip">dikirim: ${esc(S.jenisMap[k.jenis]?.nama)} ${fmt(k.n)}</span>`).join('')}</div></div>` : '';
+  const stokHtml = Object.keys(stok).length || dk.length ? `<div class="sec"><div class="row between"><h3>Bibit di lapangan</h3>${kembaliDue(id) != null && Object.keys(stok).length ? `<span class="pill ${kembaliDue(id) < 0 ? 's-bad' : 's-warn'}">${kembaliDue(id) < 0 ? 'Lewat ' + (-kembaliDue(id)) + ' hari' : 'Kembalikan ≤ ' + kembaliDue(id) + ' hari'}</span>` : ''}</div><div class="chips">${Object.entries(stok).map(([k, v]) => `<span class="chip">${esc(S.jenisMap[k]?.nama || k)} ${fmt(v)}</span>`).join('')}${dk.map(k => `<span class="chip">dikirim: ${esc(S.jenisMap[k.jenis]?.nama)} ${fmt(k.n)}</span>`).join('')}</div>${Object.keys(stok).length && isRole('admin', 'owner', 'exdas', 'bumdes') ? '<button class="btn ghost block" id="kbBtn">Kembalikan ke nursery (sisa / afkir)</button>' : ''}</div>` : '';
   const hist = plist.length ? `<div class="card stack"><h2>Riwayat pekerjaan</h2><div class="tbl"><table><thead><tr><th>Periode</th><th>Status</th><th class="r">Hasil</th><th>Tgl</th></tr></thead><tbody>${plist.slice().reverse().map(x => `<tr><td>${G.TIPE_LBL[x.tipe]}${x.tipe === 'rotasi' ? ' ' + x.nomor : ''}</td><td>${G.STATUS_LBL[x.status]}</td><td class="r">${x.pct != null ? fmt(x.pct, 2) + '%' : '–'}</td><td>${tgl(x.approved_at || x.vendor_selesai_at || x.mulai_at || x.created_at)}</td></tr>`).join('')}</tbody></table></div>${S.ba.filter(a => a.blok_id === id).map(a => `<a class="item" href="#ba/${a.id}"><div class="grow"><b>BA ${esc(a.jenis)} · ${esc(a.nomor)}</b><span>${tgl(a.created_at)}${a.scan_path ? ' · scan diunggah' : ''}</span></div></a>`).join('')}</div>` : '';
   shell(G.blokName(b), b.layer === 'bastl' ? 'BASTL · ' + (b.kode_bastl || '') : b.layer === 'perawatan' ? 'Perawatan BUMDES' : '', `<div class="stack">
     <div class="card"><div class="row between"><div><div class="eyebrow">${b.layer === 'bastl' ? 'BASTL 2026 · ExDAS' : b.layer === 'perawatan' ? 'Perawatan · ' + esc(b.pit || '') : 'Berhasil penilaian'}</div><h1>${esc(G.blokName(b))}</h1></div><span class="pill s-${st.k}">${esc(st.t)}</span></div><div class="sec" style="border:0;margin:0">${info}</div>${need}${stokHtml}</div>
@@ -279,6 +279,7 @@ function renderBlok(id) {
   on('#vSulamDone', async () => { const next = p.hasil?.final ? 'menunggu_persetujuan' : 'verifikasi'; await upd('periode', { id: p.id }, { status: next }); toast(next === 'verifikasi' ? 'Sulam selesai. GL akan memverifikasi tag GL.' : 'Sulam selesai. Menunggu persetujuan owner.'); route(); });
   on('#gStart', async () => { const sid = uid(); await ins('sesi', { id: sid, periode_id: p.id, blok_id: id, tipe: p.status === 'verifikasi' ? 'verifikasi' : 'inspeksi', oleh: S.me.id }); await upd('periode', { id: p.id }, { status: 'inspeksi' }); location.hash = '#sesi/' + sid; });
   on('#aOk', async () => { await approvePeriode(p); route(); });
+  const kb = $('#kbBtn'); if (kb) kb.addEventListener('click', () => kembaliSheet(id, route));
   on('#aSave', async () => { await upd('blok', { id }, { tgl_tanam: $('#aT').value || null, tgl_rotasi_terakhir: $('#aR').value || null }); toast('Tanggal tersimpan.'); route(); });
 }
 export const tagColor = t => t.status === 'closed' ? '#2F8A57' : t.status === 'disulam' ? '#4F86C6' : t.sumber === 'gl' ? '#E0473B' : '#F2C230';
@@ -287,8 +288,8 @@ function nextHRP() { let mx = 0; S.blok.forEach(b => { const m = /^HRP-(\d+)/.ex
 
 async function laporTanam(b, p) {
   const stok = L.stokTampung(b.id);
-  sheet(`<form class="stack" id="lt"><h2>Lapor penanaman selesai</h2><p class="small" style="margin:0">Isi jumlah bibit yang benar-benar tertanam per jenis. Sisa tetap di penampungan untuk dikembalikan ke nursery.</p>
-    ${Object.entries(stok).map(([k, v]) => `<label class="f" for="lt-${k}">${esc(S.jenisMap[k]?.nama)} <small>di penampungan ${fmt(v)}</small><input type="number" min="0" max="${v}" id="lt-${k}" value="${v}" inputmode="numeric"></label>`).join('')}
+  sheet(`<form class="stack" id="lt"><h2>Lapor penanaman selesai</h2><p class="small" style="margin:0">Isi jumlah bibit yang benar-benar tertanam per jenis. Sisa yang tidak tertanam dikembalikan lewat tombol Kembalikan ke nursery.</p>
+    ${Object.entries(stok).map(([k, v]) => `<label class="f" for="lt-${k}">${esc(S.jenisMap[k]?.nama)} <small>diterima di lapangan ${fmt(v)}</small><input type="number" min="0" max="${v}" id="lt-${k}" value="${v}" inputmode="numeric"></label>`).join('')}
     <p class="err" id="ltErr" hidden></p><div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit">Lapor selesai</button></div></form>`, (box, close) => {
     box.querySelector('#lt').addEventListener('submit', async e => {
       e.preventDefault(); const rows = [];

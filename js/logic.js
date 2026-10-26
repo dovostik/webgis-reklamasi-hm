@@ -62,6 +62,7 @@ export function makeLogic(S) {
     const tagIds = new Set(tags(bid).map(t => t.id));
     S.tag_event.filter(e => e.tipe === 'sulam' && tagIds.has(e.tag_id) && e.jenis).forEach(e => { m[e.jenis] = (m[e.jenis] || 0) - 1; });
     S.tampung_log.filter(l => l.blok_id === bid).forEach(l => { m[l.jenis] = (m[l.jenis] || 0) - l.n; });
+    (S.kembali || []).filter(k => k.blok_id === bid).forEach(k => { m[k.jenis] = (m[k.jenis] || 0) - k.n; });
     Object.keys(m).forEach(k => { if (m[k] <= 0) delete m[k]; });
     return m;
   }
@@ -142,7 +143,7 @@ export function makeLogic(S) {
       const sent = { pio: 0, sis: 0 };
       S.kirim.filter(k => k.minta_id === m.id).forEach(k => { const j = J()[k.jenis]; sent[j && j.tipe === 'pionir' ? 'pio' : 'sis'] += k.n; });
       const kembali = { pio: 0, sis: 0 };
-      S.tampung_log.filter(l => l.blok_id === m.blok_id && l.tipe === 'kembali').forEach(l => { const j = J()[l.jenis]; kembali[j && j.tipe === 'pionir' ? 'pio' : 'sis'] += l.n; });
+      [...S.tampung_log.filter(l => l.blok_id === m.blok_id && l.tipe === 'kembali'), ...(S.kembali || []).filter(k => k.blok_id === m.blok_id)].forEach(l => { const j = J()[l.jenis]; kembali[j && j.tipe === 'pionir' ? 'pio' : 'sis'] += l.n; });
       return { ...m, sent, kembali };
     });
   }
