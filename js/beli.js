@@ -118,24 +118,37 @@ function hitungSheet(b, rerender) {
 }
 function afkirActSheet(b, tipe, rerender) {
   const max = afkirSisa(b), beds = bstBeds(b.jenis).filter(x => room(x.kode) > 0);
+  const bedRow = (sel, n) => `<div class="row abrow" style="flex-wrap:nowrap;gap:6px"><select class="abB" aria-label="Bedengan tujuan">${beds.map(x => `<option value="${x.kode}" ${x.kode === sel ? 'selected' : ''}>${x.kode} · muat ${fmt(room(x.kode))}${L.lotsIn(x.kode).some(l => l.jenis === b.jenis) ? ' · jenis sama' : L.fill(x.kode) ? '' : ' · kosong'}</option>`).join('')}</select><input class="abN" type="number" min="0" inputmode="numeric" value="${n}" style="width:90px" aria-label="Jumlah"></div>`;
+  const first = beds.find(x => L.lotsIn(x.kode).some(l => l.jenis === b.jenis)) || beds[0];
   sheet(`<form class="stack" id="ab"><h2>${tipe === 'pulih' ? 'Afkir beli pulih → BST' : 'Afkir beli mati'}</h2><p class="small" style="margin:0">${esc(jn(b.jenis))} · ${esc(b.pemasok)} · tersisa ${fmt(max)}</p>
-    <label class="f" for="abN">Jumlah<input id="abN" type="number" min="1" max="${max}" inputmode="numeric" value="${max}"></label>
-    ${tipe === 'pulih' ? `<label class="f" for="abB">Bedengan BST tujuan<select id="abB">${beds.map(x => `<option value="${x.kode}">${x.kode} (muat ${fmt(room(x.kode))})</option>`).join('')}</select></label>` : ''}
+    ${tipe === 'pulih' ? (beds.length ? `<div class="stack" style="gap:6px"><span class="small"><b>Bedengan BST tujuan</b> · boleh dibagi ke beberapa bedengan</span><div id="abRows">${bedRow(first?.kode, Math.min(max, first ? room(first.kode) : max))}</div><button type="button" class="btn ghost sm" id="abAdd">+ Bedengan lain</button><div class="small" id="abT"></div></div>` : '<p class="err">Tidak ada bedengan BST yang muat.</p>') : `<label class="f" for="abN">Jumlah<input id="abN" type="number" min="1" max="${max}" inputmode="numeric" value="${max}"></label>`}
     ${crewName()}<p class="err" id="abE" hidden></p><div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit">Simpan</button></div></form>`, (box, close) => {
+    const rows = () => [...box.querySelectorAll('.abrow')].map(r => ({ bed: r.querySelector('.abB').value, n: Number(r.querySelector('.abN').value) || 0 }));
+    const show = () => { const t = box.querySelector('#abT'); if (t) t.textContent = `Total ${fmt(rows().reduce((a, r) => a + r.n, 0))} dari ${fmt(max)}`; };
+    box.addEventListener('input', show); show();
+    const add = box.querySelector('#abAdd'); if (add) add.addEventListener('click', () => { const used = rows().reduce((a, r) => a + r.n, 0); const nx = beds.find(x => !rows().some(r => r.bed === x.kode)); box.querySelector('#abRows').insertAdjacentHTML('beforeend', bedRow(nx?.kode, Math.max(0, max - used))); show(); });
     box.querySelector('#ab').addEventListener('submit', async e => {
-      e.preventDefault(); const er = box.querySelector('#abE'), n = Number(box.querySelector('#abN').value), who = getCrew(box);
+      e.preventDefault(); const er = box.querySelector('#abE'), who = getCrew(box);
       const fail = m => { er.textContent = m; er.hidden = false; };
       if (!who) return fail('Isi nama pencatat.');
-      if (!(n > 0) || n > max) return fail(`Isi jumlah 1–${fmt(max)}.`);
       if (tipe === 'pulih') {
-        const bed = box.querySelector('#abB')?.value; if (!bed) return fail('Tidak ada bedengan BST yang muat.');
-        if (n > room(bed)) return fail(`${bed} hanya muat ${fmt(room(bed))} lagi.`);
-        const lid = uid();
-        await ins('lot', { id: lid, bedengan: bed, jenis: b.jenis, jumlah: n, tgl_sapih: b.tgl_datang, tgl_masuk: G.today(), sumber: 'beli', beli_id: b.id, created_by: S.me.id });
-        await ins('lot_log', { lot_id: lid, tipe: 'pulih', n, ket: 'dari afkir beli ' + b.pemasok, oleh: S.me.id, nama_pencatat: who });
-        await ins('beli_log', { beli_id: b.id, tipe, n, bedengan: bed, lot_id: lid, oleh: S.me.id, nama_pencatat: who });
-        toast(`${fmt(n)} ${jn(b.jenis)} pulih, masuk ${bed}.`);
-      } else { await ins('beli_log', { beli_id: b.id, tipe, n, oleh: S.me.id, nama_pencatat: who }); toast(`${fmt(n)} afkir beli mati tercatat.`); }
+        const rs = rows().filter(r => r.n > 0), tot = rs.reduce((a, r) => a + r.n, 0);
+        if (!rs.length) return fail('Isi jumlah untuk minimal satu bedengan.');
+        if (tot > max) return fail(`Total ${fmt(tot)} melebihi sisa ${fmt(max)}.`);
+        const per = {}; rs.forEach(r => per[r.bed] = (per[r.bed] || 0) + r.n);
+        for (const [bed, n] of Object.entries(per)) if (n > room(bed)) return fail(`${bed} hanya muat ${fmt(room(bed))} lagi.`);
+        box.querySelector('button[type=submit]').disabled = true;
+        for (const [bed, n] of Object.entries(per)) {
+          const lid = uid();
+          await ins('lot', { id: lid, bedengan: bed, jenis: b.jenis, jumlah: n, tgl_sapih: b.tgl_datang, tgl_masuk: G.today(), sumber: 'beli', beli_id: b.id, created_by: S.me.id });
+          await ins('lot_log', { lot_id: lid, tipe: 'pulih', n, ket: 'dari afkir beli ' + b.pemasok, oleh: S.me.id, nama_pencatat: who });
+          await ins('beli_log', { beli_id: b.id, tipe, n, bedengan: bed, lot_id: lid, oleh: S.me.id, nama_pencatat: who });
+        }
+        toast(`${fmt(tot)} ${jn(b.jenis)} pulih, masuk ${Object.keys(per).join(', ')}.`);
+      } else {
+        const n = Number(box.querySelector('#abN').value); if (!(n > 0) || n > max) return fail(`Isi jumlah 1–${fmt(max)}.`);
+        await ins('beli_log', { beli_id: b.id, tipe, n, oleh: S.me.id, nama_pencatat: who }); toast(`${fmt(n)} afkir beli mati tercatat.`);
+      }
       close(); rerender();
     });
   });
