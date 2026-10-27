@@ -9,6 +9,7 @@ import { renderSesi, openScan, tagSheet, vendorNewTag } from './field.js';
 import { renderNursery, renderKirim, renderTampung, renderGudang, kembaliSheet, kembaliDue } from './nursery.js';
 import { renderBAList, renderBA, approvePeriode, approvePP, renderCetakTag } from './ba.js';
 import { renderMaster } from './master.js';
+import { renderOpname } from './opname.js';
 const { esc, fmt, tgl, jam } = G;
 
 const app = document.getElementById('app');
@@ -446,13 +447,13 @@ function renderAdmin() {
 export function route() {
   if (!S.me) return renderLogin(SB.user() ? 'Akun Anda belum terdaftar di aplikasi. Hubungi administrator.' : '');
   const [k, a] = location.hash.slice(1).split('/');
-  const r = role(); const allowed = [...(MENU[r] || []), ...(MORE[r] || []), 'blok', 'sesi', 'ba'];
+  const r = role(); const allowed = [...(MENU[r] || []), ...(MORE[r] || []), 'blok', 'sesi', 'ba']; if (allowed.includes('nursery')) allowed.push('opname');
   const key = k || MENU[r][0];
   if (!allowed.includes(key)) { location.hash = '#' + MENU[r][0]; return; }
   window.scrollTo(0, 0);
   ({
     beranda: renderBeranda, tugas: renderTugas, peta: renderPeta, blok: () => renderBlok(decodeURIComponent(a)),
-    sesi: () => renderSesi(a, shell), scan: () => openScan(shell), nursery: () => renderNursery(shell), kirim: () => renderKirim(shell),
+    sesi: () => renderSesi(a, shell), scan: () => openScan(shell), nursery: () => renderNursery(shell), opname: () => renderOpname(shell), kirim: () => renderKirim(shell),
     tampung: () => renderTampung(shell), gudang: () => renderGudang(shell), ba: () => a ? renderBA(a, shell) : renderBAList(shell),
     lainnya: renderLainnya, akun: renderAkun, admin: renderAdmin, cetak: () => renderCetakTag(shell), master: () => renderMaster(shell),
   }[key] || renderLainnya)();

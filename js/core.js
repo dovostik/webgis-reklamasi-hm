@@ -5,7 +5,7 @@ import { kvGet, kvSet, blobGet, blobSet, blobDel, SAT_URL, ORTHO, orthoUrl, SLOT
 
 export const S = { me: null, ready: false };
 export let L = null;
-const TABLES = ['setting', 'profiles', 'jenis', 'blok', 'periode', 'sesi', 'tag', 'tag_event', 'bedengan', 'nursery_fitur', 'lot', 'lot_log', 'minta', 'kirim', 'tampung_log', 'barang', 'barang_tx', 'alat', 'pinjam', 'ba', 'beli', 'beli_log', 'kembali', 'kembali_log', 'kirim_mat'];
+const TABLES = ['setting', 'profiles', 'jenis', 'blok', 'periode', 'sesi', 'tag', 'tag_event', 'bedengan', 'nursery_fitur', 'lot', 'lot_log', 'minta', 'kirim', 'tampung_log', 'barang', 'barang_tx', 'alat', 'pinjam', 'ba', 'beli', 'beli_log', 'kembali', 'kembali_log', 'kirim_mat', 'opname', 'opname_baris'];
 const PK = { jenis: 'kode', bedengan: 'kode', barang: 'nama', setting: 'k' };
 const pkOf = t => PK[t] || 'id';
 

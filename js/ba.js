@@ -3,6 +3,7 @@ import { SB } from './sb.js';
 import { S, L, ins, upd, $, $$, toast, confirmSheet, uid, nm, pickFile, fileUrl } from './core.js';
 import * as G from './logic.js';
 import { isRole, seesBlok, seesBA } from './app.js';
+import { bodySO } from './opname.js';
 const { esc, fmt, tgl, jam } = G;
 
 const JUDUL = { PP: 'BERITA ACARA PENYELESAIAN PEKERJAAN', KP: 'BERITA ACARA KEBERHASILAN PENILAIAN', KPR: 'BERITA ACARA KEBERHASILAN PENILAIAN RETENSI', SO: 'BERITA ACARA STOCK OPNAME' };
@@ -101,6 +102,7 @@ export function renderBAList(shell) {
   const list = S.ba.filter(seesBA).slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
   shell('Berita acara', null, `<div class="stack">
     ${wait.length ? `<div class="card stack"><h2>Menunggu persetujuan owner (${wait.length})</h2><div class="list">${wait.map(p => `<a class="item" href="#blok/${encodeURIComponent(p.blok_id)}"><div class="grow"><b>${esc(G.blokName(S.blokMap[p.blok_id]))} · ${p.status === 'pp_diajukan' ? 'BA Penyelesaian Pekerjaan' : G.TIPE_LBL[p.tipe]}</b><span>${p.status === 'pp_diajukan' ? 'Diajukan ExDAS ' + tgl(p.pp?.diajukan_at) : `Hasil ${fmt(p.pct, 2)}% ${p.hasil?.final ? '· siap disetujui' : ''}`}</span></div>${isRole('admin') ? '<span class="pill s-warn">Setujui</span>' : ''}</a>`).join('')}</div></div>` : ''}
+    ${(S.opname || []).filter(o => o.status === 'selesai').map(o => `<div class="card stack"><h2>BA Stock Opname menunggu persetujuan</h2><a class="item" href="#nursery"><div class="grow"><b>Stock opname bibit nursery</b><span>Selesai ${tgl(o.selesai_at)}</span></div>${isRole('admin') ? '<span class="pill s-warn">Setujui</span>' : ''}</a></div>`).join('')}
     <div class="card stack"><h2>Arsip BA (${list.length})</h2>${list.length ? `<div class="list">${list.map(a => `<a class="item" href="#ba/${a.id}"><div class="grow"><b>BA ${esc(a.jenis)} · ${esc(a.data?.blok?.nama || '')}</b><span class="mono">${esc(a.nomor)}</span><span>${tgl(a.created_at)}</span></div><span class="pill ${a.data?.esign || a.confirmed_at ? 's-ok' : a.scan_path ? 's-pend' : 's-idle'}">${a.data?.esign ? 'Final · TTE' : a.confirmed_at ? 'Final' : a.scan_path ? 'Scan diunggah' : 'Perlu ttd'}</span></a>`).join('')}</div>` : '<p class="muted small" style="margin:0">Belum ada BA. BA terbit setelah hasil ≥ 90%, semua tag GL disulam, dan disetujui owner.</p>'}</div></div>`);
 }
 
@@ -202,8 +204,8 @@ export function renderBA(id, shell) {
       ${!d.esign && (admin || isRole('spv', 'admrek')) ? `<button class="btn ghost block" id="bScan">${a.scan_path ? 'Ganti' : 'Unggah'} scan BA bertanda tangan</button>` : ''}
       ${!d.esign && (admin || isRole('spv', 'admrek')) && a.scan_path && !a.confirmed_at ? `<button class="btn block" id="bConf">${kp ? 'Konfirmasi scan & hapus foto asli inspeksi' : 'Konfirmasi scan'}</button>` : ''}
       <p class="note">${d.esign ? `Ditandatangani secara elektronik oleh semua pihak, disetujui ${esc(nm(d.approver?.id))} ${tgl(d.approver?.at)} ${jam(d.approver?.at)} WIB. Keaslian dapat dicek lewat kode QR di lampiran.` : `Cetak, tanda tangan basah semua pihak, lalu unggah scan-nya.${kp ? ' Setelah admin konfirmasi, 4 foto inspeksi asli dihapus permanen.' : ''}`}</p></div>
-    <div class="doc">${kop()}<h4>${JUDUL[a.jenis]}</h4><p class="nomor">Nomor: ${esc(a.nomor)}</p>${kp ? bodyKP(a) : bodyPP(a)}</div>
-    ${kp ? lampiran(a) : d.foto ? lampiranPP(a) : ''}</div>`);
+    <div class="doc">${kop()}<h4>${JUDUL[a.jenis]}</h4><p class="nomor">Nomor: ${esc(a.nomor)}</p>${a.jenis === 'SO' ? bodySO(a, ttdBox) : kp ? bodyKP(a) : bodyPP(a)}</div>
+    ${a.jenis === 'SO' ? '' : kp ? lampiran(a) : d.foto ? lampiranPP(a) : ''}</div>`);
   $('#bPrint').addEventListener('click', () => window.print());
   const qr = $('#baqr'); if (qr && window.QRCode) new window.QRCode(qr, { text: qr.dataset.qr, width: 84, height: 84, correctLevel: window.QRCode.CorrectLevel.M });
   $$('img[data-foto]').forEach(async im => { try { im.src = await fileUrl('foto', im.dataset.foto); } catch (e) {} });

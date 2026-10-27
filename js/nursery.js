@@ -5,6 +5,7 @@ import * as G from './logic.js';
 import { role, isRole, seesBlok } from './app.js';
 import { beliCard, afkirCard, bindBeli, aklimDue } from './beli.js';
 import { denahSVG, CLC } from './denah.js';
+import { opnameCard, bindOpnameCard, activeOpname } from './opname.js';
 const lsGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 let denahQ = '';
@@ -28,10 +29,10 @@ export function renderNursery(shell) {
     ${aklimDue().length ? `<div class="alert warn"><b>Aklimatisasi bibit beli selesai (${aklimDue().length})</b><br>Hitung bibit yang hidup di kartu Bibit beli.</div>` : ''}
     <div class="card stack"><h2>Pengingat pindah tahap</h2>${due.length ? `<div class="list">${due.map(l => `<a class="item" href="#" data-bed="${l.bedengan}"><span class="tagid">${l.bedengan}</span><div class="grow"><b>${esc(jn(l.jenis))} · ${fmt(l.jumlah)}</b><span>ke ${L.stage(l).next === 'Pembesaran' ? 'Pembesaran' : L.stage(l).next === 'BF' ? 'BST Fastgrow' : 'BST Lokal'}</span></div></a>`).join('')}</div>` : '<p class="muted small" style="margin:0">Tidak ada.</p>'}</div>
     <div class="card stack"><h2>Stok siap kirim per jenis</h2>${Object.keys(ready).length ? `<dl class="kv">${Object.entries(ready).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<dt>${esc(jn(k))}</dt><dd>${fmt(v)}${beliReady[k] ? ` <small class="muted">(beli ${fmt(beliReady[k])})</small>` : ''}</dd>`).join('')}</dl>` : '<p class="muted small" style="margin:0">Belum ada.</p>'}</div>
-    ${beliCard()}${afkirCard()}
+    ${opnameCard()}${beliCard()}${afkirCard()}
     ${can ? '<p class="note">Tap bedengan di peta untuk mencatat lot baru, mati/afkir, atau pindah tahap.</p>' : ''}</div>`);
   $$('[data-nv]').forEach(b => b.addEventListener('click', () => { lsSet('hm-nview', b.dataset.nv); renderNursery(shell); }));
-  if (lsGet('hm-nview', 'denah') === 'denah') { bindDenah(shell); $$('[data-bed]').forEach(a => { if (!a.closest('#dnWrap')) a.addEventListener('click', e => { e.preventDefault(); bedSheet(a.dataset.bed, shell); }); }); bindBeli(document.getElementById('main'), () => renderNursery(shell)); return; }
+  if (lsGet('hm-nview', 'denah') === 'denah') { bindDenah(shell); $$('[data-bed]').forEach(a => { if (!a.closest('#dnWrap')) a.addEventListener('click', e => { e.preventDefault(); bedSheet(a.dataset.bed, shell); }); }); bindBeli(document.getElementById('main'), () => renderNursery(shell)); bindOpnameCard(); return; }
   const map = newMap($('#nmap'), { maxZoom: 23 });
   const grp = window.L.featureGroup();
   S.nursery_fitur.forEach(f => {
@@ -47,7 +48,7 @@ export function renderNursery(shell) {
   if (nurseryView) map.setView(nurseryView.c, nurseryView.z); else if (grp.getLayers().length) map.fitBounds(grp.getBounds(), { padding: [6, 6] });
   map.on('moveend', () => { nurseryView = { c: map.getCenter(), z: map.getZoom() }; });
   $$('[data-bed]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); bedSheet(a.dataset.bed, shell); }));
-  bindBeli(document.getElementById('main'), () => renderNursery(shell));
+  bindBeli(document.getElementById('main'), () => renderNursery(shell)); bindOpnameCard();
 }
 function bedSheet(kode, shell) {
   const b = L.bed(kode); const ls = L.lotsIn(kode); const f = L.fill(kode), cap = b.kapasitas || 1300;
@@ -84,6 +85,7 @@ function afkirSheet(l, shell) {
   });
 }
 function moveSheet(l, shell) {
+  if (activeOpname()) return toast('Stock opname sedang berjalan. Pindah tahap dikunci sampai opname selesai.', 4000);
   const sg = L.suggestTargets(l);
   sheet(`<div class="stack"><h2>Pindah tahap · ${esc(l.bedengan)}</h2><p class="small" style="margin:0">${esc(jn(l.jenis))} ${fmt(l.jumlah)} bibit</p>
     <div class="alert ${sg.rest ? 'warn' : 'ok'}"><b>Saran tujuan</b><br>${sg.plan.map(p => `${p.bed}: ${fmt(p.n)} bibit (${p.why})`).join('<br>') || 'Tidak ada bedengan yang muat.'}${sg.rest ? `<br>Sisa ${fmt(sg.rest)} bibit belum mendapat tempat.` : ''}</div>
@@ -200,6 +202,7 @@ function bindMat(rerender) {
 // ---------- kirim bibit ----------
 // nursery memilih bedengan BST asal; saran awal = lot yang paling lama mengendap
 function sendFromStock(blok_id, minta_id, jk, n) {
+  if (activeOpname()) { toast('Stock opname sedang berjalan. Kirim bibit dikunci sampai opname selesai.', 4000); return Promise.resolve(false); }
   const lots = L.readyLots(jk); const avail = lots.reduce((a, l) => a + l.jumlah, 0);
   if (!avail) { toast(`Stok siap ${jn(jk)} kosong.`); return Promise.resolve(false); }
   let left = Math.min(n, avail); const sug = lots.map(l => { const k = Math.min(l.jumlah, left); left -= k; return k; });

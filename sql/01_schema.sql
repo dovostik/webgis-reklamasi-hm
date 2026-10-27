@@ -518,3 +518,25 @@ alter policy r on public.ba using (
     when 'exdas' then unit = 'TEWEH' and public.can_see_blok(blok_id)
     when 'bumdes' then unit = 'BUMDES' and public.can_see_blok(blok_id)
     else (blok_id is null and public.my_role() <> 'none') or public.can_see_blok(blok_id) end);
+
+-- ===== Stock opname bibit nursery =====
+create table if not exists public.opname (
+  id uuid primary key default gen_random_uuid(),
+  status text not null default 'berjalan' check (status in ('berjalan','selesai','disetujui')),
+  mulai_at timestamptz default now(), selesai_at timestamptz, oleh uuid references public.profiles(id),
+  pertama boolean default false, catatan text, ba_id uuid
+);
+create table if not exists public.opname_baris (
+  id uuid primary key default gen_random_uuid(),
+  opname_id uuid references public.opname(id) on delete cascade, bedengan text, lot_id uuid, jenis text,
+  sistem int default 0, fisik int default 0, baris int, per_baris int, sisa int, tgl_sapih date, tgl_masuk date,
+  alasan text, penghitung text, oleh uuid, at timestamptz default now()
+);
+alter table public.opname enable row level security; alter table public.opname_baris enable row level security;
+create policy opname_r on public.opname for select using (my_role() <> 'none');
+create policy opname_w on public.opname for all using (has_role(array['admin','nursery','crew'])) with check (has_role(array['admin','nursery','crew']));
+create policy opname_baris_r on public.opname_baris for select using (my_role() <> 'none');
+create policy opname_baris_w on public.opname_baris for all using (has_role(array['admin','nursery','crew'])) with check (has_role(array['admin','nursery','crew']));
+create trigger opname_t before insert on public.opname for each row execute function set_server_time('mulai_at');
+create trigger opname_baris_t before insert on public.opname_baris for each row execute function set_server_time('at');
+grant select, insert, update, delete on public.opname, public.opname_baris to authenticated;
