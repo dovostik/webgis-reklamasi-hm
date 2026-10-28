@@ -553,3 +553,30 @@ begin
 end $$;
 revoke all on function public.set_kapasitas(text[], int) from public, anon;
 grant execute on function public.set_kapasitas(text[], int) to authenticated;
+
+-- ===== QR tanda tangan: sidik dokumen + verifikasi publik minimal; notifikasi akun =====
+alter table public.ba add column if not exists sidik text;
+create or replace function public.ba_sidik() returns trigger language plpgsql as $$
+begin new.sidik := upper(substr(md5(coalesce(new.data,'{}'::jsonb)::text),1,4)||'-'||substr(md5(coalesce(new.data,'{}'::jsonb)::text),5,4)); return new; end $$;
+drop trigger if exists ba_sidik_t on public.ba;
+create trigger ba_sidik_t before insert or update of data on public.ba for each row execute function public.ba_sidik();
+create or replace function public.verifikasi_ba(p_id uuid, p_s text default null) returns json
+language sql stable security definer set search_path = public as $$
+  select json_build_object('nomor', nomor, 'jenis', jenis, 'unit', unit, 'tanggal', data->>'tanggal', 'objek', data->'blok'->>'nama',
+    'esign', coalesce((data->>'esign')::boolean, false), 'sidik', sidik, 'terbit', created_at,
+    'penanda', case when p_s is null then null else json_build_object('nama', data->'ttd'->p_s->>'nama', 'jabatan', data->'ttd'->p_s->>'jabatan', 'at', data->'ttd'->p_s->>'at') end,
+    'semua', (select json_agg(json_build_object('jabatan', v->>'jabatan', 'nama', v->>'nama', 'at', v->>'at')) from jsonb_each(data->'ttd') e(k, v)))
+  from public.ba where id = p_id
+$$;
+revoke all on function public.verifikasi_ba(uuid, text) from public;
+grant execute on function public.verifikasi_ba(uuid, text) to anon, authenticated;
+create table if not exists public.notif (
+  id uuid primary key default gen_random_uuid(), user_id uuid not null references public.profiles(id) on delete cascade,
+  judul text not null, isi text, href text, at timestamptz default now(), dibaca_at timestamptz);
+create index if not exists notif_user on public.notif(user_id, at desc);
+alter table public.notif enable row level security;
+create policy notif_r on public.notif for select to authenticated using (user_id = auth.uid());
+create policy notif_u on public.notif for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy notif_i on public.notif for insert to authenticated with check (public.my_role() <> 'none');
+create trigger notif_t before insert on public.notif for each row execute function set_server_time('at');
+grant select, insert, update on public.notif to authenticated;

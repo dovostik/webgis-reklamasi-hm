@@ -1,7 +1,7 @@
 // Stock opname bibit nursery: hitung fisik per bedengan/lot (baris × isi per baris + sisa), catat selisih & alasan,
 // perbaiki tanggal sapih/masuk (opname pertama), kunci kirim & pindah tahap selama sesi, lalu BA SO disetujui admin.
 import { SB } from './sb.js';
-import { S, L, ins, upd, $, $$, toast, sheet, confirmSheet, uid, nm } from './core.js';
+import { S, L, ins, upd, $, $$, toast, sheet, confirmSheet, uid, nm, notify } from './core.js';
 import * as G from './logic.js';
 import { isRole } from './app.js';
 const { esc, fmt, tgl, jam } = G;
@@ -157,12 +157,14 @@ async function approveSO(o) {
   const now = new Date().toISOString();
   const byJab = re => S.profiles.find(p => p.aktif !== false && re.test(p.jabatan || ''));
   const glN = S.profiles.find(p => p.role === 'nursery' && p.aktif !== false);
-  const ttd = { dibuat: { nama: glN?.nama || '……………', jabatan: 'GL Nursery', at: o.selesai_at || now }, diperiksa: { nama: byJab(/spv/i)?.nama || '……………', jabatan: 'SPV Reklamasi', at: now }, rs: { nama: byJab(/suptend|superintend/i)?.nama || '……………', jabatan: 'Reclamation Suptend', at: now } };
+  const spv = byJab(/spv/i), rsP = byJab(/suptend|superintend/i);
+  const ttd = { dibuat: { id: glN?.id || null, nama: glN?.nama || '……………', jabatan: 'GL Nursery', at: o.selesai_at || now }, diperiksa: { id: spv?.id || null, nama: spv?.nama || '……………', jabatan: 'SPV Reklamasi', at: now }, rs: { id: rsP?.id || null, nama: rsP?.nama || '……………', jabatan: 'Reclamation Suptend', at: now } };
   const td = G.toDate(G.today()), rom = G.ROM[td.getUTCMonth()], th = td.getUTCFullYear();
   const n = await SB.rpc('next_number', { p_name: `ba-NURSERY-${th}`, p_n: 1 });
   const nomor = `${String(n).padStart(3, '0')}/HM/BA/SO/NURSERY/${rom}/${th}`; const id = uid();
   await ins('ba', { id, jenis: 'SO', unit: 'NURSERY', nomor, blok_id: null, periode_id: null, data: { so: { rows, mat, mulai: o.mulai_at, selesai: o.selesai_at, pertama: o.pertama }, tanggal: G.today(), ttd, esign: true, approver: { id: S.me.id, at: now }, blok: { nama: 'Nursery' } }, created_by: S.me.id, confirmed_by: S.me.id, confirmed_at: now }, { offline: false });
   await upd('opname', { id: o.id }, { status: 'disetujui', ba_id: id }, { offline: false });
+  await notify(Object.values(ttd).map(s => s.id), 'BA Stock Opname nursery sudah Anda tandatangani', `Nomor ${nomor}. Tanda tangan elektronik atas nama Anda tercantum di BA ini.`, '#ba/' + id);
   toast('BA Stock Opname terbit.'); location.hash = '#ba/' + id;
 }
 

@@ -1,6 +1,6 @@
 // Berita acara: persetujuan owner, terbit nomor, tanda tangan elektronik, arsip foto (asli dihapus); cetak tag QR.
 import { SB } from './sb.js';
-import { S, L, ins, upd, $, $$, toast, confirmSheet, uid, nm, pickFile, fileUrl } from './core.js';
+import { S, L, ins, upd, $, $$, toast, confirmSheet, uid, nm, pickFile, fileUrl, notify } from './core.js';
 import * as G from './logic.js';
 import { isRole, seesBlok, seesBA } from './app.js';
 import { bodySO } from './opname.js';
@@ -9,8 +9,8 @@ const { esc, fmt, tgl, jam } = G;
 const JUDUL = { PP: 'BERITA ACARA PENYELESAIAN PEKERJAAN', KP: 'BERITA ACARA KEBERHASILAN PENILAIAN', KPR: 'BERITA ACARA KEBERHASILAN PENILAIAN RETENSI', SO: 'BERITA ACARA STOCK OPNAME' };
 const KODE = { PP: 'PP', KP: 'KP', KPR: 'KPR', SO: 'SO' };
 const byJab = re => S.profiles.find(p => p.aktif !== false && re.test(p.jabatan || ''));
-const signer = (re, jab) => { const p = byJab(re); return { nama: p?.nama || '……………………', jabatan: jab }; };
-const vendorSigner = v => { const p = S.profiles.find(x => x.role === v && x.aktif !== false); return { nama: p?.nama || '……………………', jabatan: p?.jabatan || (v === 'exdas' ? 'Pelaksana ExDAS' : 'Ketua BUMDES') }; };
+const signer = (re, jab) => { const p = byJab(re); return { id: p?.id || null, nama: p?.nama || '……………………', jabatan: jab }; };
+const vendorSigner = v => { const p = S.profiles.find(x => x.role === v && x.aktif !== false); return { id: p?.id || null, nama: p?.nama || '……………………', jabatan: p?.jabatan || (v === 'exdas' ? 'Pelaksana ExDAS' : 'Ketua BUMDES') }; };
 
 // ---------- arsip foto: salinan ringkas disimpan di BA, file asli dihapus ----------
 async function archivePhotos(items) {
@@ -33,7 +33,7 @@ function signers(p, extra = {}) {
   const glAt = (p.tipe === 'cek1' && p.hasil?.diajukan?.at) || p.hasil?.gl?.at || sesiList[sesiList.length - 1]?.selesai_at || now;
   return {
     approver: appr,
-    ttd: { dibuat: { ...signer(/spv/i, 'SPV Reklamasi'), ...stamp(now) }, vendor: { ...vendorSigner(p.vendor), ...stamp(vendAt) }, gl: { nama: glP?.nama || '……………………', jabatan: 'GL Reklamasi', ...stamp(glAt) }, rs: { ...signer(/suptend|superintend/i, 'Reclamation Suptend'), ...stamp(now) }, ktt: { ...signer(/ktt|kepala teknik/i, 'KTT PT Hamparan Mulya'), ...stamp(now) } }
+    ttd: { dibuat: { ...signer(/spv/i, 'SPV Reklamasi'), ...stamp(now) }, vendor: { ...vendorSigner(p.vendor), ...stamp(vendAt) }, gl: { id: glP?.id || null, nama: glP?.nama || '……………………', jabatan: 'GL Reklamasi', ...stamp(glAt) }, rs: { ...signer(/suptend|superintend/i, 'Reclamation Suptend'), ...stamp(now) }, ktt: { ...signer(/ktt|kepala teknik/i, 'KTT PT Hamparan Mulya'), ...stamp(now) } }
   };
 }
 async function issue(p, b, jenis, base) {
@@ -44,6 +44,7 @@ async function issue(p, b, jenis, base) {
     const nomor = `${String(n).padStart(3, '0')}/HM/BA/${KODE[j]}/${unit}/${rom}/${th}`;
     const id = uid(); ids.push(id);
     await ins('ba', { id, jenis: j, unit, nomor, blok_id: b.id, periode_id: p.id, data: base, created_by: S.me.id, confirmed_by: S.me.id, confirmed_at: new Date().toISOString() }, { offline: false });
+    await notify(Object.values(base.ttd || {}).map(s => s.id), `BA ${j} ${G.blokName(b)} sudah Anda tandatangani`, `Nomor ${nomor}. Tanda tangan elektronik atas nama Anda tercantum di BA ini.`, '#ba/' + id);
   }
   return ids;
 }
@@ -108,7 +109,9 @@ export function renderBAList(shell) {
 
 // ---------- dokumen ----------
 const kop = () => `<div class="kop"><img src="img/logo.svg" alt="PT Hamparan Mulya"><small>PT HAMPARAN MULYA · Site Muara Teweh<br>Departemen Reklamasi &amp; Rehabilitasi</small></div>`;
-const ttdBox = (cols, items) => `<div class="ttd" style="grid-template-columns:repeat(${cols},1fr)">${items.map(([lbl, s]) => `<div>${lbl}<br>${esc(s.jabatan)}${s.at ? `<em class="esign">✓ Ditandatangani elektronik<br>${tgl(s.at)} ${jam(s.at)} WIB</em>` : ''}<span${s.at ? ' class="es"' : ''}>${esc(s.nama)}</span></div>`).join('')}</div>`;
+let CUR = null; // BA yang sedang ditampilkan (untuk QR tanda tangan)
+const vUrl = (id, k) => new URL(`v.html?b=${id}&s=${k}`, location.href).href;
+const ttdBox = (cols, items) => `<div class="ttd" style="grid-template-columns:repeat(${cols},1fr)">${items.map(([lbl, s]) => { const k = CUR?.data?.esign && s.at ? Object.keys(CUR.data.ttd || {}).find(x => CUR.data.ttd[x] === s) : null; return `<div>${lbl}<br>${esc(s.jabatan)}${k ? `<div class="sigqr" data-qr="${esc(vUrl(CUR.id, k))}" title="Scan untuk verifikasi"></div><em class="esign q">Ditandatangani elektronik<br>${tgl(s.at)} ${jam(s.at)} WIB</em>` : s.at ? `<em class="esign">✓ Ditandatangani elektronik<br>${tgl(s.at)} ${jam(s.at)} WIB</em>` : ''}<span${s.at ? ' class="es"' : ''}>${esc(s.nama)}</span></div>`; }).join('')}</div>`;
 function sensusTbl(rows) {
   return `<table class="g"><thead><tr><th rowspan="2">Jalur</th><th colspan="3">Jumlah tanaman (pohon)</th><th rowspan="2">Keberhasilan</th></tr><tr><th>Realisasi</th><th>Mati</th><th>Hidup</th></tr></thead><tbody>${rows.map(r => `<tr${r.n === 'Jumlah' ? ' style="font-weight:700"' : ''}><td>${esc(r.n)}</td><td style="text-align:right">${fmt(r.r)}</td><td style="text-align:right">${fmt(r.m)}</td><td style="text-align:right">${fmt(r.h)}</td><td style="text-align:right">${fmt(r.p, 2)}%</td></tr>`).join('')}</tbody></table>`;
 }
@@ -196,7 +199,7 @@ export function renderBA(id, shell) {
   if (!a) return shell('BA', null, '<div class="card"><p>BA tidak ditemukan.</p></div>');
   const d = a.data; const kp = a.jenis === 'KP' || a.jenis === 'KPR';
   const sib = S.ba.filter(x => x.periode_id && x.periode_id === a.periode_id && x.id !== a.id);
-  const admin = isRole('admin');
+  const admin = isRole('admin'); CUR = a;
   shell('BA ' + a.jenis, d.blok?.nama, `<div class="stack">
     <div class="card stack noprint"><div class="row between"><b class="mono small">${esc(a.nomor)}</b><span class="pill ${d.esign || a.confirmed_at ? 's-ok' : a.scan_path ? 's-pend' : 's-idle'}">${d.esign ? 'Final · tanda tangan elektronik' : a.confirmed_at ? 'Final' : a.scan_path ? 'Menunggu konfirmasi' : 'Perlu tanda tangan'}</span></div>
       ${sib.map(x => `<a class="item" href="#ba/${x.id}"><div class="grow"><b>BA ${esc(x.jenis)} pasangan</b><span class="mono">${esc(x.nomor)}</span></div></a>`).join('')}
@@ -204,9 +207,10 @@ export function renderBA(id, shell) {
       ${!d.esign && (admin || isRole('spv', 'admrek')) ? `<button class="btn ghost block" id="bScan">${a.scan_path ? 'Ganti' : 'Unggah'} scan BA bertanda tangan</button>` : ''}
       ${!d.esign && (admin || isRole('spv', 'admrek')) && a.scan_path && !a.confirmed_at ? `<button class="btn block" id="bConf">${kp ? 'Konfirmasi scan & hapus foto asli inspeksi' : 'Konfirmasi scan'}</button>` : ''}
       <p class="note">${d.esign ? `Ditandatangani secara elektronik oleh semua pihak, disetujui ${esc(nm(d.approver?.id))} ${tgl(d.approver?.at)} ${jam(d.approver?.at)} WIB. Keaslian dapat dicek lewat kode QR di lampiran.` : `Cetak, tanda tangan basah semua pihak, lalu unggah scan-nya.${kp ? ' Setelah admin konfirmasi, 4 foto inspeksi asli dihapus permanen.' : ''}`}</p></div>
-    <div class="doc">${kop()}<h4>${JUDUL[a.jenis]}</h4><p class="nomor">Nomor: ${esc(a.nomor)}</p>${a.jenis === 'SO' ? bodySO(a, ttdBox) : kp ? bodyKP(a) : bodyPP(a)}</div>
+    <div class="doc">${kop()}<h4>${JUDUL[a.jenis]}</h4><p class="nomor">Nomor: ${esc(a.nomor)}</p>${a.jenis === 'SO' ? bodySO(a, ttdBox) : kp ? bodyKP(a) : bodyPP(a)}${d.esign && a.sidik ? `<p class="sidik">Sidik dokumen <b>${esc(a.sidik)}</b> · scan QR tanda tangan untuk memeriksa keaslian. Sidik di halaman verifikasi harus sama dengan yang tercetak di sini.</p>` : ''}</div>
     ${a.jenis === 'SO' ? '' : kp ? lampiran(a) : d.foto ? lampiranPP(a) : ''}</div>`);
   $('#bPrint').addEventListener('click', () => window.print());
+  $$('.sigqr').forEach(el => { if (window.QRCode) new window.QRCode(el, { text: el.dataset.qr, width: 160, height: 160, correctLevel: window.QRCode.CorrectLevel.M }); });
   const qr = $('#baqr'); if (qr && window.QRCode) new window.QRCode(qr, { text: qr.dataset.qr, width: 84, height: 84, correctLevel: window.QRCode.CorrectLevel.M });
   $$('img[data-foto]').forEach(async im => { try { im.src = await fileUrl('foto', im.dataset.foto); } catch (e) {} });
   const sv = $('#bScanV'); if (sv) sv.addEventListener('click', async () => { try { window.open(await SB.signedUrl('scan', a.scan_path), '_blank'); } catch (e) { toast(e.message); } });

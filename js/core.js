@@ -5,7 +5,7 @@ import { kvGet, kvSet, blobGet, blobSet, blobDel, SAT_URL, ORTHO, orthoUrl, SLOT
 
 export const S = { me: null, ready: false };
 export let L = null;
-const TABLES = ['setting', 'profiles', 'jenis', 'blok', 'periode', 'sesi', 'tag', 'tag_event', 'bedengan', 'nursery_fitur', 'lot', 'lot_log', 'minta', 'kirim', 'tampung_log', 'barang', 'barang_tx', 'alat', 'pinjam', 'ba', 'beli', 'beli_log', 'kembali', 'kembali_log', 'kirim_mat', 'opname', 'opname_baris'];
+const TABLES = ['setting', 'profiles', 'jenis', 'blok', 'periode', 'sesi', 'tag', 'tag_event', 'bedengan', 'nursery_fitur', 'lot', 'lot_log', 'minta', 'kirim', 'tampung_log', 'barang', 'barang_tx', 'alat', 'pinjam', 'ba', 'beli', 'beli_log', 'kembali', 'kembali_log', 'kirim_mat', 'opname', 'opname_baris', 'notif'];
 const PK = { jenis: 'kode', bedengan: 'kode', barang: 'nama', setting: 'k' };
 const pkOf = t => PK[t] || 'id';
 
@@ -131,6 +131,8 @@ export function confirmSheet(msg, okLbl = 'Ya, lanjutkan', danger = false) {
   }));
 }
 export const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
+// notifikasi di akun pengguna (lonceng di atas)
+export async function notify(ids, judul, isi, href) { const u = [...new Set((ids || []).filter(x => x && x !== S.me?.id))]; if (!u.length) return; try { await ins('notif', u.map(user_id => ({ id: uid(), user_id, judul, isi, href }))); } catch (e) {} }
 export const nm = id => S.profMap[id]?.nama || '–';
 
 // ---------- GPS ----------

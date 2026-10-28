@@ -153,3 +153,9 @@ td.r,th.r{text-align:right}
 .doc .ttd em.esign{display:block;margin:8px auto 0;max-width:180px;border:1.5px solid #1D6B47;color:#1D6B47;border-radius:6px;padding:3px 6px;font-style:normal;font-family:Arial,sans-serif;font-size:9.5px;line-height:1.35}
 .doc .ttd span.es{margin-top:6px}
 @media print{.doc .fotos img{aspect-ratio:16/10}.doc svg{max-height:105mm}}
+
+.doc .ttd .sigqr{display:flex;justify-content:center;margin:6px auto 0}.doc .ttd .sigqr img,.doc .ttd .sigqr canvas{width:78px!important;height:78px!important}
+.doc .ttd em.esign.q{border:0;padding:0;margin-top:2px;font-size:8.5px}
+.doc p.sidik{font-family:Arial,sans-serif;font-size:9.5px;color:#555;margin-top:14px;border-top:1px dashed #bbb;padding-top:6px}
+header.top .bell{position:relative;display:flex;color:var(--ink);padding:4px}header.top .bell svg{width:22px;height:22px}header.top .bell .badge{position:absolute;top:-3px;right:-5px;background:var(--bad);color:#fff;font-size:10px;font-weight:700;border-radius:99px;padding:0 5px;line-height:16px;min-width:16px;text-align:center}
+.notif-new{border-left:3px solid var(--accent)}

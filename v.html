@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Verifikasi BA · PT Hamparan Mulya</title>
+<meta name="robots" content="noindex">
+<style>
+:root{--ink:#17201B;--muted:#5B6660;--line:#DDE3DF;--bg:#F2F5F3;--ok:#1D6B47;--okbg:#E3F2EA;--bad:#B3261E;--badbg:#FBE7E5}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+main{max-width:520px;margin:0 auto;padding:20px 16px 40px}
+.kop{display:flex;align-items:center;gap:10px;margin-bottom:16px}.kop img{height:26px;background:#fff;border-radius:6px;padding:4px 6px}.kop small{color:var(--muted);line-height:1.3}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px}
+.st{display:flex;gap:12px;align-items:center;border-radius:10px;padding:12px 14px;margin-bottom:16px;font-weight:700}
+.st.ok{background:var(--okbg);color:var(--ok)}.st.bad{background:var(--badbg);color:var(--bad)}
+.st svg{width:28px;height:28px;flex:none}
+h1{font-size:17px;margin:0 0 10px}
+dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0}dt{color:var(--muted)}dd{margin:0;font-weight:600}
+.sidik{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:18px;letter-spacing:1px}
+.list{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}.list div{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:13.5px}.list span{color:var(--muted)}
+p.note{color:var(--muted);font-size:13px;margin:14px 0 0}
+</style>
+</head>
+<body><main>
+<div class="kop"><img src="img/logo.svg" alt="PT Hamparan Mulya"><small>PT HAMPARAN MULYA · Site Muara Teweh<br>Verifikasi tanda tangan elektronik</small></div>
+<div class="card" id="out"><p>Memeriksa…</p></div>
+</main>
+<script type="module">
+import { CONFIG } from './config.js';
+const out = document.getElementById('out'), q = new URLSearchParams(location.search);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const tg = v => v ? new Date(v).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' WIB' : '–';
+const tgl = v => v ? new Date(v + (String(v).length === 10 ? 'T00:00:00+07:00' : '')).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'long', year: 'numeric' }) : '–';
+const JUDUL = { PP: 'Berita Acara Penyelesaian Pekerjaan', KP: 'Berita Acara Keberhasilan Penilaian', KPR: 'Berita Acara Keberhasilan Penilaian Retensi', SO: 'Berita Acara Stock Opname' };
+const OK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/></svg>';
+const NO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></svg>';
+const bad = m => { out.innerHTML = `<div class="st bad">${NO}<span>${m}</span></div><p class="note">Dokumen dengan QR ini tidak tercatat di sistem PT Hamparan Mulya. Hubungi Departemen Reklamasi untuk konfirmasi.</p>`; };
+(async () => {
+  const id = q.get('b'), s = q.get('s');
+  if (!/^[0-9a-f-]{36}$/i.test(id || '')) return bad('Kode QR tidak valid');
+  try {
+    const k = CONFIG.SUPABASE_ANON_KEY, h = { apikey: k, 'Content-Type': 'application/json' }; if (/^eyJ/.test(k)) h.Authorization = 'Bearer ' + k;
+    const r = await fetch(CONFIG.SUPABASE_URL.replace(/\/$/, '') + '/rest/v1/rpc/verifikasi_ba', { method: 'POST', headers: h, body: JSON.stringify({ p_id: id, p_s: s || null }) });
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    if (!d) return bad('Dokumen tidak ditemukan');
+    const p = d.penanda && d.penanda.nama ? d.penanda : null;
+    if (s && !p) return bad('Penanda tangan tidak ditemukan di dokumen ini');
+    out.innerHTML = `<div class="st ok">${OK}<span>${p ? 'Tanda tangan asli dan tercatat di sistem' : 'Dokumen asli dan tercatat di sistem'}</span></div>
+      ${p ? `<h1>${esc(p.nama)}</h1><dl><dt>Jabatan</dt><dd>${esc(p.jabatan)}</dd><dt>Ditandatangani</dt><dd>${tg(p.at)}</dd></dl><div style="height:14px"></div>` : ''}
+      <dl><dt>Dokumen</dt><dd>${esc(JUDUL[d.jenis] || 'Berita Acara ' + d.jenis)}</dd><dt>Nomor</dt><dd>${esc(d.nomor)}</dd><dt>Objek</dt><dd>${esc(d.objek || '–')}</dd><dt>Tanggal</dt><dd>${tgl(d.tanggal)}</dd><dt>Sidik dokumen</dt><dd class="sidik">${esc(d.sidik || '–')}</dd></dl>
+      ${(d.semua || []).length ? `<div class="list"><b style="font-size:13px">Semua penanda tangan</b>${d.semua.map(x => `<div><b>${esc(x.nama)}</b><span>${esc(x.jabatan)}${x.at ? ' · ' + tg(x.at) : ''}</span></div>`).join('')}</div>` : ''}
+      <p class="note">Cocokkan <b>sidik dokumen</b> di atas dengan yang tercetak di bagian bawah BA. Jika berbeda, isi BA cetakan tersebut sudah diubah.</p>`;
+  } catch (e) { out.innerHTML = `<div class="st bad">${NO}<span>Tidak bisa memeriksa sekarang</span></div><p class="note">Periksa sinyal internet lalu scan ulang QR.</p>`; }
+})();
+</script>
+</body>
+</html>

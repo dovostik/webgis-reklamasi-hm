@@ -56,7 +56,7 @@ function shell(title, sub, body) {
   const badges = countBadges();
   const tabs = (MENU[r] || []).map(k => `<a href="#${k}" class="${cur === k || (k === 'lainnya' && MORE[r]?.includes(cur)) ? 'on' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>${LBL[k]}${badges[k] ? `<span class="badge">${badges[k]}</span>` : ''}</a>`).join('');
   app.className = '';
-  app.innerHTML = `<header class="top"><div class="logo"><img src="img/logo.svg" alt="PT Hamparan Mulya"></div><div class="t"><b>${esc(title)}</b><span>${esc(sub || (S.me ? S.me.nama + ' · ' + G.ROLE_LBL[r] : ''))}</span></div><span class="net" id="net">Online</span></header><main id="main">${G.SIM ? `<div class="alert warn" style="margin-bottom:12px">Mode uji coba: tanggal sistem ${tgl(G.today())} (dimajukan ${G.SIM} hari).</div>` : ''}${body}</main><nav class="tabs">${tabs}</nav>`;
+  app.innerHTML = `<header class="top"><div class="logo"><img src="img/logo.svg" alt="PT Hamparan Mulya"></div><div class="t"><b>${esc(title)}</b><span>${esc(sub || (S.me ? S.me.nama + ' · ' + G.ROLE_LBL[r] : ''))}</span></div>${S.me ? (() => { const n = (S.notif || []).filter(x => x.user_id === S.me.id && !x.dibaca_at).length; return `<a href="#notif" class="bell" aria-label="Notifikasi${n ? ', ' + n + ' baru' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>${n ? `<span class="badge">${n}</span>` : ''}</a>`; })() : ''}<span class="net" id="net">Online</span></header><main id="main">${G.SIM ? `<div class="alert warn" style="margin-bottom:12px">Mode uji coba: tanggal sistem ${tgl(G.today())} (dimajukan ${G.SIM} hari).</div>` : ''}${body}</main><nav class="tabs">${tabs}</nav>`;
   netState(isOnline());
   return $('#main');
 }
@@ -133,6 +133,11 @@ export function tugasList() {
 }
 
 // ---------- beranda (atasan & admin) ----------
+function renderNotif() {
+  const list = (S.notif || []).filter(x => x.user_id === S.me.id).sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  shell('Notifikasi', null, `<div class="card stack">${list.length ? `<div class="list">${list.map(n => `<a class="item${n.dibaca_at ? '' : ' notif-new'}" href="${esc(n.href || '#notif')}"><div class="grow"><b>${esc(n.judul)}</b><span>${esc(n.isi || '')}</span><span class="muted">${tgl(n.at)} ${jam(n.at)}</span></div>${n.dibaca_at ? '' : '<span class="pill s-pend">Baru</span>'}</a>`).join('')}</div>` : '<p class="muted small" style="margin:0">Belum ada notifikasi.</p>'}</div>`);
+  const now = new Date().toISOString(); list.filter(n => !n.dibaca_at).forEach(n => upd('notif', { id: n.id }, { dibaca_at: now }).catch(() => {}));
+}
 function renderBeranda() {
   const per = S.blok.filter(b => b.layer === 'perawatan'), bs = S.blok.filter(b => b.layer === 'bastl'), bh = S.blok.filter(b => b.layer === 'berhasil');
   const sum = a => a.reduce((s, b) => s + Number(b.ha), 0);
@@ -447,7 +452,7 @@ function renderAdmin() {
 export function route() {
   if (!S.me) return renderLogin(SB.user() ? 'Akun Anda belum terdaftar di aplikasi. Hubungi administrator.' : '');
   const [k, a] = location.hash.slice(1).split('/');
-  const r = role(); const allowed = [...(MENU[r] || []), ...(MORE[r] || []), 'blok', 'sesi', 'ba']; if (allowed.includes('nursery')) allowed.push('opname');
+  const r = role(); const allowed = [...(MENU[r] || []), ...(MORE[r] || []), 'blok', 'sesi', 'ba']; if (allowed.includes('nursery')) allowed.push('opname'); allowed.push('notif');
   const key = k || MENU[r][0];
   if (!allowed.includes(key)) { location.hash = '#' + MENU[r][0]; return; }
   window.scrollTo(0, 0);
@@ -455,7 +460,7 @@ export function route() {
     beranda: renderBeranda, tugas: renderTugas, peta: renderPeta, blok: () => renderBlok(decodeURIComponent(a)),
     sesi: () => renderSesi(a, shell), scan: () => openScan(shell), nursery: () => renderNursery(shell), opname: () => renderOpname(shell), kirim: () => renderKirim(shell),
     tampung: () => renderTampung(shell), gudang: () => renderGudang(shell), ba: () => a ? renderBA(a, shell) : renderBAList(shell),
-    lainnya: renderLainnya, akun: renderAkun, admin: renderAdmin, cetak: () => renderCetakTag(shell), master: () => renderMaster(shell),
+    lainnya: renderLainnya, notif: renderNotif, akun: renderAkun, admin: renderAdmin, cetak: () => renderCetakTag(shell), master: () => renderMaster(shell),
   }[key] || renderLainnya)();
 }
 window.addEventListener('hashchange', route);
