@@ -1,6 +1,6 @@
 // Nursery (bedengan & lot), kirim bibit, penampungan lapangan, gudang.
 import { SB } from './sb.js';
-import { S, L, ins, upd, $, $$, toast, sheet, confirmSheet, uid, nm, newMap, pickPhoto, scanQR } from './core.js';
+import { S, L, loadAll, ins, upd, $, $$, toast, sheet, confirmSheet, uid, nm, newMap, pickPhoto, scanQR } from './core.js';
 import * as G from './logic.js';
 import { role, isRole, seesBlok } from './app.js';
 import { beliCard, afkirCard, bindBeli, aklimDue } from './beli.js';
@@ -25,7 +25,7 @@ export function renderNursery(shell) {
     <div class="tiles"><div class="tile"><span>Siap kirim</span><b>${fmt(tr)}</b><span>≥ 2 minggu di BST</span></div><div class="tile"><span>Penyapihan</span><b>${fmt(tot('Penyapihan'))}</b><span>bibit</span></div><div class="tile"><span>Pembesaran</span><b>${fmt(tot('Pembesaran'))}</b><span>bibit</span></div><div class="tile"><span>Pindah tahap</span><b>${due.length}</b><span>lot jatuh tempo</span></div></div>
     ${(() => { const v = lsGet('hm-nview', 'denah'); return `<div class="row between"><div class="seg" role="group" aria-label="Tampilan" style="min-width:200px"><button type="button" data-nv="denah" class="${v === 'denah' ? 'on' : ''}" aria-pressed="${v === 'denah'}">Denah</button><button type="button" data-nv="peta" class="${v === 'peta' ? 'on' : ''}" aria-pressed="${v === 'peta'}">Peta asli</button></div>${v === 'denah' ? '<div class="row" style="gap:6px"><button class="btn ghost sm" id="dnOut" aria-label="Perkecil">−</button><button class="btn ghost sm" id="dnIn" aria-label="Perbesar">+</button></div>' : ''}</div>
     ${v === 'denah' ? `<input id="dnQ" type="search" placeholder="Cari kode bedengan atau jenis, mis. BF-03 atau sengon" value="${esc(denahQ)}" aria-label="Cari bedengan"><div class="chips" id="dnHits"></div><div class="dn-wrap" id="dnWrap"></div><p class="note" id="dnFac" style="margin:0"></p>` : '<div class="map" id="nmap"></div>'}`; })()}
-    <div class="legend"><span><i class="sw" style="background:${CLC.SP}"></i>Penyapihan</span><span><i class="sw" style="background:${CLC.PB}"></i>Pembesaran</span><span><i class="sw" style="background:${CLC.BF}"></i>BST Fastgrow</span><span><i class="sw" style="background:${CLC.BL}"></i>BST Lokal</span><span><i class="sw" style="background:#E0473B;border-radius:50%"></i>Waktunya pindah</span><span><i class="sw" style="background:#FFD400;border-radius:50%"></i>Siap kirim</span><span><i class="sw" style="background:#111;border-radius:50%"></i>Aklimatisasi</span><span><b>B</b> = bibit beli</span><span>Bar warna = persen isi (kapasitas 1.300)</span></div>
+    <div class="legend"><span><i class="sw" style="background:${CLC.SP}"></i>Penyapihan</span><span><i class="sw" style="background:${CLC.PB}"></i>Pembesaran</span><span><i class="sw" style="background:${CLC.BF}"></i>BST Fastgrow</span><span><i class="sw" style="background:${CLC.BL}"></i>BST Lokal</span><span><i class="sw" style="background:#E0473B;border-radius:50%"></i>Waktunya pindah</span><span><i class="sw" style="background:#FFD400;border-radius:50%"></i>Siap kirim</span><span><i class="sw" style="background:#111;border-radius:50%"></i>Aklimatisasi</span><span><b>B</b> = bibit beli</span><span>Bar warna = persen isi terhadap kapasitas bedengan</span></div>
     ${aklimDue().length ? `<div class="alert warn"><b>Aklimatisasi bibit beli selesai (${aklimDue().length})</b><br>Hitung bibit yang hidup di kartu Bibit beli.</div>` : ''}
     <div class="card stack"><h2>Pengingat pindah tahap</h2>${due.length ? `<div class="list">${due.map(l => `<a class="item" href="#" data-bed="${l.bedengan}"><span class="tagid">${l.bedengan}</span><div class="grow"><b>${esc(jn(l.jenis))} · ${fmt(l.jumlah)}</b><span>ke ${L.stage(l).next === 'Pembesaran' ? 'Pembesaran' : L.stage(l).next === 'BF' ? 'BST Fastgrow' : 'BST Lokal'}</span></div></a>`).join('')}</div>` : '<p class="muted small" style="margin:0">Tidak ada.</p>'}</div>
     <div class="card stack"><h2>Stok siap kirim per jenis</h2>${Object.keys(ready).length ? `<dl class="kv">${Object.entries(ready).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<dt>${esc(jn(k))}</dt><dd>${fmt(v)}${beliReady[k] ? ` <small class="muted">(beli ${fmt(beliReady[k])})</small>` : ''}</dd>`).join('')}</dl>` : '<p class="muted small" style="margin:0">Belum ada.</p>'}</div>
@@ -54,10 +54,11 @@ function bedSheet(kode, shell) {
   const b = L.bed(kode); const ls = L.lotsIn(kode); const f = L.fill(kode), cap = b.kapasitas || 1300;
   const can = isRole('admin', 'nursery', 'crew');
   sheet(`<div class="stack"><div class="row between"><h2>${esc(kode)}</h2><span class="pill s-idle">${esc(b.tahap)}${b.cluster === 'BF' ? ' Fastgrow' : b.cluster === 'BL' ? ' Lokal' : ''}</span></div>
-    <div><div class="row between small"><span>Terisi</span><span class="mono">${fmt(f)} / ${fmt(cap)}</span></div><div class="bar"><span style="width:${Math.min(100, f / cap * 100)}%"></span></div></div>
+    <div><div class="row between small"><span>Terisi</span><span class="mono">${fmt(f)} / ${fmt(cap)}${isRole('admin', 'nursery') ? ' <a href="#" id="capEd" class="small">Ubah kapasitas</a>' : ''}</span></div><div class="bar"><span style="width:${Math.min(100, f / cap * 100)}%"></span></div></div>
     ${ls.map(l => { const st = L.stage(l); return `<div class="sec"><div class="row between"><b>${esc(jn(l.jenis))}${l.sumber === 'beli' ? ' <span class="pill s-pend">Beli</span>' : ''}</b>${st.aklim ? `<span class="pill s-warn">Aklimatisasi${st.left > 0 ? ' · ' + st.left + ' hari' : ' · hitung'}</span>` : st.ready ? '<span class="pill s-ok">Siap kirim</span>' : st.due ? '<span class="pill s-warn">Waktunya pindah</span>' : `<span class="pill s-idle">${st.left} hari lagi</span>`}</div><dl class="kv"><dt>Jumlah</dt><dd>${fmt(l.jumlah)}</dd>${l.sumber === 'beli' ? `<dt>Asal</dt><dd>Beli · ${esc(S.beli?.find(x => x.id === l.beli_id)?.pemasok || '')}</dd><dt>Datang</dt><dd>${tgl(l.tgl_sapih)}</dd>` : `<dt>Sapih</dt><dd>${tgl(l.tgl_sapih)}</dd>`}<dt>Masuk bedengan</dt><dd>${tgl(l.tgl_masuk)}</dd>${l.sumber === 'beli' ? '' : `<dt>Umur</dt><dd>${fmt(G.diffDays(G.today(), l.tgl_sapih) / 7, 1)} minggu</dd>`}</dl>${can && !st.aklim ? `<div class="grid2"><button class="btn ghost sm" data-afk="${l.id}">Catat mati/afkir</button>${st.due ? `<button class="btn sm" data-move="${l.id}">Pindahkan</button>` : '<span></span>'}</div>` : ''}</div>`; }).join('') || '<p class="muted small" style="margin:0">Bedengan kosong.</p>'}
     ${can && b.tahap === 'Penyapihan' ? `<form class="sec" id="nl"><h3>Lot baru (sapih ke polybag)</h3><div class="grid2"><label class="f" for="nlJ">Jenis<select id="nlJ">${S.jenisAktif.filter(j => j.tersedia !== false).map(j => `<option value="${j.kode}">${esc(j.nama)}</option>`).join('')}</select></label><label class="f" for="nlN">Jumlah bibit<input id="nlN" type="number" min="1" inputmode="numeric" value="${Math.max(0, Math.min(1200, cap - f))}"></label></div>${crewName()}<p class="note">Polybag kecil berkurang otomatis sesuai jumlah bibit.</p><p class="err" id="nlErr" hidden></p><button class="btn" type="submit">Tambah lot</button></form>` : ''}
     <button class="btn ghost block" data-close>Tutup</button></div>`, (box, close) => {
+    const ce = box.querySelector('#capEd'); if (ce) ce.addEventListener('click', e => { e.preventDefault(); close(); capSheet(b, shell); });
     box.querySelectorAll('[data-afk]').forEach(btn => btn.addEventListener('click', () => { close(); afkirSheet(S.lot.find(x => x.id === btn.dataset.afk), shell); }));
     box.querySelectorAll('[data-move]').forEach(btn => btn.addEventListener('click', () => { close(); moveSheet(S.lot.find(x => x.id === btn.dataset.move), shell); }));
     const nl = box.querySelector('#nl'); if (nl) nl.addEventListener('submit', async e => {
@@ -81,6 +82,27 @@ function afkirSheet(l, shell) {
       if (!(n > 0) || n > l.jumlah) { er.textContent = `Isi jumlah 1–${fmt(l.jumlah)}.`; er.hidden = false; return; }
       await upd('lot', { id: l.id }, { jumlah: l.jumlah - n }); await ins('lot_log', { lot_id: l.id, tipe: t, n, oleh: S.me.id, nama_pencatat: who });
       close(); toast(`${t === 'mati' ? 'Mati' : 'Afkir'} ${n} bibit tercatat.`); renderNursery(shell);
+    });
+  });
+}
+// GL Nursery / admin: ubah kapasitas bedengan (satu bedengan atau satu cluster sekaligus)
+function capSheet(b, shell) {
+  const CLN = { SP: 'Penyapihan', PB: 'Pembesaran', BF: 'BST Fastgrow', BL: 'BST Lokal' };
+  const same = S.bedengan.filter(x => x.status === 'aktif' && x.cluster === b.cluster);
+  sheet(`<form class="stack" id="cpf"><h2>Kapasitas ${esc(b.kode)}</h2>
+    <label class="f" for="cpN">Kapasitas (bibit)<input id="cpN" type="number" min="1" max="20000" inputmode="numeric" value="${b.kapasitas || 1300}" required></label>
+    <label style="display:flex;gap:10px;align-items:center;font-weight:600"><input type="checkbox" id="cpAll" style="width:22px;height:22px;min-height:0;flex:none;margin:0;padding:0"> Terapkan ke semua bedengan ${esc(CLN[b.cluster] || b.cluster)} (${same.length})</label>
+    <p class="small muted" style="margin:0">Terisi sekarang ${fmt(L.fill(b.kode))} bibit. Kapasitas dipakai untuk bar persen isi, saran bedengan tujuan pindah tahap, dan batas penerimaan bibit.</p>
+    <p class="err" id="cpE" hidden></p><div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit">Simpan</button></div></form>`, (box, close) => {
+    box.querySelector('#cpf').addEventListener('submit', async e => {
+      e.preventDefault(); const er = box.querySelector('#cpE'); const n = Math.round(Number(box.querySelector('#cpN').value));
+      const kode = box.querySelector('#cpAll').checked ? same.map(x => x.kode) : [b.kode];
+      if (!(n >= 1 && n <= 20000)) { er.textContent = 'Kapasitas tidak valid.'; er.hidden = false; return; }
+      const over = kode.filter(k => L.fill(k) > n);
+      if (over.length && !(await confirmSheet(`Isi sekarang melebihi ${fmt(n)} di ${over.join(', ')}. Tetap simpan?`))) return;
+      const btn = box.querySelector('button[type=submit]'); btn.disabled = true;
+      try { await SB.rpc('set_kapasitas', { p_kode: kode, p_n: n }); S.bedengan.forEach(x => { if (kode.includes(x.kode)) x.kapasitas = n; }); await loadAll().catch(() => {}); close(); toast(`Kapasitas ${kode.length > 1 ? kode.length + ' bedengan' : b.kode} jadi ${fmt(n)}.`); renderNursery(shell); }
+      catch (x) { btn.disabled = false; er.textContent = x.net ? 'Ubah kapasitas butuh sinyal.' : x.message; er.hidden = false; }
     });
   });
 }

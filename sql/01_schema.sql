@@ -540,3 +540,16 @@ create policy opname_baris_w on public.opname_baris for all using (has_role(arra
 create trigger opname_t before insert on public.opname for each row execute function set_server_time('mulai_at');
 create trigger opname_baris_t before insert on public.opname_baris for each row execute function set_server_time('at');
 grant select, insert, update, delete on public.opname, public.opname_baris to authenticated;
+
+-- ===== GL Nursery boleh ubah kapasitas bedengan (lewat fungsi, kolom lain tetap admin) =====
+create or replace function public.set_kapasitas(p_kode text[], p_n int) returns int
+language plpgsql security definer set search_path = public as $$
+declare c int;
+begin
+  if not public.has_role('admin','nursery') then raise exception 'Hanya admin atau GL Nursery yang boleh mengubah kapasitas'; end if;
+  if p_n is null or p_n < 1 or p_n > 20000 then raise exception 'Kapasitas tidak valid'; end if;
+  update public.bedengan set kapasitas = p_n where kode = any(p_kode);
+  get diagnostics c = row_count; return c;
+end $$;
+revoke all on function public.set_kapasitas(text[], int) from public, anon;
+grant execute on function public.set_kapasitas(text[], int) to authenticated;

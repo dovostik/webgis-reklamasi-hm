@@ -138,6 +138,7 @@ function makeMock() {
     },
     async rpc(fn, a) {
       if (fn === 'next_number') { db.counter[a.p_name] = (db.counter[a.p_name] || 0) + (a.p_n || 1); persist(); return db.counter[a.p_name]; }
+      if (fn === 'set_kapasitas') { let c = 0; tbl('bedengan').forEach(r => { if (a.p_kode.includes(r.kode)) { r.kapasitas = a.p_n; c++; } }); persist(); return c; }
       throw new ApiError('rpc ' + fn + ' tidak ada di demo');
     },
     async upload(b, path, blob) {
