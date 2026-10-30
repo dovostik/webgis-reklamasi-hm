@@ -655,3 +655,45 @@ language sql stable security definer set search_path = public as $$
     'semua', (select json_agg(json_build_object('jabatan', (case when v ? 'for' then 'for ' else '' end) || (v->>'jabatan'), 'nama', v->>'nama', 'at', v->>'at')) from jsonb_each(data->'ttd') e(k, v)))
   from public.ba where id = p_id
 $$;
+-- ===== Tim inspeksi: crew bergabung ke sesi GL lewat QR (pekerjaan saja, tanpa otoritas) =====
+alter table public.sesi add column if not exists kode text;
+alter table public.tag add column if not exists pencatat text;
+alter table public.tag_event add column if not exists pencatat text;
+alter table public.tag_event add column if not exists anggota_id uuid;
+
+create table if not exists public.sesi_anggota (
+  id uuid primary key default gen_random_uuid(),
+  sesi_id uuid not null references public.sesi(id) on delete cascade,
+  oleh uuid not null default auth.uid() references public.profiles(id),
+  nama text not null, kode text,
+  joined_at timestamptz default now(), selesai_at timestamptz,
+  track jsonb not null default '[]'::jsonb, zona int
+);
+create index if not exists sesi_anggota_sesi on public.sesi_anggota(sesi_id);
+alter table public.sesi_anggota enable row level security;
+drop policy if exists sa_r on public.sesi_anggota;
+drop policy if exists sa_i on public.sesi_anggota;
+drop policy if exists sa_u on public.sesi_anggota;
+create policy sa_r on public.sesi_anggota for select to authenticated using (public.my_role() <> 'none');
+-- bergabung hanya dengan kode QR sesi yang masih terbuka, dan bukan akun vendor
+create policy sa_i on public.sesi_anggota for insert to authenticated with check (
+  oleh = auth.uid() and public.my_role() not in ('none','exdas','bumdes')
+  and exists (select 1 from public.sesi s where s.id = sesi_id and s.selesai_at is null and s.kode is not null and s.kode = sesi_anggota.kode));
+-- anggota memperbarui baris miliknya; ketua sesi (GL) boleh menandai anggota selesai
+create policy sa_u on public.sesi_anggota for update to authenticated using (
+  oleh = auth.uid() or exists (select 1 from public.sesi s where s.id = sesi_id and s.oleh = auth.uid()) or public.has_role('admin','suptend'));
+grant select, insert, update on public.sesi_anggota to authenticated;
+drop trigger if exists sesi_anggota_t on public.sesi_anggota;
+create trigger sesi_anggota_t before insert on public.sesi_anggota for each row execute function set_server_time('joined_at');
+
+-- anggota aktif di sesi terbuka untuk periode ini
+create or replace function public.in_tim(pid uuid) returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.sesi_anggota a join public.sesi s on s.id = a.sesi_id
+                 where a.oleh = auth.uid() and a.selesai_at is null and s.selesai_at is null and s.periode_id = pid)
+$$;
+grant execute on function public.in_tim(uuid) to authenticated;
+
+-- hak catat tag & penilaian untuk anggota tim (tetap tidak bisa menutup sesi / mengajukan BA)
+alter policy wi on public.tag with check ((public.has_role('admin','owner','exdas','bumdes') and public.can_see_blok(blok_id)) or public.in_tim(periode_id));
+alter policy wu on public.tag using ((public.has_role('admin','owner','exdas','bumdes') and public.can_see_blok(blok_id)) or public.in_tim(periode_id));
+alter policy w on public.tag_event with check ((public.has_role('admin','owner','exdas','bumdes') or public.in_tim(periode_id)) and oleh = auth.uid());

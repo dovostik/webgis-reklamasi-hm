@@ -5,7 +5,7 @@ import { kvGet, kvSet, blobGet, blobSet, blobDel, SAT_URL, ORTHO, orthoUrl, SLOT
 
 export const S = { me: null, ready: false };
 export let L = null;
-const TABLES = ['setting', 'profiles', 'jenis', 'blok', 'periode', 'sesi', 'tag', 'tag_event', 'bedengan', 'nursery_fitur', 'lot', 'lot_log', 'minta', 'kirim', 'tampung_log', 'barang', 'barang_tx', 'alat', 'pinjam', 'ba', 'beli', 'beli_log', 'kembali', 'kembali_log', 'kirim_mat', 'opname', 'opname_baris', 'notif', 'delegasi'];
+const TABLES = ['setting', 'profiles', 'jenis', 'blok', 'periode', 'sesi', 'tag', 'tag_event', 'bedengan', 'nursery_fitur', 'lot', 'lot_log', 'minta', 'kirim', 'tampung_log', 'barang', 'barang_tx', 'alat', 'pinjam', 'ba', 'beli', 'beli_log', 'kembali', 'kembali_log', 'kirim_mat', 'opname', 'opname_baris', 'notif', 'delegasi', 'sesi_anggota'];
 const PK = { jenis: 'kode', bedengan: 'kode', barang: 'nama', setting: 'k' };
 const pkOf = t => PK[t] || 'id';
 
@@ -193,7 +193,7 @@ export function scanQR(title = 'Arahkan kamera ke QR tag') {
           ctx.drawImage(video, (vw - sz) / 2, (vh - sz) / 2, sz, sz, 0, 0, 480, 480);
           const img = ctx.getImageData(0, 0, 480, 480);
           const code = window.jsQR && window.jsQR(img.data, 480, 480, { inversionAttempts: 'attemptBoth' });
-          if (code && code.data) { if (navigator.vibrate) navigator.vibrate(80); const t = code.data.trim(); return done(t.startsWith('HMK1') ? t : normTag(t)); }
+          if (code && code.data) { if (navigator.vibrate) navigator.vibrate(80); const t = code.data.trim(); return done(/^HM[KS]1/.test(t) ? t : normTag(t)); }
         }
         requestAnimationFrame(tick);
       };

@@ -192,14 +192,19 @@ const DAYC = ['#1F6FB5', '#D9822B', '#7B3FA0', '#2A9D8F', '#C2185B', '#6D4C41', 
 function lampiran(a) {
   const d = a.data; const sesiList = (d.sesi || []).map(id => S.sesi.find(s => s.id === id)).filter(Boolean);
   const tags = S.tag.filter(t => t.periode_id === a.periode_id && t.blok_id === d.blok.id);
-  const days = {}; sesiList.forEach(s => (s.track || []).forEach(p => { const k = G.tglWIB(new Date(p[3]).toISOString()); (days[k] = days[k] || []).push([p[0], p[1]]); }));
-  const tracks = Object.keys(days).sort().map((k, i) => ({ day: k, pts: days[k], c: DAYC[i % DAYC.length] }));
+  // jejak per hari per orang (ketua GL + anggota tim)
+  const srcs = sesiList.flatMap(s => [{ who: nm(s.oleh), tr: s.track || [] }, ...(S.sesi_anggota || []).filter(x => x.sesi_id === s.id).map(x => ({ who: x.nama, tr: x.track || [] }))]);
+  const days = {}; srcs.forEach(o => o.tr.forEach(p => { const k = G.tglWIB(new Date(p[3]).toISOString()) + '|' + o.who; (days[k] = days[k] || []).push([p[0], p[1]]); }));
+  const multi = srcs.filter(o => o.tr.length).length > sesiList.length;
+  const tracks = Object.keys(days).sort().map((k, i) => ({ day: k.split('|')[0], who: k.split('|')[1], pts: days[k], c: DAYC[i % DAYC.length] }));
+  const team = [...new Set(sesiList.flatMap(s => (S.sesi_anggota || []).filter(x => x.sesi_id === s.id).map(x => x.nama)))];
   const dead = {}; tags.forEach(t => { const e = S.tag_event.find(x => x.tag_id === t.id && x.tipe === 'mati'); const j = e?.jenis || '–'; dead[j] = (dead[j] || 0) + 1; });
   const fotos = sesiList.flatMap(s => (s.foto || []).map(path => ({ path, s })));
   const qrTxt = `${a.nomor}|${d.blok.nama}|${fmt(d.pct, 2)}%|${a.id}`;
   return `<div class="doc pgbreak">${kop()}<h4>LAMPIRAN</h4><p class="nomor">${esc(a.nomor)}</p>
     <p style="margin:0 0 6px"><b>1. Peta jejak penyapuan dan titik tag</b></p>${mapSVG(d, tags, tracks)}
-    <p class="small" style="font-family:Arial;font-size:10px;margin:4px 0">${tracks.map(t => `<span style="display:inline-block;margin-right:10px"><i style="display:inline-block;width:14px;height:3px;background:${t.c};vertical-align:middle"></i> ${tgl(t.day)}</span>`).join('')}<span style="color:#E0473B">●</span> mati &nbsp;<span style="color:#4F86C6">●</span> disulam &nbsp;<span style="color:#2F8A57">●</span> closed</p>
+    <p class="small" style="font-family:Arial;font-size:10px;margin:4px 0">${tracks.map(t => `<span style="display:inline-block;margin-right:10px"><i style="display:inline-block;width:14px;height:3px;background:${t.c};vertical-align:middle"></i> ${tgl(t.day)}${multi ? ' · ' + esc(t.who) : ''}</span>`).join('')}<span style="color:#E0473B">●</span> mati &nbsp;<span style="color:#4F86C6">●</span> disulam &nbsp;<span style="color:#2F8A57">●</span> closed</p>
+    ${team.length ? `<p class="small" style="font-family:Arial;font-size:10px;margin:2px 0">Tim inspeksi: ${esc([...new Set(sesiList.map(s => nm(s.oleh)))].join(', '))} (ketua), ${esc(team.join(', '))}</p>` : ''}
     <p style="margin:10px 0 4px"><b>2. Rekap tanaman mati per jenis</b></p><table class="g"><thead><tr><th>Jenis mati</th><th>Titik</th></tr></thead><tbody>${Object.entries(dead).map(([k, v]) => `<tr><td>${esc(S.jenisMap[k]?.nama || k)}</td><td style="text-align:right">${v}</td></tr>`).join('') || '<tr><td colspan="2">Tidak ada</td></tr>'}</tbody></table>
     ${Object.keys(d.sulam || {}).length ? `<p style="margin:10px 0 4px"><b>Jenis bibit penyulaman</b></p><table class="g"><tbody>${Object.entries(d.sulam).map(([k, v]) => `<tr><td>${esc(S.jenisMap[k]?.nama || k)}</td><td style="text-align:right">${v}</td></tr>`).join('')}</tbody></table>` : ''}
     <p style="margin:10px 0 4px"><b>3. Daftar titik</b></p><table class="g"><thead><tr><th>Tag</th><th>Sumber</th><th>Jalur</th><th>Kondisi</th><th>Koordinat</th><th>Status</th></tr></thead><tbody>${tags.map(t => `<tr><td>${esc(t.id)}</td><td>${t.sumber === 'gl' ? 'GL' : 'Vendor'}</td><td>${esc(t.jalur || '')}</td><td>${esc(G.KONDLBL[t.kondisi] || '')}</td><td>${(+t.lat).toFixed(6)}, ${(+t.lon).toFixed(6)}</td><td>${esc(t.status)}</td></tr>`).join('') || '<tr><td colspan="6">Tidak ada</td></tr>'}</tbody></table>
