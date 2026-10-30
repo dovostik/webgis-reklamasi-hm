@@ -3,7 +3,7 @@ export const STD = { lubang: 881, pupuk: 1762, npk: 44, pio: 625, sis: 256, lcc:
 export const CAP_DEFAULT = 1300;
 export const KONDISI = [['pmk', 'PMK spreading'], ['tergenang', 'Tergenang'], ['berpasir', 'Berpasir'], ['ob', 'Tanah OB']];
 export const KONDLBL = Object.fromEntries(KONDISI);
-export const ROLE_LBL = { admin: 'Administrator', spv: 'SPV Reklamasi', admrek: 'Admin Reklamasi', owner: 'GL lapangan', nursery: 'GL Nursery', crew: 'Tenaga harian nursery', exdas: 'Vendor ExDAS', bumdes: 'Vendor BUMDES', viewer: 'Atasan (lihat saja)' };
+export const ROLE_LBL = { admin: 'Administrator', spv: 'SPV Reklamasi', admrek: 'Admin Reklamasi', suptend: 'Reclamation Suptend', owner: 'GL lapangan', nursery: 'GL Nursery', crew: 'Tenaga harian nursery', exdas: 'Vendor ExDAS', bumdes: 'Vendor BUMDES', viewer: 'Atasan (lihat saja)' };
 export const STATUS_LBL = {
   pelaksanaan: 'Pelaksanaan vendor', pp_diajukan: 'BA PP menunggu persetujuan', ajukan_ba: 'Siap diajukan BA', siap_inspeksi: 'Siap inspeksi GL', inspeksi: 'Inspeksi berjalan',
   sulam_gl: 'Vendor menyulam tag GL', verifikasi: 'Siap verifikasi GL', menunggu_persetujuan: 'Menunggu persetujuan owner', selesai: 'Selesai'

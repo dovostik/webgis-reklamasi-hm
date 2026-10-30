@@ -1,6 +1,6 @@
 // Shell aplikasi: login, menu per peran, router, beranda, peta, detail blok, admin.
 import { SB } from './sb.js';
-import { S, L, loadAll, derive, ins, upd, flush, pending, netState, isOnline, $, $$, toast, sheet, confirmSheet, uid, nm, newMap, locateControl, fileUrl, uploadOrQueue, pickPhoto, pickPhotoGeo, GPS } from './core.js';
+import { S, L, loadAll, derive, ins, upd, flush, pending, netState, isOnline, notify, $, $$, toast, sheet, confirmSheet, uid, nm, newMap, locateControl, fileUrl, uploadOrQueue, pickPhoto, pickPhotoGeo, GPS } from './core.js';
 import { inBlok } from './exif.js';
 import * as G from './logic.js';
 import { downloadTiles, tileList, tileInfo, tileJob, canInstall, isInstalled, promptInstall, persist, loadOrtho, ORTHO, SLOTS, orthoKey } from './offline.js';
@@ -30,6 +30,7 @@ const MENU = {
   admin: ['beranda', 'tugas', 'peta', 'kirim', 'lainnya'],
   spv: ['beranda', 'tugas', 'peta', 'nursery', 'lainnya'],
   admrek: ['beranda', 'peta', 'nursery', 'ba', 'lainnya'],
+  suptend: ['beranda', 'tugas', 'peta', 'ba', 'lainnya'],
   owner: ['tugas', 'peta', 'scan', 'kirim', 'lainnya'],
   nursery: ['nursery', 'kirim', 'tampung', 'gudang', 'lainnya'],
   crew: ['nursery', 'gudang', 'lainnya'],
@@ -41,6 +42,7 @@ const MORE = {
   admin: ['nursery', 'tampung', 'gudang', 'ba', 'scan', 'admin', 'master', 'cetak', 'akun'],
   spv: ['kirim', 'tampung', 'gudang', 'ba', 'cetak', 'akun'],
   admrek: ['tugas', 'kirim', 'tampung', 'gudang', 'cetak', 'akun'],
+  suptend: ['nursery', 'kirim', 'tampung', 'gudang', 'akun'],
   owner: ['tampung', 'ba', 'gudang', 'akun'],
   nursery: ['ba', 'master', 'akun'],
   crew: ['kirim', 'tampung', 'akun'],
@@ -48,15 +50,22 @@ const MORE = {
   viewer: ['kirim', 'tampung', 'gudang', 'akun'],
 };
 export const role = () => S.me?.role || 'none';
-export const isRole = (...r) => r.includes(role());
+// job pending: pelimpahan tugas yang sedang aktif (tanggal hari ini di antara mulai–sampai, belum dicabut)
+export const delegAktif = d => !d.dicabut_at && d.mulai <= G.today() && G.today() <= d.sampai;
+export const delegKe = (uid = S.me?.id) => (S.delegasi || []).filter(d => d.ke === uid && delegAktif(d) && S.profMap[d.dari]?.aktif !== false);
+export const delegDari = uid => (S.delegasi || []).find(d => d.dari === uid && delegAktif(d));
+export const roles = () => [...new Set([role(), ...delegKe().map(d => S.profMap[d.dari]?.role).filter(Boolean)])];
+export const isRole = (...r) => roles().some(x => r.includes(x));
+const menuMain = () => MENU[role()] || [];
+const menuMore = () => { const m = menuMain(); return [...new Set([...(MORE[role()] || []), ...roles().slice(1).flatMap(x => [...(MENU[x] || []), ...(MORE[x] || [])])])].filter(k => k !== 'lainnya' && !m.includes(k)); };
 
 // ---------- shell ----------
 function shell(title, sub, body) {
-  const r = role(); const cur = (location.hash.slice(1).split('/')[0]) || MENU[r]?.[0];
+  const r = role(); const cur = (location.hash.slice(1).split('/')[0]) || menuMain()[0];
   const badges = countBadges();
-  const tabs = (MENU[r] || []).map(k => `<a href="#${k}" class="${cur === k || (k === 'lainnya' && MORE[r]?.includes(cur)) ? 'on' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>${LBL[k]}${badges[k] ? `<span class="badge">${badges[k]}</span>` : ''}</a>`).join('');
+  const tabs = menuMain().map(k => `<a href="#${k}" class="${cur === k || (k === 'lainnya' && menuMore().includes(cur)) ? 'on' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>${LBL[k]}${badges[k] ? `<span class="badge">${badges[k]}</span>` : ''}</a>`).join('');
   app.className = '';
-  app.innerHTML = `<header class="top"><div class="logo"><img src="img/logo.svg" alt="PT Hamparan Mulya"></div><div class="t"><b>${esc(title)}</b><span>${esc(sub || (S.me ? S.me.nama + ' · ' + G.ROLE_LBL[r] : ''))}</span></div>${S.me ? (() => { const n = (S.notif || []).filter(x => x.user_id === S.me.id && !x.dibaca_at).length; return `<a href="#notif" class="bell" aria-label="Notifikasi${n ? ', ' + n + ' baru' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>${n ? `<span class="badge">${n}</span>` : ''}</a>`; })() : ''}<span class="net" id="net">Online</span></header><main id="main">${G.SIM ? `<div class="alert warn" style="margin-bottom:12px">Mode uji coba: tanggal sistem ${tgl(G.today())} (dimajukan ${G.SIM} hari).</div>` : ''}${body}</main><nav class="tabs">${tabs}</nav>`;
+  app.innerHTML = `<header class="top"><div class="logo"><img src="img/logo.svg" alt="PT Hamparan Mulya"></div><div class="t"><b>${esc(title)}</b><span>${esc(sub || (S.me ? S.me.nama + ' · ' + G.ROLE_LBL[r] : ''))}</span></div>${S.me ? (() => { const n = (S.notif || []).filter(x => x.user_id === S.me.id && !x.dibaca_at).length; return `<a href="#notif" class="bell" aria-label="Notifikasi${n ? ', ' + n + ' baru' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>${n ? `<span class="badge">${n}</span>` : ''}</a>`; })() : ''}<span class="net" id="net">Online</span></header><main id="main">${S.me && delegKe().length ? `<a class="alert" href="#akun" style="display:block;margin-bottom:12px;text-decoration:none;color:inherit">Job pending: Anda memegang tugas ${delegKe().map(d => `<b>for ${esc(G.ROLE_LBL[S.profMap[d.dari]?.role] || '')}</b> (${esc(S.profMap[d.dari]?.nama || '')}) s/d ${tgl(d.sampai)}`).join(', ')}.</a>` : ''}${G.SIM ? `<div class="alert warn" style="margin-bottom:12px">Mode uji coba: tanggal sistem ${tgl(G.today())} (dimajukan ${G.SIM} hari).</div>` : ''}${body}</main><nav class="tabs">${tabs}</nav>`;
   netState(isOnline());
   return $('#main');
 }
@@ -64,11 +73,11 @@ function countBadges() {
   const r = role(), b = {};
   if (!S.ready || !S.me) return b;
   const t = tugasList().length; if (t) b.tugas = t;
-  if (['admin', 'nursery'].includes(r)) { const n = L.sulamDemand().filter(o => o.kurang > 0).length + L.tanamDemand().length; if (n) b.kirim = n; }
-  if (['owner', 'exdas', 'bumdes', 'admin'].includes(r)) { const k = S.kirim.filter(x => x.status === 'dikirim' && seesBlok(S.blokMap[x.blok_id])).length + (S.kirim_mat || []).filter(x => x.status === 'dikirim' && seesBlok(S.blokMap[x.blok_id])).length; if (k) b.kirim = (b.kirim || 0) + k; }
-  if (['admin', 'nursery'].includes(r)) { const m = L.matDemand().filter(x => x.kurang > 0).length; if (m) b.kirim = (b.kirim || 0) + m; }
-  if (['admin', 'nursery'].includes(r)) { const k = (S.kembali || []).filter(x => x.status === 'dikirim').length; if (k) b.tampung = k; }
-  if (r === 'admin') { const a = S.periode.filter(p => p.status === 'menunggu_persetujuan').length; if (a) b.tugas = (b.tugas || 0); }
+  if (isRole('admin', 'nursery')) { const n = L.sulamDemand().filter(o => o.kurang > 0).length + L.tanamDemand().length; if (n) b.kirim = n; }
+  if (isRole('owner', 'exdas', 'bumdes', 'admin')) { const k = S.kirim.filter(x => x.status === 'dikirim' && seesBlok(S.blokMap[x.blok_id])).length + (S.kirim_mat || []).filter(x => x.status === 'dikirim' && seesBlok(S.blokMap[x.blok_id])).length; if (k) b.kirim = (b.kirim || 0) + k; }
+  if (isRole('admin', 'nursery')) { const m = L.matDemand().filter(x => x.kurang > 0).length; if (m) b.kirim = (b.kirim || 0) + m; }
+  if (isRole('admin', 'nursery')) { const k = (S.kembali || []).filter(x => x.status === 'dikirim').length; if (k) b.tampung = k; }
+  if (isRole('suptend')) { const a = S.periode.filter(p => p.status === 'menunggu_persetujuan').length; if (a) b.tugas = (b.tugas || 0); }
   return b;
 }
 // ExDAS hanya BA ExDAS (TEWEH), BUMDES hanya BA BUMDES
@@ -87,7 +96,7 @@ function renderLogin(msg = '') {
       <label class="f" for="lp">Kata sandi<input id="lp" type="password" autocomplete="current-password" ${demo ? '' : 'required'}></label>
       <p class="err" id="lerr" ${msg ? '' : 'hidden'}>${esc(msg)}</p>
       <button class="btn block" type="submit">Masuk</button>
-      <p class="note">Akun dibuat oleh administrator. Lupa kata sandi? Hubungi administrator.</p></form>
+      <button type="button" class="btn ghost block" id="lForgot">Lupa kata sandi?</button></form>
     ${demo ? `<div class="card stack"><h3>Mode demo</h3><p class="note">Data hanya tersimpan di HP ini. Pilih akun:</p><div class="list">${demoUsers.map(p => `<button class="item" data-demo="${esc(p.email)}" style="text-align:left;font:inherit;width:100%"><div class="grow"><b>${esc(p.nama)}</b><span>${esc(G.ROLE_LBL[p.role])}</span></div></button>`).join('')}</div></div>` : ''}
   </div></main>`;
   $('#lf').addEventListener('submit', async e => {
@@ -97,6 +106,37 @@ function renderLogin(msg = '') {
     try { await SB.login(em, pw); await boot(); } catch (x) { const c = x.body?.error_code || x.body?.code || ''; er.textContent = x.net ? 'Tidak ada koneksi internet.' : c === 'invalid_credentials' ? 'Email atau kata sandi salah.' : c === 'email_not_confirmed' ? 'Email belum dikonfirmasi. Admin perlu mencentang Auto Confirm User saat membuat akun.' : `Gagal masuk: ${x.message}${c ? ' (' + c + ')' : ''} [${x.status}]`; er.hidden = false; }
   });
   $$('[data-demo]').forEach(b => b.addEventListener('click', async () => { await SB.login(b.dataset.demo, ''); await boot(); }));
+  $('#lForgot').addEventListener('click', () => forgotSheet($('#le').value.trim()));
+}
+const APP_URL = () => location.origin + location.pathname;
+function forgotSheet(em0 = '') {
+  sheet(`<form class="stack" id="fg"><h2>Lupa kata sandi</h2><p class="small" style="margin:0">Masukkan email akun Anda. Link untuk membuat kata sandi baru dikirim ke email tersebut dan berlaku 1 jam.</p>
+    <label class="f" for="fgE">Email<input id="fgE" type="email" inputmode="email" autocomplete="username" value="${esc(em0)}" required></label>
+    <p class="err" id="fgErr" hidden></p><div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit">Kirim link</button></div></form>`, (box, close) => {
+    box.querySelector('#fg').addEventListener('submit', async e => {
+      e.preventDefault(); const em = box.querySelector('#fgE').value.trim(), er = box.querySelector('#fgErr'), bt = box.querySelector('button[type=submit]');
+      if (!/^\S+@\S+\.\S+$/.test(em)) { er.textContent = 'Email tidak valid.'; er.hidden = false; return; }
+      bt.disabled = true;
+      try { await SB.recover(em, APP_URL()); close(); sheet(`<div class="stack"><h2>Cek email Anda</h2><p style="margin:0">Jika <b>${esc(em)}</b> terdaftar, link untuk membuat kata sandi baru sudah dikirim. Periksa juga folder <b>Spam</b>. Buka link itu di HP ini.</p><button class="btn block" data-close>Mengerti</button></div>`); }
+      catch (x) { bt.disabled = false; er.textContent = x.net ? 'Tidak ada koneksi internet.' : x.status === 429 ? 'Terlalu sering meminta link. Tunggu beberapa menit lalu coba lagi.' : 'Gagal mengirim: ' + x.message; er.hidden = false; }
+    });
+  });
+}
+// halaman buat kata sandi baru (dari link email lupa kata sandi)
+function renderSetPassword() {
+  app.className = '';
+  app.innerHTML = `<main style="max-width:420px;padding-top:calc(30px + env(safe-area-inset-top,0px))"><div class="stack">
+    <div class="card" style="text-align:center;background:#fff"><img src="img/logo.svg" alt="PT Hamparan Mulya" style="width:200px;max-width:70%"></div>
+    <form class="card stack" id="sp"><h1>Buat kata sandi baru</h1><p class="small" style="margin:0">Akun: <b>${esc(SB.user()?.email || '')}</b></p>
+      <label class="f" for="sp1">Kata sandi baru <small>minimal 8 karakter</small><input id="sp1" type="password" autocomplete="new-password" required></label>
+      <label class="f" for="sp2">Ulangi kata sandi baru<input id="sp2" type="password" autocomplete="new-password" required></label>
+      <p class="err" id="spErr" hidden></p><button class="btn block" type="submit">Simpan kata sandi</button></form></div></main>`;
+  $('#sp').addEventListener('submit', async e => {
+    e.preventDefault(); const a = $('#sp1').value, b = $('#sp2').value, er = $('#spErr'), fail = m => { er.textContent = m; er.hidden = false; };
+    if (a.length < 8) return fail('Kata sandi minimal 8 karakter.'); if (a !== b) return fail('Kedua kata sandi tidak sama.');
+    try { await SB.setPassword(a); toast('Kata sandi baru tersimpan.'); location.hash = ''; await boot(); }
+    catch (x) { fail(x.net ? 'Tidak ada koneksi internet.' : /same|different/i.test(x.message) ? 'Kata sandi baru harus berbeda dari yang lama.' : /weak|short/i.test(x.message) ? 'Kata sandi terlalu lemah. Pakai kombinasi huruf dan angka.' : x.message); }
+  });
 }
 
 // ---------- daftar tugas per peran ----------
@@ -106,26 +146,26 @@ export function tugasList() {
   for (const b of S.blok) {
     if (!seesBlok(b) || b.layer === 'berhasil') continue;
     const p = L.aktif(b.id);
-    if (r === 'spv' && b.layer === 'bastl' && !b.nama) { out.push({ b, p: null, t: 'Beri nama blok BASTL', k: 'warn' }); continue; }
-    if (r === 'admin') {
+    if (isRole('spv') && b.layer === 'bastl' && !b.nama) { out.push({ b, p: null, t: 'Beri nama blok BASTL', k: 'warn' }); continue; }
+    if (isRole('suptend')) {
       if (b.layer === 'bastl' && !b.nama) continue;
       if (p && p.status === 'menunggu_persetujuan') out.push({ b, p, t: 'Setujui dan terbitkan BA', k: 'warn' });
       if (p && p.status === 'pp_diajukan') out.push({ b, p, t: 'Setujui BA Penyelesaian Pekerjaan', k: 'warn' });
     }
-    if ((r === 'owner' || r === 'admin') && p && p.status === 'ajukan_ba' && p.tipe === 'cek1') out.push({ b, p, t: 'Ajukan BA Keberhasilan Penilaian', k: 'warn' });
-    if ((r === 'exdas' || r === 'bumdes' || r === 'owner') && S.kirim.some(k => k.blok_id === b.id && k.status === 'dikirim')) { const ks = S.kirim.filter(k => k.blok_id === b.id && k.status === 'dikirim'); out.push({ b, p, t: `Terima kiriman bibit: ${ks.map(k => (S.jenisMap[k.jenis]?.nama || k.jenis) + ' ' + fmt(k.n)).join(', ')}`, k: 'warn', href: '#kirim' }); }
-    if ((r === 'exdas' || r === 'bumdes' || r === 'owner') && (S.kirim_mat || []).some(k => k.blok_id === b.id && k.status === 'dikirim')) { const ks = S.kirim_mat.filter(k => k.blok_id === b.id && k.status === 'dikirim'); out.push({ b, p, t: `Terima material: ${ks.map(k => k.barang + ' ' + fmt(k.n, 1)).join(', ')}`, k: 'warn', href: '#kirim' }); }
-    if (r === 'owner' || r === 'admin') {
+    if ((isRole('owner') || isRole('admin')) && p && p.status === 'ajukan_ba' && p.tipe === 'cek1') out.push({ b, p, t: 'Ajukan BA Keberhasilan Penilaian', k: 'warn' });
+    if ((isRole('exdas') || isRole('bumdes') || isRole('owner')) && S.kirim.some(k => k.blok_id === b.id && k.status === 'dikirim')) { const ks = S.kirim.filter(k => k.blok_id === b.id && k.status === 'dikirim'); out.push({ b, p, t: `Terima kiriman bibit: ${ks.map(k => (S.jenisMap[k.jenis]?.nama || k.jenis) + ' ' + fmt(k.n)).join(', ')}`, k: 'warn', href: '#kirim' }); }
+    if ((isRole('exdas') || isRole('bumdes') || isRole('owner')) && (S.kirim_mat || []).some(k => k.blok_id === b.id && k.status === 'dikirim')) { const ks = S.kirim_mat.filter(k => k.blok_id === b.id && k.status === 'dikirim'); out.push({ b, p, t: `Terima material: ${ks.map(k => k.barang + ' ' + fmt(k.n, 1)).join(', ')}`, k: 'warn', href: '#kirim' }); }
+    if (isRole('owner') || isRole('admin')) {
       if (p && ['siap_inspeksi', 'verifikasi'].includes(p.status)) { const lk = L.lockInfo(p); out.push({ b, p, t: (p.status === 'verifikasi' ? 'Verifikasi tag GL' : 'Inspeksi') + (lk ? ` · mulai ${tgl(lk.until)}` : ' · siap'), k: lk ? 'idle' : 'pend' }); }
       if (p && p.status === 'inspeksi') out.push({ b, p, t: 'Inspeksi sedang berjalan', k: 'pend' });
     }
-    if (r === 'exdas' || r === 'bumdes') {
+    if (isRole('exdas') || isRole('bumdes')) {
       if (b.layer === 'bastl' && !b.nama) continue;
-      if (r === 'exdas' && b.layer !== 'bastl') continue; // blok yang sudah diserahkan ke BUMDES: riwayat saja
+      if (isRole('exdas') && b.layer !== 'bastl') continue; // blok yang sudah diserahkan ke BUMDES: riwayat saja
       if (!p && b.layer === 'perawatan') { const ri = L.rotasiInfo(b); if (ri && ri.dleft <= 30) out.push({ b, p: null, t: `Rotasi perawatan jatuh tempo ${tgl(ri.next)}`, k: ri.dleft < 0 ? 'bad' : 'warn' }); continue; }
       if (!p) continue;
       if (p.status === 'pelaksanaan') { const ret = L.retensiInfo(p); out.push({ b, p, t: p.tipe === 'cek1' ? 'Penanaman berjalan' : p.tipe === 'retensi' ? (ret && ret.left > 0 ? `Retensi dimulai ${tgl(ret.until)}` : 'Retensi berjalan') : 'Perawatan berjalan', k: ret && ret.left > 0 ? 'idle' : 'pend' }); }
-      if (p.status === 'ajukan_ba' && p.tipe === 'retensi' && r === 'exdas') out.push({ b, p, t: 'Ajukan BA Keberhasilan Penilaian Retensi', k: 'warn' });
+      if (p.status === 'ajukan_ba' && p.tipe === 'retensi' && isRole('exdas')) out.push({ b, p, t: 'Ajukan BA Keberhasilan Penilaian Retensi', k: 'warn' });
       if (p.status === 'sulam_gl') out.push({ b, p, t: `Sulam ${L.openGL(p).length} tag GL`, k: 'bad' });
     }
   }
@@ -168,7 +208,7 @@ function renderTugas() {
   const mine = S.blok.filter(b => seesBlok(b) && b.layer !== 'berhasil' && (b.layer !== 'bastl' || b.nama));
   shell('Tugas', null, `<div class="stack">
     <div class="list">${list.length ? list.map(x => `<a class="item" href="${x.href || '#blok/' + esc(x.b.id)}"><div class="grow"><b>${esc(G.blokName(x.b))} <span class="muted small">${fmt(x.b.ha, 2)} Ha</span></b><span>${esc(x.t)}</span></div><span class="pill s-${x.k}">${x.p ? esc(G.STATUS_LBL[x.p.status]) : 'Jadwal'}</span></a>`).join('') : '<div class="card"><p class="muted" style="margin:0">Tidak ada tugas saat ini.</p></div>'}</div>
-    <div class="card stack"><div class="row between"><h2>${r === 'exdas' || r === 'bumdes' ? 'Blok saya' : 'Semua blok kerja'}</h2><span class="small muted">${mine.length}</span></div>
+    <div class="card stack"><div class="row between"><h2>${isRole('exdas') || isRole('bumdes') ? 'Blok saya' : 'Semua blok kerja'}</h2><span class="small muted">${mine.length}</span></div>
       <input id="tq" placeholder="Cari nama blok" aria-label="Cari blok">
       <div class="list" id="tl">${mine.map(b => blokItem(b)).join('')}</div></div></div>`);
   $('#tq').addEventListener('input', e => { const q = e.target.value.toLowerCase(); $('#tl').innerHTML = mine.filter(b => G.blokName(b).toLowerCase().includes(q) || (b.kode_bastl || '').toLowerCase().includes(q)).map(blokItem).join(''); });
@@ -221,13 +261,13 @@ function renderBlok(id) {
   let act = '';
   // --- admin: beri nama BASTL ---
   if (b.layer === 'bastl' && !b.nama) {
-    act += (r === 'admin' || r === 'spv') ? `<div class="card stack"><h2>Beri nama blok</h2><p class="note">Melanjutkan urutan terakhir blok. Setelah disimpan, permintaan bibit penanaman langsung masuk ke nursery dan pekerjaan ExDAS dimulai.</p><div class="row" style="flex-wrap:nowrap"><input id="bnm" value="${esc(nextHRP())}" aria-label="Nama blok"><button class="btn" id="bnmOk">Simpan</button></div></div>` : '<div class="alert">Petak ini belum diberi nama oleh administrator.</div>';
+    act += (isRole('admin') || isRole('spv')) ? `<div class="card stack"><h2>Beri nama blok</h2><p class="note">Melanjutkan urutan terakhir blok. Setelah disimpan, permintaan bibit penanaman langsung masuk ke nursery dan pekerjaan ExDAS dimulai.</p><div class="row" style="flex-wrap:nowrap"><input id="bnm" value="${esc(nextHRP())}" aria-label="Nama blok"><button class="btn" id="bnmOk">Simpan</button></div></div>` : '<div class="alert">Petak ini belum diberi nama oleh administrator.</div>';
   }
   // --- vendor ---
-  if ((r === 'exdas' && b.layer === 'bastl') || (r === 'bumdes' && b.layer === 'perawatan') || r === 'admin') {
+  if ((isRole('exdas') && b.layer === 'bastl') || (isRole('bumdes') && b.layer === 'perawatan') || isRole('admin')) {
     if (!p && b.layer === 'perawatan') {
       const no = L.selesai(id, 'rotasi').length + 1;
-      act += `<div class="card stack"><h2>Rotasi perawatan ${no}</h2><p class="small" style="margin:0">Jadwal: ${tgl(ri?.next)} · kegiatan ${ri?.kegiatan || '–'} + NPK 50 g/pohon + sulam.</p><button class="btn block" id="vStart" ${r === 'bumdes' || r === 'admin' ? '' : 'disabled'}>Mulai perawatan</button></div>`;
+      act += `<div class="card stack"><h2>Rotasi perawatan ${no}</h2><p class="small" style="margin:0">Jadwal: ${tgl(ri?.next)} · kegiatan ${ri?.kegiatan || '–'} + NPK 50 g/pohon + sulam.</p><button class="btn block" id="vStart" ${isRole('bumdes') || isRole('admin') ? '' : 'disabled'}>Mulai perawatan</button></div>`;
     }
     if (p && p.status === 'pelaksanaan') {
       if (p.tipe === 'cek1') {
@@ -246,10 +286,10 @@ function renderBlok(id) {
       }
     }
     if (p && p.status === 'pp_diajukan') {
-      act += `<div class="card stack"><h2>BA Penyelesaian Pekerjaan diajukan</h2><p class="small" style="margin:0">Dikirim ${tgl(p.pp?.diajukan_at)} ${jam(p.pp?.diajukan_at)}. Menunggu persetujuan owner. Setelah disetujui, GL owner mengecek 7 hari kemudian.</p>${ppFotos(p)}${r === 'admin' ? '<button class="btn block" id="aPP">Setujui BA Penyelesaian Pekerjaan</button>' : ''}</div>`;
+      act += `<div class="card stack"><h2>BA Penyelesaian Pekerjaan diajukan</h2><p class="small" style="margin:0">Dikirim ${tgl(p.pp?.diajukan_at)} ${jam(p.pp?.diajukan_at)}. Menunggu persetujuan owner. Setelah disetujui, GL owner mengecek 7 hari kemudian.</p>${ppFotos(p)}${isRole('suptend') ? '<button class="btn block" id="aPP">Setujui BA Penyelesaian Pekerjaan</button>' : ''}</div>`;
     }
     if (p && p.status === 'ajukan_ba' && p.tipe === 'retensi') {
-      act += `<div class="card stack"><h2>Ajukan BA Keberhasilan Penilaian Retensi</h2><p class="small" style="margin:0">Hasil inspeksi retensi ${fmt(p.pct, 2)}% (≥ 90%) dan semua tag GL sudah disulam.</p><button class="btn block" id="vAjukan" ${r === 'exdas' || r === 'admin' ? '' : 'disabled'}>Ajukan BA KPR ke owner</button></div>`;
+      act += `<div class="card stack"><h2>Ajukan BA Keberhasilan Penilaian Retensi</h2><p class="small" style="margin:0">Hasil inspeksi retensi ${fmt(p.pct, 2)}% (≥ 90%) dan semua tag GL sudah disulam.</p><button class="btn block" id="vAjukan" ${isRole('exdas') || isRole('admin') ? '' : 'disabled'}>Ajukan BA KPR ke owner</button></div>`;
     }
     if (p && p.status === 'sulam_gl') {
       const og = L.openGL(p);
@@ -257,7 +297,7 @@ function renderBlok(id) {
     }
   }
   // --- GL owner ---
-  if ((r === 'owner' || r === 'admin') && p) {
+  if ((isRole('owner') || isRole('admin')) && p) {
     if (['siap_inspeksi', 'verifikasi'].includes(p.status)) {
       const lk = L.lockInfo(p);
       act += `<div class="card stack"><h2>${p.status === 'verifikasi' ? 'Verifikasi tag GL' : 'Inspeksi ' + G.TIPE_LBL[p.tipe].toLowerCase()}</h2>${lk ? `<div class="alert warn">${esc(lk.why)}${lk.until ? ` Bisa dimulai ${tgl(lk.until)}.` : ''}</div>` : '<p class="small" style="margin:0">Sapu seluruh jalur. Jejak GPS direkam otomatis. Wajib 4 foto kegiatan.</p>'}<button class="btn block" id="gStart" ${lk ? 'disabled' : ''}>Mulai ${p.status === 'verifikasi' ? 'verifikasi' : 'inspeksi'}</button></div>`;
@@ -265,11 +305,11 @@ function renderBlok(id) {
     if (p.status === 'ajukan_ba' && p.tipe === 'cek1') act += `<div class="card stack"><h2>Ajukan BA Keberhasilan Penilaian</h2><p class="small" style="margin:0">Hasil Cek 1 ${fmt(p.pct, 2)}% (≥ 90%) dan semua tag GL sudah disulam ExDAS. Lampiran: 4 foto inspeksi, peta jejak GPS, dan titik tag.</p><button class="btn block" id="gAjukan">Ajukan BA KP ke owner</button></div>`;
     if (p.status === 'inspeksi') { const s = S.sesi.find(x => x.periode_id === p.id && !x.selesai_at); act += `<div class="card stack"><h2>Sesi berjalan</h2><p class="small" style="margin:0">Oleh ${esc(nm(s?.oleh))} sejak ${tgl(s?.mulai_at)} ${jam(s?.mulai_at)}.</p><a class="btn block" href="#sesi/${s?.id}">Lanjutkan sesi</a></div>`; }
   }
-  if (r === 'admin' && p && p.status === 'menunggu_persetujuan') {
+  if (isRole('suptend') && p && p.status === 'menunggu_persetujuan') {
     act += `<div class="card stack"><h2>Persetujuan owner</h2><p class="small" style="margin:0">Hasil ${fmt(p.pct, 2)}% (≥ 90%). Semua tag GL sudah disulam vendor.${p.hasil?.diajukan ? ` Diajukan ${esc(nm(p.hasil.diajukan.id))} ${tgl(p.hasil.diajukan.at)}.` : ''}</p><button class="btn block" id="aOk">Setujui dan terbitkan BA (tanda tangan elektronik)</button></div>`;
   }
   // --- admin input data lama perawatan ---
-  if ((r === 'admin' || r === 'spv') && b.layer === 'perawatan') {
+  if ((isRole('admin') || isRole('spv')) && b.layer === 'perawatan') {
     act += `<details class="card"><summary><b>Input manual admin</b></summary><div class="stack" style="margin-top:10px"><div class="grid2"><label class="f" for="aT">Tanggal closing BA tanam<input type="date" id="aT" value="${esc(b.tgl_tanam || '')}"></label><label class="f" for="aR">Realisasi rotasi terakhir<input type="date" id="aR" value="${esc(b.tgl_rotasi_terakhir || '')}"></label></div><button class="btn ghost" id="aSave">Simpan tanggal</button></div></details>`;
   }
   const info = `<dl class="kv"><dt>Luas</dt><dd>${fmt(b.ha, 2)} Ha</dd>${b.kode_bastl ? `<dt>Kode BASTL</dt><dd class="mono">${esc(b.kode_bastl)}</dd>` : ''}${b.no_bastl ? `<dt>No. BASTL</dt><dd>${esc(b.no_bastl)}</dd>` : ''}
@@ -361,7 +401,7 @@ async function laporTanam(b, p) {
 
 // ---------- lainnya, akun, admin pengguna ----------
 function simCard() {
-  if (!isRole('admin', 'spv')) return '';
+  if (!isRole('admin', 'spv') || !G.SIM) return ''; // uji coba selesai: kartu hanya muncul untuk mematikan simulasi yang masih aktif
   return `<div class="card stack"><h2>Simulasi waktu (uji coba)</h2><p class="small" style="margin:0">Tanggal sistem: <b>${tgl(G.today())}</b>${G.SIM ? ` · dimajukan <b>${G.SIM} hari</b> dari tanggal asli` : ' · tanggal asli'}.</p><div class="grid2"><button class="btn ghost" data-sim="1">+1 hari</button><button class="btn ghost" data-sim="7">+7 hari</button></div>${G.SIM ? '<button class="btn ghost block" data-sim="0">Kembali ke tanggal asli</button>' : ''}<p class="note">Berlaku untuk semua akun. Dipakai untuk menguji kunci 7 hari, retensi 30 hari, dan jadwal rotasi tanpa menunggu. Kembalikan ke tanggal asli sebelum aplikasi dipakai sungguhan.</p></div>`;
 }
 // Ortho drone: hanya admin yang mengunggah; semua akun melihat hasilnya di peta.
@@ -429,22 +469,105 @@ function startTiles(manual) {
 }
 function renderLainnya() {
   const r = role();
-  shell('Lainnya', null, `${simCard()}${orthoCard()}${offCard()}<div class="list">${(MORE[r] || []).map(k => `<a class="item" href="#${k}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">${ICON[k] || ICON.tugas}</svg><div class="grow"><b>${LBL[k]}</b></div></a>`).join('')}</div>`);
+  shell('Lainnya', null, `${simCard()}${orthoCard()}${offCard()}<div class="list">${menuMore().map(k => `<a class="item" href="#${k}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">${ICON[k] || ICON.tugas}</svg><div class="grow"><b>${LBL[k]}</b></div></a>`).join('')}</div>`);
   $$('[data-sim]').forEach(b => b.addEventListener('click', async () => { const d = +b.dataset.sim; const n = d === 0 ? 0 : G.SIM + d; try { await upd('setting', { k: 'sim_days' }, { v: n, updated_by: S.me.id }, { offline: false }); toast(n ? `Tanggal sistem dimajukan ${n} hari.` : 'Kembali ke tanggal asli.'); renderLainnya(); } catch (e) { toast(e.message); } }));
   bindOff(); bindOrtho();
 }
 function renderAkun() {
-  shell('Akun saya', null, `<div class="stack"><div class="card"><dl class="kv"><dt>Nama</dt><dd>${esc(S.me.nama)}</dd><dt>Jabatan</dt><dd>${esc(S.me.jabatan || '–')}</dd><dt>Peran</dt><dd>${esc(G.ROLE_LBL[role()])}</dd><dt>Mode</dt><dd>${SB.mode === 'demo' ? 'Demo (data di HP)' : 'Online'}</dd><dt>Antrean offline</dt><dd>${pending()}</dd></dl></div>
-    <button class="btn ghost block" id="sync">Perbarui data</button><button class="btn bad block" id="out">Keluar</button>
-    <p class="note">Pasang di layar utama: buka menu browser lalu pilih "Tambahkan ke layar utama".</p></div>`);
+  const live = SB.mode !== 'demo';
+  shell('Akun saya', null, `<div class="stack"><div class="card stack"><dl class="kv"><dt>Nama</dt><dd>${esc(S.me.nama)}</dd><dt>Jabatan</dt><dd>${esc(S.me.jabatan || '–')}</dd><dt>Peran</dt><dd>${esc(G.ROLE_LBL[role()])}</dd><dt>Email</dt><dd>${esc(SB.user()?.email || '–')}</dd></dl>
+    <button class="btn ghost block" id="pwChg">Ganti kata sandi</button></div>
+    ${jobPendingCard()}
+    <div class="card stack"><button class="btn ghost block" id="sync">Perbarui data</button><button class="btn bad block" id="out">Keluar</button>
+    <p class="note">Pasang di layar utama: buka menu browser lalu pilih "Tambahkan ke layar utama".</p></div></div>`);
   $('#sync').addEventListener('click', async () => { await flush(); await loadAll(); toast('Data diperbarui.'); });
   $('#out').addEventListener('click', async () => { if (pending() && !(await confirmSheet('Masih ada data yang belum terkirim. Tetap keluar?', 'Keluar', true))) return; await SB.logout(); location.hash = ''; renderLogin(); });
+  $('#pwChg').addEventListener('click', pwSheet);
+  bindJobPending();
+}
+function pwSheet() {
+  sheet(`<form class="stack" id="pw"><h2>Ganti kata sandi</h2>
+    <label class="f" for="pw0">Kata sandi sekarang<input id="pw0" type="password" autocomplete="current-password" required></label>
+    <label class="f" for="pw1">Kata sandi baru <small>minimal 8 karakter</small><input id="pw1" type="password" autocomplete="new-password" required></label>
+    <label class="f" for="pw2">Ulangi kata sandi baru<input id="pw2" type="password" autocomplete="new-password" required></label>
+    <p class="err" id="pwErr" hidden></p><div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit">Simpan</button></div>
+    <p class="note" style="margin:0">Lupa kata sandi sekarang? Keluar, lalu ketuk "Lupa kata sandi?" di halaman masuk.</p></form>`, (box, close) => {
+    box.querySelector('#pw').addEventListener('submit', async e => {
+      e.preventDefault(); const v = k => box.querySelector(k).value, er = box.querySelector('#pwErr'), fail = m => { er.textContent = m; er.hidden = false; }, bt = box.querySelector('button[type=submit]');
+      if (v('#pw1').length < 8) return fail('Kata sandi baru minimal 8 karakter.'); if (v('#pw1') !== v('#pw2')) return fail('Kedua kata sandi baru tidak sama.'); if (v('#pw1') === v('#pw0')) return fail('Kata sandi baru harus berbeda dari yang sekarang.');
+      bt.disabled = true;
+      try { await SB.checkPassword(SB.user()?.email || S.me.email, v('#pw0')); }
+      catch (x) { bt.disabled = false; return fail(x.net ? 'Ganti kata sandi butuh sinyal.' : 'Kata sandi sekarang salah.'); }
+      try { await SB.setPassword(v('#pw1')); close(); toast('Kata sandi diganti. Pakai kata sandi baru saat masuk berikutnya.', 4000); }
+      catch (x) { bt.disabled = false; fail(x.net ? 'Ganti kata sandi butuh sinyal.' : /weak|short/i.test(x.message) ? 'Kata sandi terlalu lemah. Pakai kombinasi huruf dan angka.' : x.message); }
+    });
+  });
+}
+// ---------- job pending (pelimpahan tugas saat cuti) ----------
+const VENDOR = ['exdas', 'bumdes'];
+export function bolehDeleg(dari, ke) {
+  if (!dari || !ke || dari.id === ke.id || ke.aktif === false || dari.aktif === false) return false;
+  if (dari.role === 'admin') return false;                                   // admin teknis tidak dilimpahkan
+  if (VENDOR.includes(dari.role)) return ke.role === dari.role;              // vendor hanya ke vendor yang sama
+  return !VENDOR.includes(ke.role);                                          // peran internal tidak ke vendor
+}
+const delegSt = d => d.dicabut_at ? ['Dicabut', 's-idle'] : G.today() < d.mulai ? ['Terjadwal', 's-pend'] : G.today() > d.sampai ? ['Selesai', 's-idle'] : ['Aktif', 's-ok'];
+const delegItem = (d, canCut) => { const [t, c] = delegSt(d); const dr = S.profMap[d.dari], ke = S.profMap[d.ke]; return `<div class="item"><div class="grow"><b>${esc(dr?.nama || '–')} → ${esc(ke?.nama || '–')}</b><span>for ${esc(G.ROLE_LBL[dr?.role] || dr?.jabatan || '')} · ${tgl(d.mulai)} – ${tgl(d.sampai)}${d.alasan ? ' · ' + esc(d.alasan) : ''}</span></div><span class="pill ${c}">${t}</span>${canCut && !d.dicabut_at && G.today() <= d.sampai ? `<button class="btn ghost sm" data-cut="${d.id}">Cabut</button>` : ''}</div>`; };
+function jobPendingCard() {
+  const me = S.me, mgr = isRole('admin') || role() === 'suptend';
+  const hold = delegKe(); const mine = (S.delegasi || []).filter(d => d.dari === me.id || d.ke === me.id || mgr).sort((a, b) => String(b.mulai).localeCompare(String(a.mulai))).slice(0, 20);
+  const canSelf = me.role !== 'admin';
+  return `<div class="card stack"><h2>Job pending</h2>
+    ${hold.length ? `<div class="alert">Anda sedang memegang tugas ${hold.map(d => `<b>for ${esc(G.ROLE_LBL[S.profMap[d.dari]?.role] || '')}</b> (${esc(S.profMap[d.dari]?.nama || '')}) sampai ${tgl(d.sampai)}`).join(', ')}. Menu dan persetujuannya ada di akun Anda selama periode itu.</div>` : ''}
+    <p class="small" style="margin:0">Saat cuti, limpahkan tugas akun Anda ke orang lain. Selama periode itu penerima bisa mengerjakan dan menyetujui sesuai akun Anda, dan tanda tangannya di BA tertulis "for".</p>
+    ${canSelf || mgr ? '<button class="btn block" id="jpNew">Limpahkan tugas</button>' : ''}
+    ${mine.length ? `<div class="list">${mine.map(d => delegItem(d, d.dari === me.id || mgr)).join('')}</div>` : ''}</div>`;
+}
+function bindJobPending() {
+  const nb = $('#jpNew'); if (nb) nb.addEventListener('click', jobPendingSheet);
+  $$('[data-cut]').forEach(b => b.addEventListener('click', async () => {
+    const d = S.delegasi.find(x => x.id === b.dataset.cut); if (!d) return;
+    if (!(await confirmSheet(`Cabut job pending ${esc(S.profMap[d.dari]?.nama)} → ${esc(S.profMap[d.ke]?.nama)} sekarang? Penerima langsung kehilangan akses tugas ini.`, 'Cabut', true))) return;
+    try { await upd('delegasi', { id: d.id }, { dicabut_at: new Date().toISOString(), dicabut_oleh: S.me.id }, { offline: false }); await notify([d.ke, d.dari], 'Job pending dicabut', `Tugas for ${G.ROLE_LBL[S.profMap[d.dari]?.role] || ''} (${S.profMap[d.dari]?.nama}) yang dipegang ${S.profMap[d.ke]?.nama} sudah dicabut.`, '#akun'); toast('Job pending dicabut.'); renderAkun(); }
+    catch (x) { toast(x.net ? 'Butuh sinyal.' : x.message); }
+  }));
+}
+function jobPendingSheet() {
+  const mgr = isRole('admin') || role() === 'suptend';
+  const froms = mgr ? S.profiles.filter(p => p.aktif !== false && p.role !== 'admin') : [S.me];
+  const opt = dariId => { const dr = S.profMap[dariId]; return S.profiles.filter(k => bolehDeleg(dr, k)).map(k => `<option value="${k.id}">${esc(k.nama)} · ${esc(G.ROLE_LBL[k.role] || k.role)}</option>`).join(''); };
+  sheet(`<form class="stack" id="jp"><h2>Limpahkan tugas (job pending)</h2>
+    ${mgr ? `<label class="f" for="jpD">Tugas milik<select id="jpD">${froms.map(p => `<option value="${p.id}" ${p.id === S.me.id ? 'selected' : ''}>${esc(p.nama)} · ${esc(G.ROLE_LBL[p.role] || p.role)}</option>`).join('')}</select></label>` : ''}
+    <label class="f" for="jpK">Dilimpahkan ke<select id="jpK">${opt(froms.find(p => p.id === S.me.id)?.id || froms[0]?.id)}</select></label>
+    <div class="grid2"><label class="f" for="jpM">Mulai<input id="jpM" type="date" value="${G.today()}" required></label><label class="f" for="jpS">Sampai<input id="jpS" type="date" required></label></div>
+    <label class="f" for="jpA">Alasan<input id="jpA" placeholder="mis. cuti tahunan, dinas luar" value="Cuti"></label>
+    <p class="note" style="margin:0">Peran internal tidak bisa dilimpahkan ke akun vendor, dan akun vendor hanya ke vendor yang sama. Satu orang tidak bisa menandatangani dua kolom di BA yang sama.</p>
+    <p class="err" id="jpErr" hidden></p><div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit">Limpahkan</button></div></form>`, (box, close) => {
+    const dSel = box.querySelector('#jpD'); if (dSel) dSel.addEventListener('change', () => { box.querySelector('#jpK').innerHTML = opt(dSel.value); });
+    box.querySelector('#jp').addEventListener('submit', async e => {
+      e.preventDefault(); const er = box.querySelector('#jpErr'), fail = m => { er.textContent = m; er.hidden = false; };
+      const dari = dSel ? dSel.value : S.me.id, ke = box.querySelector('#jpK').value, mulai = box.querySelector('#jpM').value, sampai = box.querySelector('#jpS').value, alasan = box.querySelector('#jpA').value.trim();
+      const dr = S.profMap[dari], kp = S.profMap[ke];
+      if (!ke) return fail('Pilih penerima.'); if (!bolehDeleg(dr, kp)) return fail('Penerima ini tidak boleh menerima tugas tersebut.');
+      if (!mulai || !sampai) return fail('Isi tanggal mulai dan sampai.'); if (sampai < mulai) return fail('Tanggal sampai sebelum tanggal mulai.'); if (sampai < G.today()) return fail('Tanggal sampai sudah lewat.');
+      const bentrok = (S.delegasi || []).find(d => d.dari === dari && !d.dicabut_at && d.mulai <= sampai && mulai <= d.sampai);
+      if (bentrok) return fail(`Sudah ada job pending ${dr.nama} ke ${S.profMap[bentrok.ke]?.nama} (${tgl(bentrok.mulai)} – ${tgl(bentrok.sampai)}). Cabut dulu kalau mau diganti.`);
+      const btn = box.querySelector('button[type=submit]'); btn.disabled = true;
+      try {
+        await ins('delegasi', { id: uid(), dari, ke, mulai, sampai, alasan: alasan || null, dibuat_oleh: S.me.id }, { offline: false });
+        const lbl = G.ROLE_LBL[dr.role] || dr.jabatan;
+        await notify([ke], `Job pending: Anda memegang tugas for ${lbl}`, `Dari ${dr.nama}, ${tgl(mulai)} – ${tgl(sampai)}${alasan ? ' (' + alasan + ')' : ''}. Menu dan persetujuan ${lbl} tersedia di akun Anda selama periode itu.`, '#akun');
+        await notify([dari], 'Job pending dibuat', `Tugas Anda (${lbl}) dipegang ${kp.nama} ${tgl(mulai)} – ${tgl(sampai)}.`, '#akun');
+        close(); toast('Job pending tersimpan.'); renderAkun();
+      } catch (x) { btn.disabled = false; fail(x.net ? 'Membuat job pending butuh sinyal.' : x.message); }
+    });
+  });
 }
 function renderAdmin() {
   if (role() !== 'admin') return renderLainnya();
   shell('Pengguna', null, `<div class="stack"><div class="alert">Akun baru dibuat di Supabase: <b>Authentication → Users → Add user</b> (centang <i>Auto confirm</i>). Setelah orangnya login sekali atau muncul di daftar ini, atur nama, jabatan, dan perannya di sini.</div>
     <div class="list">${S.profiles.map(p => `<div class="card stack"><div class="grid2"><label class="f">Nama<input data-p="${p.id}" data-k="nama" value="${esc(p.nama)}"></label><label class="f">Jabatan<input data-p="${p.id}" data-k="jabatan" value="${esc(p.jabatan || '')}"></label></div><div class="grid2"><label class="f">Peran<select data-p="${p.id}" data-k="role">${Object.entries(G.ROLE_LBL).map(([k, v]) => `<option value="${k}" ${p.role === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label><label class="f">Status<select data-p="${p.id}" data-k="aktif"><option value="true" ${p.aktif !== false ? 'selected' : ''}>Aktif</option><option value="false" ${p.aktif === false ? 'selected' : ''}>Nonaktif</option></select></label></div><button class="btn ghost sm" data-save="${p.id}">Simpan</button></div>`).join('')}</div>
-    <p class="note">Penanda tangan BA diambil dari jabatan: "SPV Reklamasi", "Reclamation Suptend", "KTT", nama vendor dari akun ExDAS/BUMDES, dan GL dari pengawas yang menginspeksi (dicetak "GL Reklamasi").</p></div>`);
+    <p class="note">Penanda tangan BA: peran SPV Reklamasi, peran Reclamation Suptend (yang menyetujui), jabatan "KTT", nama vendor dari akun ExDAS/BUMDES, dan GL dari pengawas yang menginspeksi (dicetak "GL Reklamasi").</p></div>`);
   $$('[data-save]').forEach(b => b.addEventListener('click', async () => { const id = b.dataset.save; const patch = {}; $$(`[data-p="${id}"]`).forEach(i => { patch[i.dataset.k] = i.dataset.k === 'aktif' ? i.value === 'true' : i.value; }); try { await upd('profiles', { id }, patch, { offline: false }); toast('Tersimpan.'); } catch (e) { toast(e.message); } }));
 }
 
@@ -452,9 +575,9 @@ function renderAdmin() {
 export function route() {
   if (!S.me) return renderLogin(SB.user() ? 'Akun Anda belum terdaftar di aplikasi. Hubungi administrator.' : '');
   const [k, a] = location.hash.slice(1).split('/');
-  const r = role(); const allowed = [...(MENU[r] || []), ...(MORE[r] || []), 'blok', 'sesi', 'ba']; if (allowed.includes('nursery')) allowed.push('opname'); allowed.push('notif');
-  const key = k || MENU[r][0];
-  if (!allowed.includes(key)) { location.hash = '#' + MENU[r][0]; return; }
+  const r = role(); const allowed = [...menuMain(), ...menuMore(), 'blok', 'sesi', 'ba']; if (allowed.includes('nursery')) allowed.push('opname'); allowed.push('notif');
+  const key = k || menuMain()[0];
+  if (!allowed.includes(key)) { location.hash = '#' + menuMain()[0]; return; }
   window.scrollTo(0, 0);
   ({
     beranda: renderBeranda, tugas: renderTugas, peta: renderPeta, blok: () => renderBlok(decodeURIComponent(a)),
@@ -469,6 +592,11 @@ document.addEventListener('visibilitychange', async () => { if (document.visibil
 
 async function boot() {
   try {
+    if (/access_token=|error_code=/.test(location.hash)) {
+      const h = location.hash; history.replaceState(null, '', location.pathname + location.search);
+      try { const r = await SB.fromLink(h); if (r && r.type === 'recovery') return renderSetPassword(); }
+      catch (x) { return renderLogin(/expired|invalid/i.test((x.body?.error_code || '') + x.message) ? 'Link sudah kedaluwarsa atau sudah dipakai. Ketuk "Lupa kata sandi?" untuk meminta link baru.' : 'Link tidak berlaku: ' + x.message); }
+    }
     const u = await SB.ensure();
     await loadOrtho();
     if (!u) { if (SB.mode === 'demo') await loadAll().catch(() => {}); return renderLogin(); }

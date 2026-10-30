@@ -2,14 +2,22 @@
 import { SB } from './sb.js';
 import { S, L, ins, upd, $, $$, toast, confirmSheet, uid, nm, pickFile, fileUrl, notify } from './core.js';
 import * as G from './logic.js';
-import { isRole, seesBlok, seesBA } from './app.js';
+import { isRole, seesBlok, seesBA, delegDari, delegKe } from './app.js';
 import { bodySO } from './opname.js';
 const { esc, fmt, tgl, jam } = G;
 
 const JUDUL = { PP: 'BERITA ACARA PENYELESAIAN PEKERJAAN', KP: 'BERITA ACARA KEBERHASILAN PENILAIAN', KPR: 'BERITA ACARA KEBERHASILAN PENILAIAN RETENSI', SO: 'BERITA ACARA STOCK OPNAME' };
 const KODE = { PP: 'PP', KP: 'KP', KPR: 'KPR', SO: 'SO' };
 const byJab = re => S.profiles.find(p => p.aktif !== false && re.test(p.jabatan || ''));
-const signer = (re, jab) => { const p = byJab(re); return { id: p?.id || null, nama: p?.nama || '……………………', jabatan: jab }; };
+// penanda tangan: jika pemegang jabatan sedang job pending, kolomnya ditandatangani penerima dengan label "for"
+export const asSig = (p, jab) => { if (!p) return { id: null, nama: '……………………', jabatan: jab }; const d = delegDari(p.id), q = d && S.profMap[d.ke]; return q ? { id: q.id, nama: q.nama, jabatan: jab, for: { id: p.id, nama: p.nama } } : { id: p.id, nama: p.nama, jabatan: jab }; };
+// yang sedang menyetujui (akun ini): langsung, atau "for" bila memegang peran itu lewat job pending
+export const actorSig = (roleKey, jab) => { const me = S.me; if (me.role === roleKey) return { id: me.id, nama: me.nama, jabatan: jab }; const d = delegKe().find(x => S.profMap[x.dari]?.role === roleKey); return { id: me.id, nama: me.nama, jabatan: jab, ...(d ? { for: { id: d.dari, nama: S.profMap[d.dari]?.nama } } : {}) }; };
+// pelaku lama (mis. GL yang menginspeksi): "for" bila saat itu memegang peran lewat job pending
+const forAt = (p, roleKey, jab, at) => { if (!p) return { id: null, nama: '……………………', jabatan: jab }; if (p.role === roleKey) return { id: p.id, nama: p.nama, jabatan: jab }; const day = String(at || G.today()).slice(0, 10); const d = (S.delegasi || []).find(x => x.ke === p.id && S.profMap[x.dari]?.role === roleKey && x.mulai <= day && day <= x.sampai && (!x.dicabut_at || x.dicabut_at.slice(0, 10) >= day)); return { id: p.id, nama: p.nama, jabatan: jab, ...(d ? { for: { id: d.dari, nama: S.profMap[d.dari]?.nama } } : {}) }; };
+// satu orang tidak boleh menandatangani dua kolom di BA yang sama
+export function dupSigner(ttd) { const seen = {}; for (const s of Object.values(ttd || {})) { if (!s?.id) continue; if (seen[s.id]) return `${s.nama} tercantum di dua kolom tanda tangan (${seen[s.id]} dan ${s.for ? 'for ' : ''}${s.jabatan}). BA belum bisa terbit: tunggu pemegang jabatan kembali atau limpahkan job pending ke orang lain.`; seen[s.id] = (s.for ? 'for ' : '') + s.jabatan; } return null; }
+const signer = (re, jab) => asSig(byJab(re), jab);
 const vendorSigner = v => { const p = S.profiles.find(x => x.role === v && x.aktif !== false); return { id: p?.id || null, nama: p?.nama || '……………………', jabatan: p?.jabatan || (v === 'exdas' ? 'Pelaksana ExDAS' : 'Ketua BUMDES') }; };
 
 // ---------- arsip foto: salinan ringkas disimpan di BA, file asli dihapus ----------
@@ -33,10 +41,11 @@ function signers(p, extra = {}) {
   const glAt = (p.tipe === 'cek1' && p.hasil?.diajukan?.at) || p.hasil?.gl?.at || sesiList[sesiList.length - 1]?.selesai_at || now;
   return {
     approver: appr,
-    ttd: { dibuat: { ...signer(/spv/i, 'SPV Reklamasi'), ...stamp(now) }, vendor: { ...vendorSigner(p.vendor), ...stamp(vendAt) }, gl: { id: glP?.id || null, nama: glP?.nama || '……………………', jabatan: 'GL Reklamasi', ...stamp(glAt) }, rs: { ...signer(/suptend|superintend/i, 'Reclamation Suptend'), ...stamp(now) }, ktt: { ...signer(/ktt|kepala teknik/i, 'KTT PT Hamparan Mulya'), ...stamp(now) } }
+    ttd: { dibuat: { ...asSig(S.profiles.find(x => x.role === 'spv' && x.aktif !== false) || byJab(/spv/i), 'SPV Reklamasi'), ...stamp(now) }, vendor: { ...vendorSigner(p.vendor), ...stamp(vendAt) }, gl: { ...forAt(glP, 'owner', 'GL Reklamasi', glAt), ...stamp(glAt) }, rs: { ...actorSig('suptend', 'Reclamation Suptend'), ...stamp(now) }, ktt: { ...signer(/ktt|kepala teknik/i, 'KTT PT Hamparan Mulya'), ...stamp(now) } }
   };
 }
 async function issue(p, b, jenis, base) {
+  const dup = dupSigner(base.ttd); if (dup) throw new Error(dup);
   const unit = p.vendor === 'exdas' ? 'TEWEH' : 'BUMDES';
   const td = G.toDate(G.today()), rom = G.ROM[td.getUTCMonth()], th = td.getUTCFullYear(); const ids = [];
   for (const j of jenis) {
@@ -45,6 +54,7 @@ async function issue(p, b, jenis, base) {
     const id = uid(); ids.push(id);
     await ins('ba', { id, jenis: j, unit, nomor, blok_id: b.id, periode_id: p.id, data: base, created_by: S.me.id, confirmed_by: S.me.id, confirmed_at: new Date().toISOString() }, { offline: false });
     await notify(Object.values(base.ttd || {}).map(s => s.id), `BA ${j} ${G.blokName(b)} sudah Anda tandatangani`, `Nomor ${nomor}. Tanda tangan elektronik atas nama Anda tercantum di BA ini.`, '#ba/' + id);
+    for (const s of Object.values(base.ttd || {}).filter(s => s.for)) await notify([s.for.id], `BA ${j} ${G.blokName(b)} ditandatangani for Anda`, `${s.nama} menandatangani sebagai for ${s.jabatan} (job pending). Nomor ${nomor}.`, '#ba/' + id);
   }
   return ids;
 }
@@ -63,6 +73,7 @@ function baseData(p, b) {
 export async function approvePP(p) {
   const b = S.blokMap[p.blok_id];
   if (!(await confirmSheet(`Setujui BA Penyelesaian Pekerjaan ${esc(G.blokName(b))}? BA terbit dengan tanda tangan elektronik semua pihak. Foto asli diarsipkan ringkas di BA lalu dihapus dari penyimpanan.`, 'Setujui & terbitkan'))) return;
+  { const dup = dupSigner(signers(p).ttd); if (dup) return toast(dup, 7000); }
   try {
     toast('Menerbitkan BA…', 8000);
     const fotos = await archivePhotos((p.pp?.foto || []).map((path, i) => ({ path, label: G.PP_FOTO[i], ...(p.pp?.meta?.[i] || {}) })));
@@ -78,6 +89,7 @@ export async function approvePeriode(p) {
   if (!p.hasil?.final) return toast('Hasil belum ≥ 90%. BA tidak bisa terbit.');
   if (L.openGL(p).length) return toast('Masih ada tag GL yang belum disulam vendor.');
   if (!(await confirmSheet(`Setujui hasil ${fmt(p.pct, 2)}% di ${esc(G.blokName(b))} dan terbitkan BA dengan tanda tangan elektronik? Foto inspeksi asli diarsipkan ringkas di BA lalu dihapus dari penyimpanan.`, 'Setujui & terbitkan'))) return;
+  { const dup = dupSigner(signers(p).ttd); if (dup) return toast(dup, 7000); }
   try {
     toast('Menerbitkan BA…', 8000);
     // ExDAS: PP sudah terbit di awal → cek1 = KP saja, retensi = KPR. BUMDES: PP + KP.
@@ -102,8 +114,8 @@ export function renderBAList(shell) {
   const wait = S.periode.filter(p => ['menunggu_persetujuan', 'pp_diajukan'].includes(p.status) && seesBlok(S.blokMap[p.blok_id]) && (!isRole('exdas', 'bumdes') || isRole(p.vendor)));
   const list = S.ba.filter(seesBA).slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
   shell('Berita acara', null, `<div class="stack">
-    ${wait.length ? `<div class="card stack"><h2>Menunggu persetujuan owner (${wait.length})</h2><div class="list">${wait.map(p => `<a class="item" href="#blok/${encodeURIComponent(p.blok_id)}"><div class="grow"><b>${esc(G.blokName(S.blokMap[p.blok_id]))} · ${p.status === 'pp_diajukan' ? 'BA Penyelesaian Pekerjaan' : G.TIPE_LBL[p.tipe]}</b><span>${p.status === 'pp_diajukan' ? 'Diajukan ExDAS ' + tgl(p.pp?.diajukan_at) : `Hasil ${fmt(p.pct, 2)}% ${p.hasil?.final ? '· siap disetujui' : ''}`}</span></div>${isRole('admin') ? '<span class="pill s-warn">Setujui</span>' : ''}</a>`).join('')}</div></div>` : ''}
-    ${(S.opname || []).filter(o => o.status === 'selesai').map(o => `<div class="card stack"><h2>BA Stock Opname menunggu persetujuan</h2><a class="item" href="#nursery"><div class="grow"><b>Stock opname bibit nursery</b><span>Selesai ${tgl(o.selesai_at)}</span></div>${isRole('admin') ? '<span class="pill s-warn">Setujui</span>' : ''}</a></div>`).join('')}
+    ${wait.length ? `<div class="card stack"><h2>Menunggu persetujuan owner (${wait.length})</h2><div class="list">${wait.map(p => `<a class="item" href="#blok/${encodeURIComponent(p.blok_id)}"><div class="grow"><b>${esc(G.blokName(S.blokMap[p.blok_id]))} · ${p.status === 'pp_diajukan' ? 'BA Penyelesaian Pekerjaan' : G.TIPE_LBL[p.tipe]}</b><span>${p.status === 'pp_diajukan' ? 'Diajukan ExDAS ' + tgl(p.pp?.diajukan_at) : `Hasil ${fmt(p.pct, 2)}% ${p.hasil?.final ? '· siap disetujui' : ''}`}</span></div>${isRole('suptend') ? '<span class="pill s-warn">Setujui</span>' : ''}</a>`).join('')}</div></div>` : ''}
+    ${(S.opname || []).filter(o => o.status === 'selesai').map(o => `<div class="card stack"><h2>BA Stock Opname menunggu persetujuan</h2><a class="item" href="#nursery"><div class="grow"><b>Stock opname bibit nursery</b><span>Selesai ${tgl(o.selesai_at)}</span></div>${isRole('suptend') ? '<span class="pill s-warn">Setujui</span>' : ''}</a></div>`).join('')}
     <div class="card stack"><h2>Arsip BA (${list.length})</h2>${list.length ? `<div class="list">${list.map(a => `<a class="item" href="#ba/${a.id}"><div class="grow"><b>BA ${esc(a.jenis)} · ${esc(a.data?.blok?.nama || '')}</b><span class="mono">${esc(a.nomor)}</span><span>${tgl(a.created_at)}</span></div><span class="pill ${a.data?.esign || a.confirmed_at ? 's-ok' : a.scan_path ? 's-pend' : 's-idle'}">${a.data?.esign ? 'Final · TTE' : a.confirmed_at ? 'Final' : a.scan_path ? 'Scan diunggah' : 'Perlu ttd'}</span></a>`).join('')}</div>` : '<p class="muted small" style="margin:0">Belum ada BA. BA terbit setelah hasil ≥ 90%, semua tag GL disulam, dan disetujui owner.</p>'}</div></div>`);
 }
 
@@ -111,7 +123,7 @@ export function renderBAList(shell) {
 const kop = () => `<div class="kop"><img src="img/logo.svg" alt="PT Hamparan Mulya"><small>PT HAMPARAN MULYA · Site Muara Teweh<br>Departemen Reklamasi &amp; Rehabilitasi</small></div>`;
 let CUR = null; // BA yang sedang ditampilkan (untuk QR tanda tangan)
 const vUrl = (id, k) => new URL(`v.html?b=${id}&s=${k}`, location.href).href;
-const ttdBox = (cols, items) => `<div class="ttd" style="grid-template-columns:repeat(${cols},1fr)">${items.map(([lbl, s]) => { const k = CUR?.data?.esign && s.at ? Object.keys(CUR.data.ttd || {}).find(x => CUR.data.ttd[x] === s) : null; return `<div>${lbl}<br>${esc(s.jabatan)}${k ? `<div class="sigqr" data-qr="${esc(vUrl(CUR.id, k))}" title="Scan untuk verifikasi"></div><em class="esign q">Ditandatangani elektronik<br>${tgl(s.at)} ${jam(s.at)} WIB</em>` : s.at ? `<em class="esign">✓ Ditandatangani elektronik<br>${tgl(s.at)} ${jam(s.at)} WIB</em>` : ''}<span${s.at ? ' class="es"' : ''}>${esc(s.nama)}</span></div>`; }).join('')}</div>`;
+const ttdBox = (cols, items) => `<div class="ttd" style="grid-template-columns:repeat(${cols},1fr)">${items.map(([lbl, s]) => { const k = CUR?.data?.esign && s.at ? Object.keys(CUR.data.ttd || {}).find(x => CUR.data.ttd[x] === s) : null; return `<div>${lbl}<br>${s.for ? 'for ' : ''}${esc(s.jabatan)}${k ? `<div class="sigqr" data-qr="${esc(vUrl(CUR.id, k))}" title="Scan untuk verifikasi"></div><em class="esign q">Ditandatangani elektronik<br>${tgl(s.at)} ${jam(s.at)} WIB</em>` : s.at ? `<em class="esign">✓ Ditandatangani elektronik<br>${tgl(s.at)} ${jam(s.at)} WIB</em>` : ''}<span${s.at ? ' class="es"' : ''}>${esc(s.nama)}</span></div>`; }).join('')}</div>`;
 function sensusTbl(rows) {
   return `<table class="g"><thead><tr><th rowspan="2">Jalur</th><th colspan="3">Jumlah tanaman (pohon)</th><th rowspan="2">Keberhasilan</th></tr><tr><th>Realisasi</th><th>Mati</th><th>Hidup</th></tr></thead><tbody>${rows.map(r => `<tr${r.n === 'Jumlah' ? ' style="font-weight:700"' : ''}><td>${esc(r.n)}</td><td style="text-align:right">${fmt(r.r)}</td><td style="text-align:right">${fmt(r.m)}</td><td style="text-align:right">${fmt(r.h)}</td><td style="text-align:right">${fmt(r.p, 2)}%</td></tr>`).join('')}</tbody></table>`;
 }
@@ -199,7 +211,7 @@ export function renderBA(id, shell) {
   if (!a) return shell('BA', null, '<div class="card"><p>BA tidak ditemukan.</p></div>');
   const d = a.data; const kp = a.jenis === 'KP' || a.jenis === 'KPR';
   const sib = S.ba.filter(x => x.periode_id && x.periode_id === a.periode_id && x.id !== a.id);
-  const admin = isRole('admin'); CUR = a;
+  const admin = isRole('suptend'); CUR = a;
   shell('BA ' + a.jenis, d.blok?.nama, `<div class="stack">
     <div class="card stack noprint"><div class="row between"><b class="mono small">${esc(a.nomor)}</b><span class="pill ${d.esign || a.confirmed_at ? 's-ok' : a.scan_path ? 's-pend' : 's-idle'}">${d.esign ? 'Final · tanda tangan elektronik' : a.confirmed_at ? 'Final' : a.scan_path ? 'Menunggu konfirmasi' : 'Perlu tanda tangan'}</span></div>
       ${sib.map(x => `<a class="item" href="#ba/${x.id}"><div class="grow"><b>BA ${esc(x.jenis)} pasangan</b><span class="mono">${esc(x.nomor)}</span></div></a>`).join('')}

@@ -4,6 +4,7 @@ import { SB } from './sb.js';
 import { S, L, ins, upd, $, $$, toast, sheet, confirmSheet, uid, nm, notify } from './core.js';
 import * as G from './logic.js';
 import { isRole } from './app.js';
+import { asSig, actorSig, dupSigner } from './ba.js';
 const { esc, fmt, tgl, jam } = G;
 const jn = k => S.jenisMap[k]?.nama || k || '–';
 const CL = { SP: 'Penyapihan', PB: 'Pembesaran', BF: 'BST Fastgrow', BL: 'BST Lokal' };
@@ -33,7 +34,7 @@ export function opnameCard() {
   }
   const wait = (S.opname || []).find(x => x.status === 'selesai');
   return `<div class="card stack"><div class="row between"><h2>Stock opname bibit</h2>${last ? `<span class="small muted">terakhir ${tgl(last.selesai_at || last.mulai_at)}</span>` : ''}</div>
-    ${wait ? `<div class="alert">Opname ${tgl(wait.selesai_at)} selesai, BA Stock Opname menunggu persetujuan admin.</div>${isRole('admin') ? `<button class="btn block" id="soOk" data-o="${wait.id}">Setujui & terbitkan BA SO</button>` : ''}` : ''}
+    ${wait ? `<div class="alert">Opname ${tgl(wait.selesai_at)} selesai, BA Stock Opname menunggu persetujuan Reclamation Suptend.</div>${isRole('suptend') ? `<button class="btn block" id="soOk" data-o="${wait.id}">Setujui & terbitkan BA SO</button>` : ''}` : ''}
     ${canDo() && !wait ? `<p class="small" style="margin:0">Hitung fisik semua bedengan dan sesuaikan stok aplikasi dengan aktual. ${(S.opname || []).length ? '' : 'Ini opname pertama: tanggal sapih dan tanggal masuk bedengan bisa diisi supaya umur bibit tercatat.'}</p><button class="btn ghost block" id="soStart">Mulai stock opname</button>` : ''}</div>`;
 }
 export function bindOpnameCard(rerender) {
@@ -155,15 +156,15 @@ async function approveSO(o) {
   const rows = liveRows(o).map(r => ({ bedengan: r.bedengan, cluster: S.bedMap[r.bedengan]?.cluster, jenis: r.jenis, nama: jn(r.jenis), sistem: r.sistem, fisik: r.fisik, alasan: r.alasan, penghitung: r.penghitung, tgl_sapih: r.tgl_sapih }));
   const mat = (S.barang_tx || []).filter(x => x.tipe === 'opname' && x.at >= o.mulai_at && (!o.selesai_at || x.at <= new Date(new Date(o.selesai_at).getTime() + 864e5).toISOString())).map(x => ({ barang: x.barang, n: Number(x.n), at: x.at }));
   const now = new Date().toISOString();
-  const byJab = re => S.profiles.find(p => p.aktif !== false && re.test(p.jabatan || ''));
-  const glN = S.profiles.find(p => p.role === 'nursery' && p.aktif !== false);
-  const spv = byJab(/spv/i), rsP = byJab(/suptend|superintend/i);
-  const ttd = { dibuat: { id: glN?.id || null, nama: glN?.nama || '……………', jabatan: 'GL Nursery', at: o.selesai_at || now }, diperiksa: { id: spv?.id || null, nama: spv?.nama || '……………', jabatan: 'SPV Reklamasi', at: now }, rs: { id: rsP?.id || null, nama: rsP?.nama || '……………', jabatan: 'Reclamation Suptend', at: now } };
+  const glN = S.profiles.find(p => p.role === 'nursery' && p.aktif !== false), spv = S.profiles.find(p => p.role === 'spv' && p.aktif !== false);
+  const ttd = { dibuat: { ...asSig(glN, 'GL Nursery'), at: o.selesai_at || now }, diperiksa: { ...asSig(spv, 'SPV Reklamasi'), at: now }, rs: { ...actorSig('suptend', 'Reclamation Suptend'), at: now } };
+  { const dup = dupSigner(ttd); if (dup) return toast(dup, 7000); }
   const td = G.toDate(G.today()), rom = G.ROM[td.getUTCMonth()], th = td.getUTCFullYear();
   const n = await SB.rpc('next_number', { p_name: `ba-NURSERY-${th}`, p_n: 1 });
   const nomor = `${String(n).padStart(3, '0')}/HM/BA/SO/NURSERY/${rom}/${th}`; const id = uid();
   await ins('ba', { id, jenis: 'SO', unit: 'NURSERY', nomor, blok_id: null, periode_id: null, data: { so: { rows, mat, mulai: o.mulai_at, selesai: o.selesai_at, pertama: o.pertama }, tanggal: G.today(), ttd, esign: true, approver: { id: S.me.id, at: now }, blok: { nama: 'Nursery' } }, created_by: S.me.id, confirmed_by: S.me.id, confirmed_at: now }, { offline: false });
   await upd('opname', { id: o.id }, { status: 'disetujui', ba_id: id }, { offline: false });
+  for (const s of Object.values(ttd).filter(s => s.for)) await notify([s.for.id], 'BA Stock Opname nursery ditandatangani for Anda', `${s.nama} menandatangani sebagai for ${s.jabatan} (job pending). Nomor ${nomor}.`, '#ba/' + id);
   await notify(Object.values(ttd).map(s => s.id), 'BA Stock Opname nursery sudah Anda tandatangani', `Nomor ${nomor}. Tanda tangan elektronik atas nama Anda tercantum di BA ini.`, '#ba/' + id);
   toast('BA Stock Opname terbit.'); location.hash = '#ba/' + id;
 }

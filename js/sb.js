@@ -68,6 +68,17 @@ const real = {
     const s = await req('/auth/v1/token?grant_type=password', { method: 'POST', headers: { apikey: CONFIG.SUPABASE_ANON_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) }, false);
     saveSession(s); return s.user;
   },
+  // lupa kata sandi: Supabase mengirim link ke email; link kembali ke aplikasi dengan #access_token…&type=recovery
+  async recover(email, redirectTo) { await req('/auth/v1/recover?redirect_to=' + enc(redirectTo), { method: 'POST', headers: { apikey: CONFIG.SUPABASE_ANON_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) }, false); },
+  async fromLink(h) {
+    const p = new URLSearchParams(h.replace(/^#/, ''));
+    if (p.get('error') || p.get('error_code')) { const e = new ApiError(p.get('error_description') || p.get('error') || 'Link tidak berlaku', 400, { error_code: p.get('error_code') }); throw e; }
+    if (!p.get('access_token')) return null;
+    saveSession({ access_token: p.get('access_token'), refresh_token: p.get('refresh_token'), expires_at: Number(p.get('expires_at')) || Math.floor(Date.now() / 1000) + Number(p.get('expires_in') || 3600) });
+    const u = await req('/auth/v1/user', { headers: hdr() }, false); saveSession({ ...session, user: u }); return { user: u, type: p.get('type') };
+  },
+  async setPassword(password) { const u = await req('/auth/v1/user', { method: 'PUT', headers: hdr({ 'Content-Type': 'application/json' }), body: JSON.stringify({ password }) }, false); saveSession({ ...session, user: u }); return u; },
+  async checkPassword(email, password) { await req('/auth/v1/token?grant_type=password', { method: 'POST', headers: { apikey: CONFIG.SUPABASE_ANON_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) }, false); },
   async logout() { try { await req('/auth/v1/logout', { method: 'POST', headers: hdr() }, false); } catch (e) {} saveSession(null); },
   async ensure() { if (!session) return null; if (session.expires_at && session.expires_at * 1000 < Date.now() + 60000) await refresh(); return session?.user || null; },
   select(table, q = {}) { return req('/rest/v1/' + table + qs({ select: '*', ...q }), { headers: hdr() }); },
@@ -96,7 +107,7 @@ function makeMock() {
   const now = () => new Date().toISOString();
   const tbl = t => (db[t] = db[t] || []);
   const pk = { blok: 'id', jenis: 'kode', bedengan: 'kode', barang: 'nama', tag: 'id', counter: 'name', setting: 'k' };
-  const TIME = { periode: 'created_at', sesi: 'mulai_at', tag: 'created_at', tag_event: 'at', lot: 'created_at', lot_log: 'at', minta: 'created_at', kirim: 'dikirim_at', tampung_log: 'at', barang_tx: 'at', pinjam: 'at', ba: 'created_at', beli: 'created_at', beli_log: 'at', kembali: 'dikirim_at', kembali_log: 'at', kirim_mat: 'dikirim_at', opname: 'mulai_at', opname_baris: 'at', notif: 'at' };
+  const TIME = { periode: 'created_at', sesi: 'mulai_at', tag: 'created_at', tag_event: 'at', lot: 'created_at', lot_log: 'at', minta: 'created_at', kirim: 'dikirim_at', tampung_log: 'at', barang_tx: 'at', pinjam: 'at', ba: 'created_at', beli: 'created_at', beli_log: 'at', kembali: 'dikirim_at', kembali_log: 'at', kirim_mat: 'dikirim_at', opname: 'mulai_at', opname_baris: 'at', notif: 'at', delegasi: 'at' };
   const DEF = { minta: { status: 'terbuka', pio: 0, sis: 0 }, kirim: { status: 'dikirim' }, tag: { status: 'mati', low_acc: false }, periode: { status: 'pelaksanaan', nomor: 1 }, sesi: { track: [], foto: [] }, ba: { data: {} }, beli: { status: 'aklimatisasi' }, kembali: { status: 'dikirim' }, kirim_mat: { status: 'dikirim', sisa: 0 }, lot: { sumber: 'mandiri' }, opname: { status: 'berjalan', pertama: false } };
   let seq = 1;
   const match = (r, q) => Object.entries(q).every(([k, v]) => ['select', 'order', 'limit'].includes(k) || (Array.isArray(v) ? v.includes(r[k]) : v === null ? r[k] == null : String(r[k]) === String(v)));
@@ -118,6 +129,7 @@ function makeMock() {
       db.__user = { id: p.id, email: p.email }; persist(); return db.__user;
     },
     async logout() { db.__user = null; persist(); },
+    async recover() { db.__recover = (db.__recover || 0) + 1; persist(); }, async fromLink() { return null; }, async setPassword() { return me(); }, async checkPassword(e, p) { if (p === 'salah') throw new ApiError('Invalid login credentials', 400, { error_code: 'invalid_credentials' }); },
     async ensure() { return me(); },
     async select(t, q = {}) { return tbl(t).filter(r => match(r, q)).map(r => ({ ...r })); },
     async insert(t, rows) {

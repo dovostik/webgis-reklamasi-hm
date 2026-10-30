@@ -580,3 +580,78 @@ create policy notif_u on public.notif for update to authenticated using (user_id
 create policy notif_i on public.notif for insert to authenticated with check (public.my_role() <> 'none');
 create trigger notif_t before insert on public.notif for each row execute function set_server_time('at');
 grant select, insert, update on public.notif to authenticated;
+-- ===== 1) Peran Reclamation Suptend =====
+alter table public.profiles drop constraint if exists profiles_role_check;
+alter table public.profiles add constraint profiles_role_check check (role in ('admin','suptend','spv','admrek','owner','nursery','crew','exdas','bumdes','viewer'));
+update public.profiles set role = 'suptend', jabatan = 'Reclamation Suptend' where id = (select id from auth.users where email = 'casimin@padangbara.com');
+update public.profiles set jabatan = 'Administrator sistem' where id = (select id from auth.users where email = 'dovos1234@gmail.com');
+
+-- ===== 2) Job pending (pelimpahan tugas) =====
+create table if not exists public.delegasi (
+  id uuid primary key default gen_random_uuid(),
+  dari uuid not null references public.profiles(id) on delete cascade,
+  ke uuid not null references public.profiles(id) on delete cascade,
+  mulai date not null, sampai date not null, alasan text,
+  dibuat_oleh uuid references public.profiles(id), at timestamptz default now(),
+  dicabut_at timestamptz, dicabut_oleh uuid references public.profiles(id)
+);
+alter table public.delegasi enable row level security;
+drop policy if exists delegasi_r on public.delegasi;
+drop policy if exists delegasi_i on public.delegasi;
+drop policy if exists delegasi_u on public.delegasi;
+create policy delegasi_r on public.delegasi for select to authenticated using (public.my_role() <> 'none');
+create policy delegasi_i on public.delegasi for insert to authenticated with check ((dari = auth.uid() and public.my_role() <> 'admin') or public.my_role() in ('admin','suptend'));
+create policy delegasi_u on public.delegasi for update to authenticated using (dari = auth.uid() or public.my_role() in ('admin','suptend'));
+grant select, insert, update on public.delegasi to authenticated;
+drop trigger if exists delegasi_t on public.delegasi;
+create trigger delegasi_t before insert on public.delegasi for each row execute function set_server_time('at');
+
+create or replace function public.delegasi_cek() returns trigger language plpgsql security definer set search_path = public as $$
+declare rd text; rk text; ak boolean;
+begin
+  select role into rd from public.profiles where id = new.dari;
+  select role, aktif into rk, ak from public.profiles where id = new.ke;
+  if new.dari = new.ke then raise exception 'Tidak bisa melimpahkan ke diri sendiri'; end if;
+  if rd = 'admin' then raise exception 'Peran admin teknis tidak bisa dilimpahkan'; end if;
+  if not coalesce(ak, false) then raise exception 'Akun penerima tidak aktif'; end if;
+  if rd in ('exdas','bumdes') and rk is distinct from rd then raise exception 'Akun vendor hanya bisa dilimpahkan ke vendor yang sama'; end if;
+  if rd not in ('exdas','bumdes') and rk in ('exdas','bumdes') then raise exception 'Peran internal tidak bisa dilimpahkan ke akun vendor'; end if;
+  if new.sampai < new.mulai then raise exception 'Tanggal sampai sebelum tanggal mulai'; end if;
+  if tg_op = 'INSERT' and exists (select 1 from public.delegasi d where d.dari = new.dari and d.dicabut_at is null and d.mulai <= new.sampai and new.mulai <= d.sampai) then
+    raise exception 'Sudah ada job pending yang tanggalnya bentrok'; end if;
+  return new;
+end $$;
+drop trigger if exists delegasi_cek_t on public.delegasi;
+create trigger delegasi_cek_t before insert or update on public.delegasi for each row execute function public.delegasi_cek();
+
+-- hak akses: peran sendiri ATAU peran yang sedang dilimpahkan ke akun ini (tanggal WIB)
+create or replace function public.has_role(variadic roles text[]) returns boolean
+language sql stable security definer set search_path to 'public' as $$
+  select public.my_role() <> 'none' and (
+    public.my_role() = any(roles)
+    or exists (select 1 from public.delegasi d join public.profiles p on p.id = d.dari
+               where d.ke = auth.uid() and d.dicabut_at is null and p.aktif and p.role = any(roles)
+                 and (now() at time zone 'Asia/Jakarta')::date between d.mulai and d.sampai))
+$$;
+
+-- ===== 3) Persetujuan oleh Reclamation Suptend =====
+alter policy wi on public.ba with check (public.has_role('admin','owner','nursery','suptend'));
+alter policy wu on public.ba using (public.has_role('admin','owner','nursery','suptend'));
+alter policy wi on public.periode with check (public.has_role('admin','owner','exdas','bumdes','suptend') and public.can_see_blok(blok_id));
+alter policy wu on public.periode using (public.has_role('admin','owner','exdas','bumdes','suptend') and public.can_see_blok(blok_id));
+alter policy w on public.blok using (public.has_role('admin','exdas','bumdes','owner','suptend')) with check (public.has_role('admin','suptend') or public.can_see_layer(layer));
+alter policy w on public.sesi using (public.has_role('admin','owner','suptend')) with check (public.has_role('admin','owner','suptend'));
+alter policy w on public.opname using (public.has_role('admin','nursery','crew','suptend')) with check (public.has_role('admin','nursery','crew','suptend'));
+drop policy if exists suptend_foto_d on storage.objects;
+create policy suptend_foto_d on storage.objects for delete to authenticated using (bucket_id = 'foto' and public.has_role('suptend'));
+
+-- ===== 4) Halaman verifikasi menampilkan "for" =====
+create or replace function public.verifikasi_ba(p_id uuid, p_s text default null) returns json
+language sql stable security definer set search_path = public as $$
+  select json_build_object('nomor', nomor, 'jenis', jenis, 'unit', unit, 'tanggal', data->>'tanggal', 'objek', data->'blok'->>'nama',
+    'esign', coalesce((data->>'esign')::boolean, false), 'sidik', sidik, 'terbit', created_at,
+    'penanda', case when p_s is null then null else json_build_object('nama', data->'ttd'->p_s->>'nama',
+       'jabatan', (case when data->'ttd'->p_s ? 'for' then 'for ' else '' end) || (data->'ttd'->p_s->>'jabatan'), 'at', data->'ttd'->p_s->>'at') end,
+    'semua', (select json_agg(json_build_object('jabatan', (case when v ? 'for' then 'for ' else '' end) || (v->>'jabatan'), 'nama', v->>'nama', 'at', v->>'at')) from jsonb_each(data->'ttd') e(k, v)))
+  from public.ba where id = p_id
+$$;

@@ -2,7 +2,7 @@
 import { SB } from './sb.js';
 import { S, L, ins, upd, $, $$, toast, sheet, confirmSheet, uid, nm, GPS, dist, waitGPS, scanQR, pickPhoto, newMap, locateControl, uploadOrQueue, fileUrl, loadAll, isOnline } from './core.js';
 import * as G from './logic.js';
-import { role, seesBlok, route, tagColor, tagItem } from './app.js';
+import { role, isRole, seesBlok, route, tagColor, tagItem } from './app.js';
 const { esc, fmt, tgl, jam } = G;
 
 const jenisOpts = (jalur, sel) => {
@@ -137,7 +137,7 @@ export function openScan(shell) {
   shell('Scan tag', null, `<div class="stack">
     ${myOpen ? `<a class="item" href="#sesi/${myOpen.id}"><div class="grow"><b>Sesi inspeksi berjalan</b><span>${esc(G.blokName(S.blokMap[myOpen.blok_id]))}</span></div><span class="pill s-pend">Buka</span></a>` : ''}
     <button class="btn big block" id="scGo">Scan QR tag</button>
-    <p class="note">${r === 'exdas' || r === 'bumdes' ? 'Scan tag untuk mencatat sulam, atau untuk memasang tag baru pada tanaman mati di blok yang sedang Anda kerjakan.' : 'Scan tag untuk melihat riwayat titik. Penilaian hidup/mati dilakukan dari dalam sesi inspeksi.'}</p>
+    <p class="note">${isRole('exdas') || isRole('bumdes') ? 'Scan tag untuk mencatat sulam, atau untuk memasang tag baru pada tanaman mati di blok yang sedang Anda kerjakan.' : 'Scan tag untuk melihat riwayat titik. Penilaian hidup/mati dilakukan dari dalam sesi inspeksi.'}</p>
     <div class="card stack"><h2>Tag terakhir saya</h2><div class="list">${S.tag_event.filter(e => e.oleh === S.me.id).slice(-10).reverse().map(e => S.tag.find(t => t.id === e.tag_id)).filter(Boolean).map(tagItem).join('') || '<p class="muted small" style="margin:0">Belum ada.</p>'}</div></div></div>`);
   $$('[data-tag]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); tagSheet(a.dataset.tag); }));
   $('#scGo').addEventListener('click', async () => {
@@ -146,7 +146,7 @@ export function openScan(shell) {
     if (isOnline()) { try { await Promise.race([loadAll(), new Promise(ok => setTimeout(ok, 6000))]); } catch (e) {} } // stok & status terbaru sebelum mencatat
     const t = S.tag.find(x => x.id === id);
     if (t) { if (!seesBlok(S.blokMap[t.blok_id])) return toast('Tag ini bukan bagian pekerjaan akun Anda.'); return tagSheet(id, null, () => openScan(shell)); }
-    if (r === 'exdas' || r === 'bumdes' || r === 'admin') {
+    if (isRole('exdas') || isRole('bumdes') || isRole('admin')) {
       const cands = S.blok.filter(b => seesBlok(b) && b.layer !== 'berhasil').map(b => ({ b, p: L.aktif(b.id) })).filter(x => x.p && x.p.status === 'pelaksanaan' && x.p.tipe !== 'cek1');
       if (!cands.length) return toast('Tag baru hanya bisa dipasang saat perawatan atau retensi sedang berjalan.');
       const pick = cands.length === 1 ? cands[0] : await new Promise(res => sheet(`<div class="stack"><h2>Tag ${esc(id)} untuk blok mana?</h2><div class="list">${cands.map((c, i) => `<button class="item" data-i="${i}" style="font:inherit;text-align:left;width:100%"><div class="grow"><b>${esc(G.blokName(c.b))}</b><span>${G.TIPE_LBL[c.p.tipe]}</span></div></button>`).join('')}</div><button class="btn ghost" data-close>Batal</button></div>`, (box, close) => { box.querySelectorAll('[data-i]').forEach(x => x.addEventListener('click', () => { close(); res(cands[+x.dataset.i]); })); box.querySelector('[data-close]').addEventListener('click', () => res(null)); }));
@@ -164,7 +164,7 @@ export function tagSheet(id, sesi = null, after = null) {
   const b = S.blokMap[t.blok_id]; const p = L.aktif(b.id); const r = role();
   const ev = L.events(id); const dead = L.deadAt(t); const al = L.allowed(t);
   const lastS = ev.filter(e => e.tipe === 'sulam').pop(); const ageS = lastS ? G.diffDays(G.today(), G.tglWIB(lastS.at)) : null;
-  const vendorOk = (r === G.vendorOf(b) || r === 'admin') && t.status === 'mati' && p && ((t.sumber === 'vendor' && p.status === 'pelaksanaan') || (t.sumber === 'gl' && p.status === 'sulam_gl') || (p.status === 'pelaksanaan' && p.tipe !== 'cek1'));
+  const vendorOk = (isRole(G.vendorOf(b)) || isRole('admin')) && t.status === 'mati' && p && ((t.sumber === 'vendor' && p.status === 'pelaksanaan') || (t.sumber === 'gl' && p.status === 'sulam_gl') || (p.status === 'pelaksanaan' && p.tipe !== 'cek1'));
   const sesiOk = sesi && !sesi.selesai_at && sesi.oleh === S.me.id && sesi.blok_id === b.id;
   const stok = L.stokTampung(b.id);
   let act = '';
@@ -175,7 +175,7 @@ export function tagSheet(id, sesi = null, after = null) {
       `<div class="grid2"><button class="btn" id="tHidup" ${t.status === 'mati' ? 'disabled' : ''}>Hidup</button><button class="btn bad" id="tMati">Mati</button></div>${t.status === 'mati' ? '<p class="note">Tag ini masih berstatus mati (belum disulam), otomatis dihitung mati.</p>' : ''}`;
   } else if (vendorOk) {
     const opts = al.filter(j => stok[j.kode] > 0);
-    act = `<div class="sec"><h3>Scan sulam (${r === 'admin' ? 'vendor' : 'Anda'})</h3>${p.status === 'inspeksi' ? '<p class="err">Sesi inspeksi sedang terbuka. Sulam belum bisa dicatat.</p>' : opts.length ? `<label class="f" for="tJ">Jenis yang disulam <small>dari stok bibit di lapangan blok ini</small><select id="tJ">${opts.map(j => `<option value="${j.kode}">${esc(j.nama)} (${fmt(stok[j.kode])})</option>`).join('')}</select></label><button class="btn block" id="tSulam">Tandai sudah disulam</button><p class="note">Posisi HP dicek: harus dalam 15 m${t.low_acc ? ' + ' + fmt(t.acc) + ' m (akurasi awal rendah)' : ''} dari titik tag.</p>` : '<p class="err">Tidak ada bibit yang cocok di stok bibit di lapangan blok ini. Minta kiriman dari nursery.</p>'}</div>`;
+    act = `<div class="sec"><h3>Scan sulam (${isRole('admin') ? 'vendor' : 'Anda'})</h3>${p.status === 'inspeksi' ? '<p class="err">Sesi inspeksi sedang terbuka. Sulam belum bisa dicatat.</p>' : opts.length ? `<label class="f" for="tJ">Jenis yang disulam <small>dari stok bibit di lapangan blok ini</small><select id="tJ">${opts.map(j => `<option value="${j.kode}">${esc(j.nama)} (${fmt(stok[j.kode])})</option>`).join('')}</select></label><button class="btn block" id="tSulam">Tandai sudah disulam</button><p class="note">Posisi HP dicek: harus dalam 15 m${t.low_acc ? ' + ' + fmt(t.acc) + ' m (akurasi awal rendah)' : ''} dari titik tag.</p>` : '<p class="err">Tidak ada bibit yang cocok di stok bibit di lapangan blok ini. Minta kiriman dari nursery.</p>'}</div>`;
   }
   sheet(`<div class="stack"><div class="row between"><span class="tagid" style="font-size:16px">${esc(id)}</span><span class="pill ${t.status === 'closed' ? 's-ok' : t.status === 'disulam' ? 's-pend' : 's-bad'}">${t.status === 'mati' ? 'Mati' : t.status === 'disulam' ? 'Disulam' : 'Hidup, closed'}</span></div>
     <dl class="kv"><dt>Blok</dt><dd>${esc(G.blokName(b))}</dd><dt>Ditandai</dt><dd>${t.sumber === 'gl' ? 'GL owner' : 'Vendor'} · ${esc(nm(t.created_by))}</dd><dt>Jalur</dt><dd>${esc(t.jalur)}</dd><dt>Kondisi</dt><dd>${esc(G.KONDLBL[t.kondisi])}</dd><dt>Akurasi awal</dt><dd style="${t.low_acc ? 'color:var(--warn)' : ''}">± ${fmt(t.acc, 1)} m${t.low_acc ? ' · sulit ditemukan' : ''}</dd></dl>
