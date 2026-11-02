@@ -117,7 +117,7 @@ function forgotSheet(em0 = '') {
       e.preventDefault(); const em = box.querySelector('#fgE').value.trim(), er = box.querySelector('#fgErr'), bt = box.querySelector('button[type=submit]');
       if (!/^\S+@\S+\.\S+$/.test(em)) { er.textContent = 'Email tidak valid.'; er.hidden = false; return; }
       bt.disabled = true;
-      try { await SB.recover(em, APP_URL()); close(); sheet(`<div class="stack"><h2>Cek email Anda</h2><p style="margin:0">Jika <b>${esc(em)}</b> terdaftar, link untuk membuat kata sandi baru sudah dikirim. Periksa juga folder <b>Spam</b>. Buka link itu di HP ini.</p><button class="btn block" data-close>Mengerti</button></div>`); }
+      try { await SB.recover(em, APP_URL()); close(); sheet(`<div class="stack"><h2>Cek email Anda</h2><p style="margin:0">Jika <b>${esc(em)}</b> terdaftar, link untuk membuat kata sandi baru sudah dikirim. Periksa juga folder <b>Spam</b>. Email bisa butuh beberapa menit: <b>jangan minta link lagi</b> sebelum email ini masuk, karena link lama otomatis batal. Ketuk link di email yang paling baru, satu kali saja.</p><button class="btn block" data-close>Mengerti</button></div>`); }
       catch (x) { bt.disabled = false; er.textContent = x.net ? 'Tidak ada koneksi internet.' : x.status === 429 ? 'Terlalu sering meminta link. Tunggu beberapa menit lalu coba lagi.' : 'Gagal mengirim: ' + x.message; er.hidden = false; }
     });
   });
@@ -595,7 +595,7 @@ async function boot() {
     if (/access_token=|error_code=/.test(location.hash)) {
       const h = location.hash; history.replaceState(null, '', location.pathname + location.search);
       try { const r = await SB.fromLink(h); if (r && r.type === 'recovery') return renderSetPassword(); }
-      catch (x) { return renderLogin(/expired|invalid/i.test((x.body?.error_code || '') + x.message) ? 'Link sudah kedaluwarsa atau sudah dipakai. Ketuk "Lupa kata sandi?" untuk meminta link baru.' : 'Link tidak berlaku: ' + x.message); }
+      catch (x) { return renderLogin(/expired|invalid/i.test((x.body?.error_code || '') + x.message) ? 'Link ini sudah tidak berlaku. Setiap kali meminta link baru, link di email sebelumnya otomatis batal. Buka hanya email reset yang PALING BARU (cek jam kirimnya), atau tunggu email terbaru masuk dulu sebelum mengetuk link.' : 'Link tidak berlaku: ' + x.message); }
     }
     const u = await SB.ensure();
     await loadOrtho();
