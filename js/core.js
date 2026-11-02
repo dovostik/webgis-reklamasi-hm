@@ -205,7 +205,7 @@ export function scanQR(title = 'Arahkan kamera ke QR tag') {
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false });
       } catch (e) {
         const n = e && e.name;
-        return fail(n === 'NotAllowedError' || n === 'SecurityError' ? '<b>Izin kamera ditolak.</b> Ketuk ikon gembok/pengaturan di samping alamat (atau Info aplikasi → Izin) → Kamera → <b>Izinkan</b>, lalu ketuk "Coba buka kamera lagi".'
+        return fail(n === 'NotAllowedError' || n === 'SecurityError' ? '<b>Izin kamera ditolak oleh HP.</b> Buka <b>Setelan HP → Aplikasi → Chrome</b> (bukan Reklamasi HM) <b>→ Izin → Kamera → Izinkan saat aplikasi digunakan</b>. Pastikan juga sakelar <b>Akses kamera</b> di panel atas HP menyala. Lalu ketuk "Coba buka kamera lagi". (iPhone: Pengaturan → Safari → Kamera → Izinkan.)'
           : n === 'NotReadableError' || n === 'AbortError' ? 'Kamera sedang dipakai aplikasi lain. Tutup aplikasi kamera/WhatsApp video, lalu coba lagi.'
           : n === 'NotFoundError' || n === 'OverconstrainedError' ? 'Kamera tidak ditemukan di perangkat ini.' : 'Kamera tidak bisa dibuka (' + esc(n || 'error') + ').');
       }
