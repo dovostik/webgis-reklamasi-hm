@@ -176,29 +176,47 @@ export function waitGPS(maxAcc = 6, title = 'Mengunci posisi GPS') {
 export function scanQR(title = 'Arahkan kamera ke QR tag') {
   return new Promise(res => {
     const w = document.createElement('div'); w.className = 'scanner';
-    w.innerHTML = `<video playsinline muted></video><div class="frame"></div><div class="bar"><b>${esc(title)}</b><span class="small" id="qMsg">Membuka kamera…</span><div class="row" style="flex-wrap:nowrap"><input id="qManual" placeholder="atau ketik nomor tag, mis. HM-T-000123" style="background:#222;color:#fff;border-color:#444"><button class="btn sm" id="qOk">OK</button></div><button class="btn ghost" id="qCancel" style="color:#fff;border-color:#555">Batal</button></div>`;
+    // kontrol di ATAS layar: di sebagian HP Android bagian bawah tertutup tombol navigasi
+    w.innerHTML = `<div class="bar"><div class="row between" style="gap:10px"><b>${esc(title)}</b><button class="btn ghost sm" id="qCancel" style="color:#fff;border-color:#555">Batal</button></div><span class="small" id="qMsg">Membuka kamera…</span><button class="btn sm" id="qRetry" hidden>Coba buka kamera lagi</button><div class="row" style="flex-wrap:nowrap"><input id="qManual" placeholder="atau ketik nomor tag, mis. HM-T-000123" style="background:#222;color:#fff;border-color:#444"><button class="btn sm" id="qOk">OK</button></div></div><div class="cam"><video playsinline muted autoplay></video><div class="frame"></div></div>`;
     document.body.appendChild(w);
-    const video = w.querySelector('video'); let stream = null, stop = false;
+    const video = w.querySelector('video'), msg = w.querySelector('#qMsg'), retry = w.querySelector('#qRetry'); let stream = null, stop = false, watch = null;
     const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    const done = v => { stop = true; if (stream) stream.getTracks().forEach(t => t.stop()); w.remove(); res(v); };
+    const stopCam = () => { if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; clearTimeout(watch); };
+    const done = v => { stop = true; stopCam(); w.remove(); res(v); };
+    const fail = t => { msg.innerHTML = t; msg.style.color = '#FFB4A9'; retry.hidden = false; };
     w.querySelector('#qCancel').addEventListener('click', () => done(null));
-    w.querySelector('#qOk').addEventListener('click', () => { const v = w.querySelector('#qManual').value.trim().toUpperCase(); if (v) done(normTag(v)); });
-    navigator.mediaDevices?.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } }, audio: false }).then(s => {
-      stream = s; video.srcObject = s; video.play(); w.querySelector('#qMsg').textContent = 'Kamera aktif. Dekatkan QR ke dalam kotak.';
-      const tick = () => {
-        if (stop) return;
-        if (video.readyState >= 2) {
-          const vw = video.videoWidth, vh = video.videoHeight, sz = Math.min(vw, vh) * 0.7;
-          canvas.width = 480; canvas.height = 480;
-          ctx.drawImage(video, (vw - sz) / 2, (vh - sz) / 2, sz, sz, 0, 0, 480, 480);
-          const img = ctx.getImageData(0, 0, 480, 480);
-          const code = window.jsQR && window.jsQR(img.data, 480, 480, { inversionAttempts: 'attemptBoth' });
-          if (code && code.data) { if (navigator.vibrate) navigator.vibrate(80); const t = code.data.trim(); return done(/^HM[KS]1/.test(t) ? t : normTag(t)); }
-        }
-        requestAnimationFrame(tick);
-      };
+    w.querySelector('#qOk').addEventListener('click', () => { const v = w.querySelector('#qManual').value.trim(); if (v) done(/^HM[KS]1/.test(v) ? v : normTag(v.toUpperCase())); });
+    const tick = () => {
+      if (stop || !stream) return;
+      if (video.readyState >= 2 && video.videoWidth) {
+        const vw = video.videoWidth, vh = video.videoHeight, sz = Math.min(vw, vh) * 0.7;
+        canvas.width = 480; canvas.height = 480;
+        ctx.drawImage(video, (vw - sz) / 2, (vh - sz) / 2, sz, sz, 0, 0, 480, 480);
+        const img = ctx.getImageData(0, 0, 480, 480);
+        const code = window.jsQR && window.jsQR(img.data, 480, 480, { inversionAttempts: 'attemptBoth' });
+        if (code && code.data) { if (navigator.vibrate) navigator.vibrate(80); const t = code.data.trim(); return done(/^HM[KS]1/.test(t) ? t : normTag(t)); }
+      }
+      requestAnimationFrame(tick);
+    };
+    const start = async () => {
+      retry.hidden = true; msg.style.color = ''; msg.textContent = 'Membuka kamera…'; stopCam();
+      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) return fail('Browser ini tidak mengizinkan kamera. Buka aplikasi lewat Chrome (Android) atau Safari (iPhone), atau ketik nomor di bawah.');
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false });
+      } catch (e) {
+        const n = e && e.name;
+        return fail(n === 'NotAllowedError' || n === 'SecurityError' ? '<b>Izin kamera ditolak.</b> Ketuk ikon gembok/pengaturan di samping alamat (atau Info aplikasi → Izin) → Kamera → <b>Izinkan</b>, lalu ketuk "Coba buka kamera lagi".'
+          : n === 'NotReadableError' || n === 'AbortError' ? 'Kamera sedang dipakai aplikasi lain. Tutup aplikasi kamera/WhatsApp video, lalu coba lagi.'
+          : n === 'NotFoundError' || n === 'OverconstrainedError' ? 'Kamera tidak ditemukan di perangkat ini.' : 'Kamera tidak bisa dibuka (' + esc(n || 'error') + ').');
+      }
+      if (stop) return stopCam();
+      video.srcObject = stream; try { await video.play(); } catch (e) {}
+      msg.textContent = 'Kamera aktif. Dekatkan QR ke dalam kotak.';
+      watch = setTimeout(() => { if (!stop && !(video.videoWidth > 0)) fail('Gambar kamera belum muncul. Ketuk "Coba buka kamera lagi". Bila tetap hitam, tutup lalu buka ulang aplikasi.'); }, 5000);
       tick();
-    }).catch(() => { w.querySelector('#qMsg').textContent = 'Kamera tidak bisa dibuka. Izinkan kamera, atau ketik nomor tag.'; });
+    };
+    retry.addEventListener('click', start);
+    start();
   });
 }
 export function normTag(v) { const m = /(\d{1,6})\s*$/.exec(v); if (/^HM-T-\d{6}$/.test(v)) return v; if (m && /HM|T|^\d+$/.test(v)) return 'HM-T-' + m[1].padStart(6, '0'); return v; }
