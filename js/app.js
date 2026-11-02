@@ -1,6 +1,6 @@
 // Shell aplikasi: login, menu per peran, router, beranda, peta, detail blok, admin.
 import { SB } from './sb.js';
-import { S, L, loadAll, derive, ins, upd, flush, pending, netState, isOnline, notify, $, $$, toast, sheet, confirmSheet, uid, nm, newMap, locateControl, fileUrl, uploadOrQueue, pickPhoto, pickPhotoGeo, GPS } from './core.js';
+import { S, L, loadAll, derive, ins, upd, flush, pending, netState, isOnline, notify, viewing, setViewAs, $, $$, toast, sheet, confirmSheet, uid, nm, newMap, locateControl, fileUrl, uploadOrQueue, pickPhoto, pickPhotoGeo, GPS } from './core.js';
 import { inBlok } from './exif.js';
 import * as G from './logic.js';
 import { downloadTiles, tileList, tileInfo, tileJob, canInstall, isInstalled, promptInstall, persist, loadOrtho, ORTHO, SLOTS, orthoKey } from './offline.js';
@@ -65,8 +65,9 @@ function shell(title, sub, body) {
   const badges = countBadges();
   const tabs = menuMain().map(k => `<a href="#${k}" class="${cur === k || (k === 'lainnya' && menuMore().includes(cur)) ? 'on' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>${LBL[k]}${badges[k] ? `<span class="badge">${badges[k]}</span>` : ''}</a>`).join('');
   app.className = '';
-  app.innerHTML = `<header class="top"><div class="logo"><img src="img/logo.svg" alt="PT Hamparan Mulya"></div><div class="t"><b>${esc(title)}</b><span>${esc(sub || (S.me ? S.me.nama + ' · ' + G.ROLE_LBL[r] : ''))}</span></div>${S.me ? (() => { const n = (S.notif || []).filter(x => x.user_id === S.me.id && !x.dibaca_at).length; return `<a href="#notif" class="bell" aria-label="Notifikasi${n ? ', ' + n + ' baru' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>${n ? `<span class="badge">${n}</span>` : ''}</a>`; })() : ''}<span class="net" id="net">Online</span></header><main id="main">${S.me && delegKe().length ? `<a class="alert" href="#akun" style="display:block;margin-bottom:12px;text-decoration:none;color:inherit">Job pending: Anda memegang tugas ${delegKe().map(d => `<b>for ${esc(G.ROLE_LBL[S.profMap[d.dari]?.role] || '')}</b> (${esc(S.profMap[d.dari]?.nama || '')}) s/d ${tgl(d.sampai)}`).join(', ')}.</a>` : ''}${G.SIM ? `<div class="alert warn" style="margin-bottom:12px">Mode uji coba: tanggal sistem ${tgl(G.today())} (dimajukan ${G.SIM} hari).</div>` : ''}${body}</main><nav class="tabs">${tabs}</nav>`;
+  app.innerHTML = `<header class="top"><div class="logo"><img src="img/logo.svg" alt="PT Hamparan Mulya"></div><div class="t"><b>${esc(title)}</b><span>${esc(sub || (S.me ? S.me.nama + ' · ' + G.ROLE_LBL[r] : ''))}</span></div>${S.me ? (() => { const n = (S.notif || []).filter(x => x.user_id === S.me.id && !x.dibaca_at).length; return `<a href="#notif" class="bell" aria-label="Notifikasi${n ? ', ' + n + ' baru' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>${n ? `<span class="badge">${n}</span>` : ''}</a>`; })() : ''}<span class="net" id="net">Online</span></header><main id="main">${viewing() ? `<div class="alert warn" style="position:sticky;top:0;z-index:20;margin-bottom:12px;display:flex;gap:10px;align-items:center"><div style="flex:1">Melihat sebagai <b>${esc(S.me.nama)}</b> · ${esc(G.ROLE_LBL[S.me.role] || S.me.role)}<br><span class="small">Hanya melihat, tidak bisa menyimpan.</span></div><button class="btn sm" id="vaOut">Keluar</button></div>` : ''}${S.me && delegKe().length ? `<a class="alert" href="#akun" style="display:block;margin-bottom:12px;text-decoration:none;color:inherit">Job pending: Anda memegang tugas ${delegKe().map(d => `<b>for ${esc(G.ROLE_LBL[S.profMap[d.dari]?.role] || '')}</b> (${esc(S.profMap[d.dari]?.nama || '')}) s/d ${tgl(d.sampai)}`).join(', ')}.</a>` : ''}${G.SIM ? `<div class="alert warn" style="margin-bottom:12px">Mode uji coba: tanggal sistem ${tgl(G.today())} (dimajukan ${G.SIM} hari).</div>` : ''}${body}</main><nav class="tabs">${tabs}</nav>`;
   netState(isOnline());
+  const vo = document.getElementById('vaOut'); if (vo) vo.addEventListener('click', () => { setViewAs(null); derive(); location.hash = '#lainnya'; route(); });
   return $('#main');
 }
 function countBadges() {
@@ -467,11 +468,18 @@ function startTiles(manual) {
   if (manual) toast('Mengunduh peta offline di latar belakang…');
   p.then(r => { if (manual || r.fail) toast(r.fail ? `Peta offline: ${r.fail} ubin gagal, coba Perbarui lagi.` : 'Peta offline siap dipakai tanpa sinyal.'); if (location.hash === '#lainnya') renderLainnya(); });
 }
+function viewAsCard() {
+  if (S.realMe?.role !== 'admin' || viewing()) return '';
+  const ps = S.profiles.filter(p => p.aktif !== false && p.id !== S.realMe.id).sort((a, b) => (G.ROLE_LBL[a.role] || '').localeCompare(G.ROLE_LBL[b.role] || '') || a.nama.localeCompare(b.nama));
+  return `<div class="card stack"><h2>Lihat sebagai pengguna</h2><p class="small" style="margin:0">Tampilkan aplikasi persis seperti yang dilihat akun lain (menu, tugas, notifikasi job pending, blok yang terlihat) untuk memeriksa keluhan. Hanya melihat, tidak bisa menyimpan.</p>
+    <select id="vaSel" aria-label="Pilih akun">${ps.map(p => `<option value="${p.id}">${esc(p.nama)} · ${esc(G.ROLE_LBL[p.role] || p.role)}</option>`).join('')}</select><button class="btn block" id="vaGo">Lihat sebagai akun ini</button></div>`;
+}
 function renderLainnya() {
   const r = role();
-  shell('Lainnya', null, `${simCard()}${orthoCard()}${offCard()}<div class="list">${menuMore().map(k => `<a class="item" href="#${k}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">${ICON[k] || ICON.tugas}</svg><div class="grow"><b>${LBL[k]}</b></div></a>`).join('')}</div>`);
+  shell('Lainnya', null, `${viewAsCard()}${simCard()}${orthoCard()}${offCard()}<div class="list">${menuMore().map(k => `<a class="item" href="#${k}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">${ICON[k] || ICON.tugas}</svg><div class="grow"><b>${LBL[k]}</b></div></a>`).join('')}</div>`);
   $$('[data-sim]').forEach(b => b.addEventListener('click', async () => { const d = +b.dataset.sim; const n = d === 0 ? 0 : G.SIM + d; try { await upd('setting', { k: 'sim_days' }, { v: n, updated_by: S.me.id }, { offline: false }); toast(n ? `Tanggal sistem dimajukan ${n} hari.` : 'Kembali ke tanggal asli.'); renderLainnya(); } catch (e) { toast(e.message); } }));
   bindOff(); bindOrtho();
+  const vg = $('#vaGo'); if (vg) vg.addEventListener('click', () => { setViewAs($('#vaSel').value); derive(); location.hash = ''; route(); });
 }
 function renderAkun() {
   const live = SB.mode !== 'demo';

@@ -37,6 +37,13 @@ function replayOutbox() {
     else if (o.op === 'update') applyLocal('update', o.t, null, o.match, o.patch, true);
   }
 }
+// ---------- mode "Lihat sebagai" (khusus administrator): tampilan mengikuti akun lain, hanya melihat ----------
+const VA = 'hm-viewas';
+export const viewAsId = () => { try { return sessionStorage.getItem(VA); } catch (e) { return null; } };
+export const setViewAs = id => { try { id ? sessionStorage.setItem(VA, id) : sessionStorage.removeItem(VA); } catch (e) {} };
+export const viewing = () => !!(S.realMe && S.me && S.realMe.id !== S.me.id);
+const roErr = () => Object.assign(new Error('Mode "Lihat sebagai" hanya untuk melihat. Ketuk Keluar di bagian atas untuk kembali ke akun Anda.'), { viewAs: true });
+for (const k of ['insert', 'update', 'rpc', 'upload', 'remove']) { const f = SB[k]; if (typeof f === 'function') SB[k] = (...a) => viewing() ? Promise.reject(roErr()) : f.apply(SB, a); }
 export function derive() {
   setSim((S.setting || []).find(x => x.k === 'sim_days')?.v || 0);
   S.jenisMap = Object.fromEntries(S.jenis.map(j => [j.kode, j]));
@@ -44,7 +51,8 @@ export function derive() {
   S.blokMap = Object.fromEntries(S.blok.map(b => [b.id, b]));
   S.bedMap = Object.fromEntries(S.bedengan.map(b => [b.kode, b]));
   S.profMap = Object.fromEntries(S.profiles.map(p => [p.id, p]));
-  const u = SB.user(); S.me = u ? S.profMap[u.id] || null : null;
+  const u = SB.user(); S.me = u ? S.profMap[u.id] || null : null; S.realMe = S.me;
+  const va = viewAsId(); if (S.me?.role === 'admin' && va && S.profMap[va] && va !== S.me.id) S.me = S.profMap[va];
   L = makeLogic(S);
 }
 
@@ -73,6 +81,7 @@ function applyLocal(op, t, rows, match, patch, quiet) {
   if (!quiet) { derive(); saveSnap(); }
 }
 export async function ins(t, rows, opts = {}) {
+  if (viewing()) throw roErr();
   rows = [].concat(rows).map(r => ({ ...r }));
   try { const out = await SB.insert(t, rows); applyLocal('insert', t, out); return out; }
   catch (e) {
@@ -81,6 +90,7 @@ export async function ins(t, rows, opts = {}) {
   }
 }
 export async function upd(t, match, patch, opts = {}) {
+  if (viewing()) throw roErr();
   try { const out = await SB.update(t, match, patch); applyLocal('update', t, out, match, patch); return out; }
   catch (e) {
     if (e.net && opts.offline !== false) { outbox.push({ op: 'update', t, match, patch }); saveOB(); applyLocal('update', t, null, match, patch); netState(false); toast('Tersimpan di HP. Dikirim otomatis saat ada sinyal.'); return []; }
