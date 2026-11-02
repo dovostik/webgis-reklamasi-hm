@@ -17,19 +17,20 @@ const getCrew = box => { const i = box.querySelector('#cn'); return i ? i.value.
 // ---------- nursery ----------
 let nurseryView = null;
 export function renderNursery(shell) {
+  autoKembali();
   const can = isRole('admin', 'nursery', 'crew');
   const ready = L.readyStock(); const beliReady = {}; S.lot.forEach(l => { if (l.sumber === 'beli' && l.jumlah > 0 && L.stage(l).ready) beliReady[l.jenis] = (beliReady[l.jenis] || 0) + l.jumlah; }); const tr = Object.values(ready).reduce((a, b) => a + b, 0);
   const due = S.lot.filter(l => l.jumlah > 0 && L.stage(l).due);
-  const tot = t => S.lot.filter(l => l.jumlah > 0 && L.bed(l.bedengan)?.tahap === t).reduce((a, l) => a + l.jumlah, 0);
+  const tot = t => S.lot.filter(l => l.jumlah > 0 && L.tahapOf(l.bedengan) === t).reduce((a, l) => a + l.jumlah, 0);
   shell('Nursery', null, `<div class="stack">
     <div class="tiles"><div class="tile"><span>Siap kirim</span><b>${fmt(tr)}</b><span>≥ 2 minggu di BST</span></div><div class="tile"><span>Penyapihan</span><b>${fmt(tot('Penyapihan'))}</b><span>bibit</span></div><div class="tile"><span>Pembesaran</span><b>${fmt(tot('Pembesaran'))}</b><span>bibit</span></div><div class="tile"><span>Pindah tahap</span><b>${due.length}</b><span>lot jatuh tempo</span></div></div>
     ${(() => { const v = lsGet('hm-nview', 'denah'); return `<div class="row between"><div class="seg" role="group" aria-label="Tampilan" style="min-width:200px"><button type="button" data-nv="denah" class="${v === 'denah' ? 'on' : ''}" aria-pressed="${v === 'denah'}">Denah</button><button type="button" data-nv="peta" class="${v === 'peta' ? 'on' : ''}" aria-pressed="${v === 'peta'}">Peta asli</button></div>${v === 'denah' ? '<div class="row" style="gap:6px"><button class="btn ghost sm" id="dnOut" aria-label="Perkecil">−</button><button class="btn ghost sm" id="dnIn" aria-label="Perbesar">+</button></div>' : ''}</div>
     ${v === 'denah' ? `<input id="dnQ" type="search" placeholder="Cari kode bedengan atau jenis, mis. BF-03 atau sengon" value="${esc(denahQ)}" aria-label="Cari bedengan"><div class="chips" id="dnHits"></div><div class="dn-wrap" id="dnWrap"></div><p class="note" id="dnFac" style="margin:0"></p>` : '<div class="map" id="nmap"></div>'}`; })()}
-    <div class="legend"><span><i class="sw" style="background:${CLC.SP}"></i>Penyapihan</span><span><i class="sw" style="background:${CLC.PB}"></i>Pembesaran</span><span><i class="sw" style="background:${CLC.BF}"></i>BST Fastgrow</span><span><i class="sw" style="background:${CLC.BL}"></i>BST Lokal</span><span><i class="sw" style="background:#E0473B;border-radius:50%"></i>Waktunya pindah</span><span><i class="sw" style="background:#FFD400;border-radius:50%"></i>Siap kirim</span><span><i class="sw" style="background:#111;border-radius:50%"></i>Aklimatisasi</span><span><b>B</b> = bibit beli</span><span>Bar warna = persen isi terhadap kapasitas bedengan</span></div>
+    <div class="legend"><span><i class="sw" style="background:${CLC.SP}"></i>Penyapihan</span><span><i class="sw" style="background:${CLC.PB}"></i>Pembesaran</span><span><i class="sw" style="background:${CLC.BF}"></i>BST Fastgrow</span><span><i class="sw" style="background:${CLC.BL}"></i>BST Lokal</span><span><i class="sw" style="background:#E0473B;border-radius:50%"></i>Waktunya pindah</span><span><i class="sw" style="background:#FFD400;border-radius:50%"></i>Siap kirim</span><span><i class="sw" style="background:#111;border-radius:50%"></i>Aklimatisasi</span><span><b>B</b> = bibit beli</span><span><i class="sw" style="background:repeating-linear-gradient(45deg,#999 0 3px,#fff 3px 6px)"></i>Arsir = bedengan dipinjam (warna = tahap pinjaman)</span><span>Bar warna = persen isi terhadap kapasitas bedengan</span></div>
     ${aklimDue().length ? `<div class="alert warn"><b>Aklimatisasi bibit beli selesai (${aklimDue().length})</b><br>Hitung bibit yang hidup di kartu Bibit beli.</div>` : ''}
     <div class="card stack"><h2>Pengingat pindah tahap</h2>${due.length ? `<div class="list">${due.map(l => `<a class="item" href="#" data-bed="${l.bedengan}"><span class="tagid">${l.bedengan}</span><div class="grow"><b>${esc(jn(l.jenis))} · ${fmt(l.jumlah)}</b><span>ke ${L.stage(l).next === 'Pembesaran' ? 'Pembesaran' : L.stage(l).next === 'BF' ? 'BST Fastgrow' : 'BST Lokal'}</span></div></a>`).join('')}</div>` : '<p class="muted small" style="margin:0">Tidak ada.</p>'}</div>
     <div class="card stack"><h2>Stok siap kirim per jenis</h2>${Object.keys(ready).length ? `<dl class="kv">${Object.entries(ready).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<dt>${esc(jn(k))}</dt><dd>${fmt(v)}${beliReady[k] ? ` <small class="muted">(beli ${fmt(beliReady[k])})</small>` : ''}</dd>`).join('')}</dl>` : '<p class="muted small" style="margin:0">Belum ada.</p>'}</div>
-    ${opnameCard()}${beliCard()}${afkirCard()}
+    ${pinjamCard()}${opnameCard()}${beliCard()}${afkirCard()}
     ${can ? '<p class="note">Tap bedengan di peta untuk mencatat lot baru, mati/afkir, atau pindah tahap.</p>' : ''}</div>`);
   $$('[data-nv]').forEach(b => b.addEventListener('click', () => { lsSet('hm-nview', b.dataset.nv); renderNursery(shell); }));
   if (lsGet('hm-nview', 'denah') === 'denah') { bindDenah(shell); $$('[data-bed]').forEach(a => { if (!a.closest('#dnWrap')) a.addEventListener('click', e => { e.preventDefault(); bedSheet(a.dataset.bed, shell); }); }); bindBeli(document.getElementById('main'), () => renderNursery(shell)); bindOpnameCard(); return; }
@@ -52,12 +53,22 @@ export function renderNursery(shell) {
 }
 function bedSheet(kode, shell) {
   const b = L.bed(kode); const ls = L.lotsIn(kode); const f = L.fill(kode), cap = b.kapasitas || 1300;
-  const can = isRole('admin', 'nursery', 'crew');
-  sheet(`<div class="stack"><div class="row between"><h2>${esc(kode)}</h2><span class="pill s-idle">${esc(b.tahap)}${b.cluster === 'BF' ? ' Fastgrow' : b.cluster === 'BL' ? ' Lokal' : ''}</span></div>
+  const can = isRole('admin', 'nursery', 'crew'), gl = isRole('admin', 'nursery'); const pj = L.pinjamOf(kode);
+  const hist = (S.bedengan_pinjam || []).filter(x => x.bedengan === kode).sort((a, c) => String(c.at).localeCompare(String(a.at)));
+  const realRoom = jk => L.realBST(S.jenisMap[jk]?.tipe === 'pionir' ? 'BF' : 'BL').reduce((a, x) => a + Math.max(0, (x.kapasitas || 1300) - L.fill(x.kode)), 0);
+  sheet(`<div class="stack"><div class="row between"><h2>${esc(kode)}</h2><span class="pill ${pj ? 's-warn' : 's-idle'}">${pj ? `Pinjam ${esc(pj.tahap)}` : esc(b.tahap) + (b.cluster === 'BF' ? ' Fastgrow' : b.cluster === 'BL' ? ' Lokal' : '')}</span></div>
+    ${pj ? `<div class="alert warn">Bedengan ${esc(b.tahap)} ini <b>dipinjam sebagai ${esc(pj.tahap)}</b> sejak ${tgl(pj.mulai)} (${esc(pj.alasan || '-')}, oleh ${esc(nm(pj.oleh))}). Bibit di sini dihitung sebagai tahap ${esc(pj.tahap)}.${gl ? '' : ''}</div>${gl ? `<button class="btn ghost block" id="pjEnd">Kembalikan jadi ${esc(b.tahap)}</button>` : ''}` : gl ? '<button class="btn ghost block" id="pjNew">Pinjam bedengan untuk tahap lain</button>' : ''}
     <div><div class="row between small"><span>Terisi</span><span class="mono">${fmt(f)} / ${fmt(cap)}${isRole('admin', 'nursery') ? ' <a href="#" id="capEd" class="small">Ubah kapasitas</a>' : ''}</span></div><div class="bar"><span style="width:${Math.min(100, f / cap * 100)}%"></span></div></div>
-    ${ls.map(l => { const st = L.stage(l); return `<div class="sec"><div class="row between"><b>${esc(jn(l.jenis))}${l.sumber === 'beli' ? ' <span class="pill s-pend">Beli</span>' : ''}</b>${st.aklim ? `<span class="pill s-warn">Aklimatisasi${st.left > 0 ? ' · ' + st.left + ' hari' : ' · hitung'}</span>` : st.ready ? '<span class="pill s-ok">Siap kirim</span>' : st.due ? '<span class="pill s-warn">Waktunya pindah</span>' : `<span class="pill s-idle">${st.left} hari lagi</span>`}</div><dl class="kv"><dt>Jumlah</dt><dd>${fmt(l.jumlah)}</dd>${l.sumber === 'beli' ? `<dt>Asal</dt><dd>Beli · ${esc(S.beli?.find(x => x.id === l.beli_id)?.pemasok || '')}</dd><dt>Datang</dt><dd>${tgl(l.tgl_sapih)}</dd>` : `<dt>Sapih</dt><dd>${tgl(l.tgl_sapih)}</dd>`}<dt>Masuk bedengan</dt><dd>${tgl(l.tgl_masuk)}</dd>${l.sumber === 'beli' ? '' : `<dt>Umur</dt><dd>${fmt(G.diffDays(G.today(), l.tgl_sapih) / 7, 1)} minggu</dd>`}</dl>${can && !st.aklim ? `<div class="grid2"><button class="btn ghost sm" data-afk="${l.id}">Catat mati/afkir</button>${st.due ? `<button class="btn sm" data-move="${l.id}">Pindahkan</button>` : '<span></span>'}</div>` : ''}</div>`; }).join('') || '<p class="muted small" style="margin:0">Bedengan kosong.</p>'}
-    ${can && b.tahap === 'Penyapihan' ? `<form class="sec" id="nl"><h3>Lot baru (sapih ke polybag)</h3><div class="grid2"><label class="f" for="nlJ">Jenis<select id="nlJ">${S.jenisAktif.filter(j => j.tersedia !== false).map(j => `<option value="${j.kode}">${esc(j.nama)}</option>`).join('')}</select></label><label class="f" for="nlN">Jumlah bibit<input id="nlN" type="number" min="1" inputmode="numeric" value="${Math.max(0, Math.min(1200, cap - f))}"></label></div>${crewName()}<p class="note">Polybag kecil berkurang otomatis sesuai jumlah bibit.</p><p class="err" id="nlErr" hidden></p><button class="btn" type="submit">Tambah lot</button></form>` : ''}
+    ${ls.map(l => { const st = L.stage(l); return `<div class="sec"><div class="row between"><b>${esc(jn(l.jenis))}${l.sumber === 'beli' ? ' <span class="pill s-pend">Beli</span>' : ''}</b>${st.aklim ? `<span class="pill s-warn">Aklimatisasi${st.left > 0 ? ' · ' + st.left + ' hari' : ' · hitung'}</span>` : st.ready ? '<span class="pill s-ok">Siap kirim</span>' : st.due ? '<span class="pill s-warn">Waktunya pindah</span>' : `<span class="pill s-idle">${st.left} hari lagi</span>`}</div><dl class="kv"><dt>Jumlah</dt><dd>${fmt(l.jumlah)}</dd>${l.sumber === 'beli' ? `<dt>Asal</dt><dd>Beli · ${esc(S.beli?.find(x => x.id === l.beli_id)?.pemasok || '')}</dd><dt>Datang</dt><dd>${tgl(l.tgl_sapih)}</dd>` : `<dt>Sapih</dt><dd>${tgl(l.tgl_sapih)}</dd>`}<dt>Masuk bedengan</dt><dd>${tgl(l.tgl_masuk)}</dd>${l.sumber === 'beli' ? '' : `<dt>Umur</dt><dd>${fmt(G.diffDays(G.today(), l.tgl_sapih) / 7, 1)} minggu</dd>`}</dl>${can && !st.aklim ? `<div class="grid2"><button class="btn ghost sm" data-afk="${l.id}">Catat mati/afkir</button>${st.due ? `<button class="btn sm" data-move="${l.id}">Pindahkan</button>` : pj && pj.tahap === 'BST' && realRoom(l.jenis) > 0 ? `<button class="btn sm" data-mvreal="${l.id}">Pindah ke BST asli</button>` : '<span></span>'}</div>` : ''}</div>`; }).join('') || '<p class="muted small" style="margin:0">Bedengan kosong.</p>'}
+    ${can && L.tahapOf(kode) === 'Penyapihan' ? `<form class="sec" id="nl"><h3>Lot baru (sapih ke polybag)</h3><div class="grid2"><label class="f" for="nlJ">Jenis<select id="nlJ">${S.jenisAktif.filter(j => j.tersedia !== false).map(j => `<option value="${j.kode}">${esc(j.nama)}</option>`).join('')}</select></label><label class="f" for="nlN">Jumlah bibit<input id="nlN" type="number" min="1" inputmode="numeric" value="${Math.max(0, Math.min(1200, cap - f))}"></label></div>${crewName()}<p class="note">Polybag kecil berkurang otomatis sesuai jumlah bibit.</p><p class="err" id="nlErr" hidden></p><button class="btn" type="submit">Tambah lot</button></form>` : ''}
+    ${hist.length ? `<details class="sec"><summary class="small"><b>Riwayat pinjam bedengan (${hist.length})</b></summary><ul class="small" style="margin:6px 0 0;padding-left:18px">${hist.map(h => `<li>${tgl(h.mulai)} → ${h.selesai_at ? tgl(h.selesai_at) : 'sekarang'} · dipakai ${esc(h.tahap)} · ${esc(h.alasan || '-')} · ${esc(nm(h.oleh))}${h.selesai_at ? ` · dikembalikan ${esc(h.selesai_alasan || '')}${h.selesai_oleh ? ' oleh ' + esc(nm(h.selesai_oleh)) : ''}` : ''}</li>`).join('')}</ul></details>` : ''}
     <button class="btn ghost block" data-close>Tutup</button></div>`, (box, close) => {
+    const pn = box.querySelector('#pjNew'); if (pn) pn.addEventListener('click', () => { close(); pinjamSheet(b, shell); });
+    const pe = box.querySelector('#pjEnd'); if (pe) pe.addEventListener('click', async () => {
+      const ls2 = L.lotsIn(kode); if (!(await confirmSheet(`Kembalikan ${esc(kode)} menjadi bedengan ${esc(b.tahap)}?${ls2.length ? ` Masih ada ${fmt(L.fill(kode))} bibit di sini; tahapnya akan dihitung ulang sebagai ${esc(b.tahap)}.` : ''}`, 'Kembalikan'))) return;
+      try { await upd('bedengan_pinjam', { id: pj.id }, { selesai_at: new Date().toISOString(), selesai_oleh: S.me.id, selesai_alasan: 'manual' }, { offline: false }); close(); toast(kode + ' kembali jadi ' + b.tahap + '.'); renderNursery(shell); } catch (x) { toast(x.net ? 'Butuh sinyal.' : x.message); }
+    });
+    box.querySelectorAll('[data-mvreal]').forEach(btn => btn.addEventListener('click', () => { close(); moveSheet(S.lot.find(x => x.id === btn.dataset.mvreal), shell, 'real'); }));
     const ce = box.querySelector('#capEd'); if (ce) ce.addEventListener('click', e => { e.preventDefault(); close(); capSheet(b, shell); });
     box.querySelectorAll('[data-afk]').forEach(btn => btn.addEventListener('click', () => { close(); afkirSheet(S.lot.find(x => x.id === btn.dataset.afk), shell); }));
     box.querySelectorAll('[data-move]').forEach(btn => btn.addEventListener('click', () => { close(); moveSheet(S.lot.find(x => x.id === btn.dataset.move), shell); }));
@@ -66,7 +77,7 @@ function bedSheet(kode, shell) {
       const who = getCrew(box); if (!who) { er.textContent = 'Isi nama pencatat.'; er.hidden = false; return; }
       if (!(n > 0)) { er.textContent = 'Isi jumlah bibit.'; er.hidden = false; return; }
       if (n > cap - f) { er.textContent = `Bedengan hanya muat ${fmt(cap - f)} lagi.`; er.hidden = false; return; }
-      if (ls.length && !ls.every(x => x.jenis === j)) { const empty = S.bedengan.some(x => x.tahap === 'Penyapihan' && x.status === 'aktif' && L.fill(x.kode) === 0); if (empty || f > cap / 2 || new Set(ls.map(x => x.jenis)).size >= 2) { er.textContent = 'Campur jenis hanya boleh bila tidak ada bedengan kosong dan bedengan ini terisi ≤ ½.'; er.hidden = false; return; } }
+      if (ls.length && !ls.every(x => x.jenis === j)) { const empty = S.bedengan.some(x => L.tahapOf(x.kode) === 'Penyapihan' && x.status === 'aktif' && L.fill(x.kode) === 0); if (empty || f > cap / 2 || new Set(ls.map(x => x.jenis)).size >= 2) { er.textContent = 'Campur jenis hanya boleh bila tidak ada bedengan kosong dan bedengan ini terisi ≤ ½.'; er.hidden = false; return; } }
       const id = uid(); await ins('lot', { id, bedengan: kode, jenis: j, jumlah: n, tgl_sapih: G.today(), tgl_masuk: G.today(), created_by: S.me.id });
       await ins('lot_log', { lot_id: id, tipe: 'baru', n, oleh: S.me.id, nama_pencatat: who });
       const pb = S.barang.find(x => x.nama === 'Polybag kecil'); if (pb && pb.stok != null) { await upd('barang', { nama: pb.nama }, { stok: Number(pb.stok) - n }); await ins('barang_tx', { barang: pb.nama, tipe: 'keluar', n, keperluan: 'Penyapihan', lokasi: 'Nursery ' + kode, oleh: S.me.id }); }
@@ -82,6 +93,42 @@ function afkirSheet(l, shell) {
       if (!(n > 0) || n > l.jumlah) { er.textContent = `Isi jumlah 1–${fmt(l.jumlah)}.`; er.hidden = false; return; }
       await upd('lot', { id: l.id }, { jumlah: l.jumlah - n }); await ins('lot_log', { lot_id: l.id, tipe: t, n, oleh: S.me.id, nama_pencatat: who });
       close(); toast(`${t === 'mati' ? 'Mati' : 'Afkir'} ${n} bibit tercatat.`); renderNursery(shell);
+    });
+  });
+}
+// bedengan pinjaman yang sudah kosong berakhir otomatis (bukan di hari mulai, agar bisa diisi dulu)
+let akBusy = false;
+function autoKembali() {
+  if (akBusy || !isRole('admin', 'nursery', 'crew')) return;
+  const due = (S.bedengan_pinjam || []).filter(p => !p.selesai_at && p.mulai < G.today() && L.fill(p.bedengan) === 0); if (!due.length) return;
+  akBusy = true; Promise.all(due.map(p => upd('bedengan_pinjam', { id: p.id }, { selesai_at: new Date().toISOString(), selesai_alasan: 'kosong (otomatis)' }).catch(() => {}))).finally(() => { akBusy = false; });
+}
+function pinjamCard() {
+  const act = (S.bedengan_pinjam || []).filter(p => !p.selesai_at).sort((a, b) => a.bedengan.localeCompare(b.bedengan)); if (!act.length) return '';
+  const room = c => L.realBST(c).reduce((a, x) => a + Math.max(0, (x.kapasitas || 1300) - L.fill(x.kode)), 0);
+  const bst = act.filter(p => p.tahap === 'BST'); const rF = room('BF'), rL = room('BL');
+  const tot = act.reduce((a, p) => a + L.fill(p.bedengan), 0);
+  return `<div class="card stack"><div class="row between"><h2>Bedengan dipinjam (${act.length})</h2><span class="small muted">${fmt(tot)} bibit</span></div>
+    ${bst.length && (rF > 0 || rL > 0) ? `<div class="alert">BST asli ada tempat: Fastgrow ${fmt(rF)}, Lokal ${fmt(rL)} bibit. Pindahkan bibit dari bedengan pinjaman (buka bedengan → <b>Pindah ke BST asli</b>).</div>` : ''}
+    <div class="list">${act.map(p => { const b = S.bedMap[p.bedengan]; return `<a class="item" href="#" data-bed="${esc(p.bedengan)}"><span class="tagid">${esc(p.bedengan)}</span><div class="grow"><b>${esc(b?.tahap || '')} → dipakai ${esc(p.tahap)}</b><span>sejak ${tgl(p.mulai)} · ${fmt(L.fill(p.bedengan))} bibit · ${esc(p.alasan || '')}</span></div></a>`; }).join('')}</div></div>`;
+}
+// GL Nursery: pinjam bedengan untuk tahap lain (tanpa persetujuan, riwayat tercatat)
+function pinjamSheet(b, shell) {
+  const opts = ['Penyapihan', 'Pembesaran', 'BST'].filter(t => t !== b.tahap);
+  sheet(`<form class="stack" id="pjf"><h2>Pinjam ${esc(b.kode)}</h2><p class="small" style="margin:0">Bedengan ${esc(b.tahap)} ini dipakai sementara untuk tahap lain. Riwayatnya tercatat dan terlihat SPV serta Suptend.</p>
+    <label class="f" for="pjT">Dipakai sebagai<select id="pjT">${opts.map(t => `<option ${t === 'BST' ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+    <div class="grid2"><label class="f" for="pjM">Mulai<input id="pjM" type="date" value="${G.today()}" max="${G.today()}" required></label><label class="f" for="pjA">Alasan<input id="pjA" value="BST penuh"></label></div>
+    <p class="note" style="margin:0">Bibit di bedengan ini langsung dihitung sesuai tahap pinjaman (BST: siap kirim 2 minggu setelah tanggal masuk). Saat kirim bibit, bedengan pinjaman diambil lebih dulu. Bila bedengan kosong, pinjaman berakhir otomatis.</p>
+    <p class="err" id="pjE" hidden></p><div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit">Simpan</button></div></form>`, (box, close) => {
+    box.querySelector('#pjf').addEventListener('submit', async e => {
+      e.preventDefault(); const er = box.querySelector('#pjE'), bt = box.querySelector('button[type=submit]'); bt.disabled = true;
+      const tahap = box.querySelector('#pjT').value, mulai = box.querySelector('#pjM').value || G.today(), alasan = box.querySelector('#pjA').value.trim() || null;
+      try {
+        await ins('bedengan_pinjam', { id: uid(), bedengan: b.kode, tahap, mulai, alasan, oleh: S.me.id }, { offline: false });
+        const ids = S.profiles.filter(p => p.aktif !== false && ['spv', 'suptend'].includes(p.role)).map(p => p.id);
+        const { notify } = await import('./core.js'); await notify(ids, `Bedengan ${b.kode} dipinjam sebagai ${tahap}`, `${S.me.nama}: ${b.kode} (${b.tahap}) dipakai sebagai ${tahap} mulai ${tgl(mulai)}${alasan ? ' · ' + alasan : ''}.`, '#nursery');
+        close(); toast(`${b.kode} sekarang dihitung sebagai ${tahap}.`); renderNursery(shell);
+      } catch (x) { bt.disabled = false; er.textContent = x.net ? 'Butuh sinyal.' : x.message; er.hidden = false; }
     });
   });
 }
@@ -106,15 +153,15 @@ function capSheet(b, shell) {
     });
   });
 }
-function moveSheet(l, shell) {
+function moveSheet(l, shell, mode) {
   if (activeOpname()) return toast('Stock opname sedang berjalan. Pindah tahap dikunci sampai opname selesai.', 4000);
-  const sg = L.suggestTargets(l);
-  sheet(`<div class="stack"><h2>Pindah tahap · ${esc(l.bedengan)}</h2><p class="small" style="margin:0">${esc(jn(l.jenis))} ${fmt(l.jumlah)} bibit</p>
+  const sg = L.suggestTargets(l, mode);
+  sheet(`<div class="stack"><h2>${mode === 'real' ? 'Pindah ke BST asli' : 'Pindah tahap'} · ${esc(l.bedengan)}</h2>${mode === 'real' ? '<p class="note" style="margin:0">Umur BST tetap dihitung dari tanggal masuk semula.</p>' : ''}<p class="small" style="margin:0">${esc(jn(l.jenis))} ${fmt(l.jumlah)} bibit</p>
     <div class="alert ${sg.rest ? 'warn' : 'ok'}"><b>Saran tujuan</b><br>${sg.plan.map(p => `${p.bed}: ${fmt(p.n)} bibit (${p.why})`).join('<br>') || 'Tidak ada bedengan yang muat.'}${sg.rest ? `<br>Sisa ${fmt(sg.rest)} bibit belum mendapat tempat.` : ''}</div>
     ${crewName()}<div class="grid2"><button class="btn ghost" data-close>Batal</button><button class="btn" id="mvOk" ${sg.plan.length ? '' : 'disabled'}>Pindahkan</button></div></div>`, (box, close) => {
     const ok = box.querySelector('#mvOk'); if (ok) ok.addEventListener('click', async () => {
       const who = getCrew(box); if (!who) return toast('Isi nama pencatat.');
-      for (const p of sg.plan) { const id = uid(); await ins('lot', { id, bedengan: p.bed, jenis: l.jenis, jumlah: p.n, tgl_sapih: l.tgl_sapih, tgl_masuk: G.today(), created_by: S.me.id }); await ins('lot_log', { lot_id: id, tipe: 'pindah_masuk', n: p.n, ket: 'dari ' + l.bedengan, oleh: S.me.id, nama_pencatat: who }); }
+      for (const p of sg.plan) { const id = uid(); await ins('lot', { id, bedengan: p.bed, jenis: l.jenis, jumlah: p.n, tgl_sapih: l.tgl_sapih, tgl_masuk: mode === 'real' ? l.tgl_masuk : G.today(), created_by: S.me.id }); await ins('lot_log', { lot_id: id, tipe: 'pindah_masuk', n: p.n, ket: 'dari ' + l.bedengan, oleh: S.me.id, nama_pencatat: who }); }
       const moved = sg.plan.reduce((a, p) => a + p.n, 0);
       await upd('lot', { id: l.id }, { jumlah: l.jumlah - moved }); await ins('lot_log', { lot_id: l.id, tipe: 'pindah_keluar', n: moved, ket: 'ke ' + sg.plan.map(p => p.bed).join(', '), oleh: S.me.id, nama_pencatat: who });
       close(); toast('Dipindah ke ' + sg.plan.map(p => p.bed).join(', ')); renderNursery(shell);
@@ -287,7 +334,7 @@ export function renderKirim(shell) {
 // ---------- penampungan: bibit kembali dari lapangan ----------
 const kLogs = k => (S.kembali_log || []).filter(x => x.kembali_id === k.id);
 const kSisa = k => k.n - kLogs(k).reduce((a, x) => a + x.n, 0);
-const bstFor = jk => S.bedengan.filter(x => x.status === 'aktif' && x.cluster === (S.jenisMap[jk]?.tipe === 'pionir' ? 'BF' : 'BL') && L.fill(x.kode) < (x.kapasitas || 1300)).concat(S.bedengan.filter(x => x.status === 'aktif' && (x.cluster === 'BF' || x.cluster === 'BL') && x.cluster !== (S.jenisMap[jk]?.tipe === 'pionir' ? 'BF' : 'BL') && L.fill(x.kode) < (x.kapasitas || 1300)));
+const bstFor = jk => { const c = S.jenisMap[jk]?.tipe === 'pionir' ? 'BF' : 'BL', ok = x => L.fill(x.kode) < (x.kapasitas || 1300); return [...L.realBST(c).filter(ok), ...L.realBST(c === 'BF' ? 'BL' : 'BF').filter(ok), ...L.pinjamBST().filter(ok)]; };
 const roomOf = k => (S.bedMap[k]?.kapasitas || 1300) - L.fill(k);
 // sisa hari pengembalian setelah blok closing (null bila blok masih berjalan)
 export function kembaliDue(bid) { const p = L.aktif(bid), last = L.periodes(bid).filter(x => x.status === 'selesai').pop(); return !p && last ? 3 - G.diffDays(G.today(), G.tglWIB(last.approved_at)) : null; }

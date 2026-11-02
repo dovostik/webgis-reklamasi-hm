@@ -154,21 +154,26 @@ export function makeLogic(S) {
   const bed = k => S.bedMap[k];
   const lotsIn = k => S.lot.filter(l => l.bedengan === k && l.jumlah > 0);
   const fill = k => lotsIn(k).reduce((a, l) => a + l.jumlah, 0);
+  // pinjam bedengan: bedengan dipakai sementara sebagai tahap lain (mis. PB dipakai BST karena BST penuh)
+  const pinjamOf = k => (S.bedengan_pinjam || []).find(p => p.bedengan === k && !p.selesai_at);
+  const tahapOf = k => pinjamOf(k)?.tahap || bed(k)?.tahap;
+  const realBST = c => S.bedengan.filter(b => b.status === 'aktif' && b.cluster === c && !pinjamOf(b.kode));
+  const pinjamBST = () => S.bedengan.filter(b => b.status === 'aktif' && pinjamOf(b.kode)?.tahap === 'BST');
   function stage(l) {
-    const b = bed(l.bedengan); const j = J()[l.jenis] || {}; const inBed = diffDays(today(), l.tgl_masuk);
+    const b = bed(l.bedengan); const T = tahapOf(l.bedengan); const j = J()[l.jenis] || {}; const inBed = diffDays(today(), l.tgl_masuk);
     const dS = j.durasi_sapih || 56, dB = j.durasi_besar || 14, dT = j.durasi_bst || 14;
     if (!b) return { tahap: '?', left: 0 };
     if (l.aklim_sampai) { const left = diffDays(l.aklim_sampai, today()); return { tahap: 'BST', left, due: false, ready: false, aklim: true, next: null }; }
-    if (l.sumber === 'beli' && b.tahap !== 'Penyapihan' && b.tahap !== 'Pembesaran') return { tahap: 'BST', left: 0, due: false, ready: true, next: null };
-    if (b.tahap === 'Penyapihan') { const left = dS - diffDays(today(), l.tgl_sapih); return { tahap: b.tahap, left, due: left <= 0, ready: false, next: 'Pembesaran' }; }
-    if (b.tahap === 'Pembesaran') { const left = dB - inBed; return { tahap: b.tahap, left, due: left <= 0, ready: false, next: j.tipe === 'pionir' ? 'BF' : 'BL' }; }
+    if (l.sumber === 'beli' && T !== 'Penyapihan' && T !== 'Pembesaran') return { tahap: 'BST', left: 0, due: false, ready: true, next: null };
+    if (T === 'Penyapihan') { const left = dS - diffDays(today(), l.tgl_sapih); return { tahap: T, left, due: left <= 0, ready: false, next: 'Pembesaran' }; }
+    if (T === 'Pembesaran') { const left = dB - inBed; return { tahap: T, left, due: left <= 0, ready: false, next: j.tipe === 'pionir' ? 'BF' : 'BL' }; }
     const left = dT - inBed; return { tahap: 'BST', left, due: false, ready: left <= 0, next: null };
   }
   function readyStock() { const m = {}; S.lot.forEach(l => { if (l.jumlah > 0 && stage(l).ready) m[l.jenis] = (m[l.jenis] || 0) + l.jumlah; }); return m; }
-  function readyLots(jk) { return S.lot.filter(l => l.jenis === jk && l.jumlah > 0 && stage(l).ready).sort((a, b) => a.tgl_masuk.localeCompare(b.tgl_masuk)); }
-  function targetCluster(l) { const st = stage(l); if (st.next === 'Pembesaran') return S.bedengan.filter(b => b.tahap === 'Pembesaran'); if (st.next === 'BF' || st.next === 'BL') return S.bedengan.filter(b => b.cluster === st.next); return []; }
-  function suggestTargets(l) {
-    const beds = targetCluster(l).filter(b => b.status === 'aktif' && b.kode !== l.bedengan);
+  function readyLots(jk) { return S.lot.filter(l => l.jenis === jk && l.jumlah > 0 && stage(l).ready).sort((a, b) => (pinjamOf(a.bedengan) ? 0 : 1) - (pinjamOf(b.bedengan) ? 0 : 1) || a.tgl_masuk.localeCompare(b.tgl_masuk)); } // bedengan pinjaman dikosongkan lebih dulu
+  function targetCluster(l, mode) { if (mode === 'real') return realBST(J()[l.jenis]?.tipe === 'pionir' ? 'BF' : 'BL'); const st = stage(l); if (st.next === 'Pembesaran') return S.bedengan.filter(b => tahapOf(b.kode) === 'Pembesaran'); if (st.next === 'BF' || st.next === 'BL') return realBST(st.next); return []; }
+  function suggestTargets(l, mode) {
+    const beds = targetCluster(l, mode).filter(b => b.status === 'aktif' && b.kode !== l.bedengan);
     const cap = b => b.kapasitas || CAP_DEFAULT;
     const same = beds.filter(b => { const ls = lotsIn(b.kode); return ls.length && ls.every(x => x.jenis === l.jenis) && fill(b.kode) < cap(b); });
     const empty = beds.filter(b => fill(b.kode) === 0);
@@ -176,6 +181,8 @@ export function makeLogic(S) {
     const plan = []; let rest = l.jumlah;
     const take = (arr, why) => { for (const b of arr) { if (rest <= 0) break; const room = cap(b) - fill(b.kode) - plan.filter(p => p.bed === b.kode).reduce((s, p) => s + p.n, 0); if (room <= 0) continue; const n = Math.min(room, rest); plan.push({ bed: b.kode, n, why }); rest -= n; } };
     take(same, 'jenis sama'); if (rest > 0) take(empty, 'bedengan kosong'); if (rest > 0 && !empty.length) take(partial, 'campur, tidak ada bedengan kosong');
+    // BST asli penuh: pakai bedengan yang sedang dipinjam untuk BST
+    if (rest > 0 && mode !== 'real' && ['BF', 'BL'].includes(stage(l).next)) { const pb = pinjamBST().filter(b => b.kode !== l.bedengan); take(pb.filter(b => lotsIn(b.kode).every(x => x.jenis === l.jenis)), 'bedengan pinjaman BST'); if (rest > 0) take(pb, 'bedengan pinjaman BST, campur'); }
     return { plan, rest };
   }
   // ---------- sensus ----------
@@ -206,5 +213,5 @@ export function makeLogic(S) {
     });
     return out;
   }
-  return { MAT, unitK, matDemand, periodes, aktif, selesai, tags, events, deadAt, allowed, stokTampung, dalamKirim, realisasi, lastSulam, lockInfo, retensiInfo, rotasiInfo, blokStatus, openGL, openVendor, sulamDemand, tanamDemand, bed, lotsIn, fill, stage, readyStock, readyLots, suggestTargets, sensus };
+  return { MAT, unitK, matDemand, periodes, aktif, selesai, tags, events, deadAt, allowed, stokTampung, dalamKirim, realisasi, lastSulam, lockInfo, retensiInfo, rotasiInfo, blokStatus, openGL, openVendor, sulamDemand, tanamDemand, bed, lotsIn, fill, pinjamOf, tahapOf, realBST, pinjamBST, stage, readyStock, readyLots, suggestTargets, sensus };
 }

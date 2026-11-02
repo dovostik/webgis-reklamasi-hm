@@ -701,3 +701,31 @@ alter policy w on public.tag_event with check ((public.has_role('admin','owner',
 alter policy w on public.blok using (public.has_role('admin','exdas','bumdes','owner','suptend','spv')) with check (public.has_role('admin','suptend','spv') or public.can_see_layer(layer));
 alter policy w on public.minta using (public.has_role('admin','owner','nursery','exdas','bumdes','spv')) with check (public.has_role('admin','owner','nursery','exdas','bumdes','spv'));
 alter policy wi on public.periode with check (public.has_role('admin','owner','exdas','bumdes','suptend','spv') and public.can_see_blok(blok_id));
+-- ===== Pinjam bedengan: bedengan dipakai sementara sebagai tahap lain (riwayat tercatat) =====
+create table if not exists public.bedengan_pinjam (
+  id uuid primary key default gen_random_uuid(),
+  bedengan text not null references public.bedengan(kode),
+  tahap text not null check (tahap in ('Penyapihan','Pembesaran','BST')),
+  mulai date not null default current_date, alasan text,
+  oleh uuid default auth.uid() references public.profiles(id), at timestamptz default now(),
+  selesai_at timestamptz, selesai_oleh uuid references public.profiles(id), selesai_alasan text
+);
+create unique index if not exists bedengan_pinjam_aktif on public.bedengan_pinjam(bedengan) where selesai_at is null;
+alter table public.bedengan_pinjam enable row level security;
+drop policy if exists bp_r on public.bedengan_pinjam;
+drop policy if exists bp_i on public.bedengan_pinjam;
+drop policy if exists bp_u on public.bedengan_pinjam;
+create policy bp_r on public.bedengan_pinjam for select to authenticated using (public.my_role() <> 'none');
+create policy bp_i on public.bedengan_pinjam for insert to authenticated with check (public.has_role('admin','nursery'));
+create policy bp_u on public.bedengan_pinjam for update to authenticated using (public.has_role('admin','nursery','crew'));
+grant select, insert, update on public.bedengan_pinjam to authenticated;
+drop trigger if exists bedengan_pinjam_t on public.bedengan_pinjam;
+create trigger bedengan_pinjam_t before insert on public.bedengan_pinjam for each row execute function set_server_time('at');
+
+-- kondisi aktual saat ini: PB-01 s/d PB-05 dan PB-10 s/d PB-17 dipakai sebagai BST (BST penuh)
+insert into public.bedengan_pinjam (bedengan, tahap, mulai, alasan, oleh)
+select b.kode, 'BST', coalesce((select min(l.tgl_masuk) from public.lot l where l.bedengan = b.kode and l.jumlah > 0), current_date), 'BST penuh (kondisi awal)',
+       (select p.id from public.profiles p join auth.users u on u.id = p.id where u.email = 'casimin@padangbara.com')
+from public.bedengan b
+where b.kode in ('PB-01','PB-02','PB-03','PB-04','PB-05','PB-10','PB-11','PB-12','PB-13','PB-14','PB-15','PB-16','PB-17')
+  and not exists (select 1 from public.bedengan_pinjam x where x.bedengan = b.kode and x.selesai_at is null);

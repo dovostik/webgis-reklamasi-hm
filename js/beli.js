@@ -16,7 +16,8 @@ export const hutang = b => b.pengganti_untuk || b.status !== 'selesai' ? 0 : Mat
 export const aklimList = () => (S.beli || []).filter(b => b.status === 'aklimatisasi').sort((a, b) => a.aklim_sampai.localeCompare(b.aklim_sampai));
 export const aklimDue = () => aklimList().filter(b => b.aklim_sampai <= G.today());
 const lotsOf = b => S.lot.filter(l => l.beli_id === b.id && l.aklim_sampai);
-const bstBeds = jk => S.bedengan.filter(x => x.status === 'aktif' && (x.cluster === 'BF' || x.cluster === 'BL')).sort((a, b) => ((a.cluster === (S.jenisMap[jk]?.tipe === 'pionir' ? 'BF' : 'BL')) ? -1 : 1) - ((b.cluster === (S.jenisMap[jk]?.tipe === 'pionir' ? 'BF' : 'BL')) ? -1 : 1) || a.kode.localeCompare(b.kode));
+const bstBeds = jk => [...L.realBST('BF'), ...L.realBST('BL')].sort((a, b) => ((a.cluster === (S.jenisMap[jk]?.tipe === 'pionir' ? 'BF' : 'BL')) ? -1 : 1) - ((b.cluster === (S.jenisMap[jk]?.tipe === 'pionir' ? 'BF' : 'BL')) ? -1 : 1) || a.kode.localeCompare(b.kode));
+const bstBedsAll = jk => [...bstBeds(jk), ...L.pinjamBST()];
 const room = k => (S.bedMap[k]?.kapasitas || 1300) - L.fill(k);
 
 // kartu ringkas untuk halaman Nursery
@@ -44,7 +45,7 @@ export function bindBeli(box, rerender) {
 }
 
 function bedRow(jk, i) {
-  const beds = bstBeds(jk).filter(b => room(b.kode) > 0);
+  const beds = bstBedsAll(jk).filter(b => room(b.kode) > 0);
   return `<div class="row bedrow" style="flex-wrap:nowrap;gap:6px"><select class="bB" aria-label="Bedengan ${i + 1}">${beds.map(b => `<option value="${b.kode}">${b.kode} (muat ${fmt(room(b.kode))})</option>`).join('')}</select><input class="bN" type="number" min="1" inputmode="numeric" placeholder="Jumlah" style="width:96px" aria-label="Jumlah"></div>`;
 }
 function terimaSheet(rerender) {
@@ -117,7 +118,7 @@ function hitungSheet(b, rerender) {
   });
 }
 function afkirActSheet(b, tipe, rerender) {
-  const max = afkirSisa(b), beds = bstBeds(b.jenis).filter(x => room(x.kode) > 0);
+  const max = afkirSisa(b), beds = bstBedsAll(b.jenis).filter(x => room(x.kode) > 0);
   const bedRow = (sel, n) => `<div class="row abrow" style="flex-wrap:nowrap;gap:6px"><select class="abB" aria-label="Bedengan tujuan">${beds.map(x => `<option value="${x.kode}" ${x.kode === sel ? 'selected' : ''}>${x.kode} · muat ${fmt(room(x.kode))}${L.lotsIn(x.kode).some(l => l.jenis === b.jenis) ? ' · jenis sama' : L.fill(x.kode) ? '' : ' · kosong'}</option>`).join('')}</select><input class="abN" type="number" min="0" inputmode="numeric" value="${n}" style="width:90px" aria-label="Jumlah"></div>`;
   const first = beds.find(x => L.lotsIn(x.kode).some(l => l.jenis === b.jenis)) || beds[0];
   sheet(`<form class="stack" id="ab"><h2>${tipe === 'pulih' ? 'Afkir beli pulih → BST' : 'Afkir beli mati'}</h2><p class="small" style="margin:0">${esc(jn(b.jenis))} · ${esc(b.pemasok)} · tersisa ${fmt(max)}</p>

@@ -60,17 +60,18 @@ export function denahSVG(q = '') {
     const match = ql && (b.kode.toLowerCase().includes(ql) || jen.some(j => j.toLowerCase().includes(ql)));
     if (match) hits.push(b.kode);
     const vert = b.h > b.w, fr = Math.min(1, n / cap);
-    const col = CLC[b.cl] || '#888', pct = Math.round(fr * 100);
+    const pj = L.pinjamOf(b.kode);
+    const col = pj ? (pj.tahap === 'Pembesaran' ? CLC.PB : pj.tahap === 'Penyapihan' ? CLC.SP : (ls.length && ls.filter(l => S.jenisMap[l.jenis]?.tipe === 'pionir').length * 2 < ls.length ? CLC.BL : CLC.BF)) : (CLC[b.cl] || '#888'), pct = Math.round(fr * 100);
     const fill = vert ? `<rect x="${b.x}" y="${b.y + b.h * (1 - fr)}" width="${b.w}" height="${b.h * fr}" fill="${col}"/>` : `<rect x="${b.x}" y="${b.y}" width="${b.w * fr}" height="${b.h}" fill="${col}"/>`;
-    const l1 = b.kode + (n ? ' · ' + pct + '%' : ''), l2 = n ? (jen.length > 1 ? jen.length + ' jenis' : short(jen[0])) : 'kosong', l3 = n ? fmt(n) : '';
+    const l1 = b.kode + (pj ? ' · pinjam ' + (pj.tahap === 'BST' ? 'BST' : pj.tahap.slice(0, 3)) : '') + (n ? ' · ' + pct + '%' : ''), l2 = n ? (jen.length > 1 ? jen.length + ' jenis' : short(jen[0])) : 'kosong', l3 = n ? fmt(n) : '';
     const cx = b.x + b.w / 2, cy = b.y + b.h / 2, thick = Math.min(b.w, b.h);
     const fs = Math.max(8, Math.min(thick * .36, 15));
     const tx = `<text class="dn-t" font-size="${fs.toFixed(1)}" stroke-width="${(fs * .17).toFixed(1)}" transform="translate(${cx.toFixed(1)} ${cy.toFixed(1)})${vert ? ' rotate(-90)' : ''}"><tspan x="0" dy="${(-fs * .15).toFixed(1)}" font-weight="700">${esc(l1)}</tspan><tspan x="0" dy="${(fs * 1.05).toFixed(1)}">${esc(l2)}${l3 ? ' · ' + l3 : ''}</tspan></text>`;
     const dot = (due ? '#E0473B' : ak ? '#111' : ready ? '#FFD400' : null);
     const dx = vert ? cx : b.x + b.w - fs * .7, dy = vert ? b.y + fs * .7 : cy;
-    return `<g class="dn-b${match ? ' hit' : ''}${ql && !match ? ' dim' : ''}" data-bed="${esc(b.kode)}" id="dn-${esc(b.kode)}" role="button" tabindex="0" aria-label="Bedengan ${esc(b.kode)}, ${esc(l2)} ${l3}"><rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="#fff"/><rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="${col}" fill-opacity=".14"/>${fill}<rect class="dn-o" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="transparent" stroke="${col}"/>${tx}${dot ? `<circle cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="${(fs * .38).toFixed(1)}" fill="${dot}" stroke="#fff" stroke-width="${(fs * .16).toFixed(1)}"/>` : ''}${beli ? `<text class="dn-beli" font-size="${(fs * .7).toFixed(1)}" x="${(vert ? cx : b.x + fs * .5).toFixed(1)}" y="${(vert ? b.y + b.h - fs * .4 : cy + fs * .25).toFixed(1)}">B</text>` : ''}</g>`;
+    return `<g class="dn-b${match ? ' hit' : ''}${ql && !match ? ' dim' : ''}" data-bed="${esc(b.kode)}" id="dn-${esc(b.kode)}" role="button" tabindex="0" aria-label="Bedengan ${esc(b.kode)}, ${esc(l2)} ${l3}"><rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="#fff"/><rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="${col}" fill-opacity=".14"/>${fill}${pj ? `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="url(#dnHatch)"/>` : ''}<rect class="dn-o" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="transparent" stroke="${col}"${pj ? ' stroke-dasharray="6 4"' : ''}/>${tx}${dot ? `<circle cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="${(fs * .38).toFixed(1)}" fill="${dot}" stroke="#fff" stroke-width="${(fs * .16).toFixed(1)}"/>` : ''}${beli ? `<text class="dn-beli" font-size="${(fs * .7).toFixed(1)}" x="${(vert ? cx : b.x + fs * .5).toFixed(1)}" y="${(vert ? b.y + b.h - fs * .4 : cy + fs * .25).toFixed(1)}">B</text>` : ''}</g>`;
   }).join('');
   const { x, y, w, h } = f.vb;
   const facNames = f.F.filter(x => x.layer === 'fasilitas').sort((a, b) => (a.props.NO || 0) - (b.props.NO || 0)).map(x => `${x.props.NO} ${x.props.NAMA}`).join(' · ');
-  return { hits, w, h, facNames, svg: `<svg viewBox="${x.toFixed(0)} ${y.toFixed(0)} ${w.toFixed(0)} ${h.toFixed(0)}" class="dn-svg" role="group" aria-label="Denah nursery">${fac}${beds}</svg>` };
+  return { hits, w, h, facNames, svg: `<svg viewBox="${x.toFixed(0)} ${y.toFixed(0)} ${w.toFixed(0)} ${h.toFixed(0)}" class="dn-svg" role="group" aria-label="Denah nursery"><defs><pattern id="dnHatch" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="10" stroke="#000" stroke-width="2.2" opacity=".28"/></pattern></defs>${fac}${beds}</svg>` };
 }
