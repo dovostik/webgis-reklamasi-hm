@@ -177,7 +177,7 @@ export function scanQR(title = 'Arahkan kamera ke QR tag') {
   return new Promise(res => {
     const w = document.createElement('div'); w.className = 'scanner';
     // kontrol di ATAS layar: di sebagian HP Android bagian bawah tertutup tombol navigasi
-    w.innerHTML = `<div class="bar"><div class="row between" style="gap:10px"><b>${esc(title)}</b><button class="btn ghost sm" id="qCancel" style="color:#fff;border-color:#555">Batal</button></div><span class="small" id="qMsg">Membuka kamera…</span><button class="btn sm" id="qRetry" hidden>Coba buka kamera lagi</button><div class="row" style="flex-wrap:nowrap"><input id="qManual" placeholder="atau ketik nomor tag, mis. HM-T-000123" style="background:#222;color:#fff;border-color:#444"><button class="btn sm" id="qOk">OK</button></div></div><div class="cam"><video playsinline muted autoplay></video><div class="frame"></div></div>`;
+    w.innerHTML = `<div class="bar"><div class="row between" style="gap:10px"><b>${esc(title)}</b><button class="btn ghost sm" id="qCancel" style="color:#fff;border-color:#555">Batal</button></div><span class="small" id="qMsg">Membuka kamera…</span><button class="btn sm" id="qRetry" hidden>Coba buka kamera lagi</button><label class="btn ghost sm" style="color:#fff;border-color:#555;text-align:center">Pakai foto QR (aplikasi kamera)<input type="file" accept="image/*" capture="environment" id="qPhoto" hidden></label><div class="row" style="flex-wrap:nowrap"><input id="qManual" placeholder="atau ketik nomor tag, mis. HM-T-000123" style="background:#222;color:#fff;border-color:#444"><button class="btn sm" id="qOk">OK</button></div></div><div class="cam"><video playsinline muted autoplay></video><div class="frame"></div></div>`;
     document.body.appendChild(w);
     const video = w.querySelector('video'), msg = w.querySelector('#qMsg'), retry = w.querySelector('#qRetry'); let stream = null, stop = false, watch = null;
     const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -205,7 +205,7 @@ export function scanQR(title = 'Arahkan kamera ke QR tag') {
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false });
       } catch (e) {
         const n = e && e.name;
-        return fail(n === 'NotAllowedError' || n === 'SecurityError' ? '<b>Izin kamera ditolak oleh HP.</b> Buka <b>Setelan HP → Aplikasi → Chrome</b> (bukan Reklamasi HM) <b>→ Izin → Kamera → Izinkan saat aplikasi digunakan</b>. Pastikan juga sakelar <b>Akses kamera</b> di panel atas HP menyala. Lalu ketuk "Coba buka kamera lagi". (iPhone: Pengaturan → Safari → Kamera → Izinkan.)'
+        return fail(n === 'NotAllowedError' || n === 'SecurityError' ? '<b>Izin kamera ditolak oleh HP.</b> Buka <b>Setelan HP → Aplikasi → Chrome</b> (bukan Reklamasi HM) <b>→ Izin → Kamera → Izinkan saat aplikasi digunakan</b>. Pastikan juga sakelar <b>Akses kamera</b> di panel atas HP menyala. Cek juga <b>Chrome → ⋮ → Setelan → Setelan situs → Kamera</b> harus menyala. Lalu ketuk "Coba buka kamera lagi", atau pakai tombol <b>foto QR</b> di bawah. (iPhone: Pengaturan → Safari → Kamera → Izinkan.)'
           : n === 'NotReadableError' || n === 'AbortError' ? 'Kamera sedang dipakai aplikasi lain. Tutup aplikasi kamera/WhatsApp video, lalu coba lagi.'
           : n === 'NotFoundError' || n === 'OverconstrainedError' ? 'Kamera tidak ditemukan di perangkat ini.' : 'Kamera tidak bisa dibuka (' + esc(n || 'error') + ').');
       }
@@ -216,6 +216,22 @@ export function scanQR(title = 'Arahkan kamera ke QR tag') {
       tick();
     };
     retry.addEventListener('click', start);
+    // cadangan: foto QR lewat aplikasi kamera HP (tidak butuh izin kamera untuk situs)
+    w.querySelector('#qPhoto').addEventListener('change', async e => {
+      const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+      msg.style.color = ''; msg.textContent = 'Membaca QR dari foto…';
+      try {
+        const bm = await createImageBitmap(f); let found = null;
+        for (const max of [1400, 900, 2000]) {
+          const k = Math.min(1, max / Math.max(bm.width, bm.height)); const cw = Math.round(bm.width * k), ch = Math.round(bm.height * k);
+          canvas.width = cw; canvas.height = ch; ctx.drawImage(bm, 0, 0, cw, ch);
+          const code = window.jsQR && window.jsQR(ctx.getImageData(0, 0, cw, ch).data, cw, ch, { inversionAttempts: 'attemptBoth' });
+          if (code && code.data) { found = code.data.trim(); break; }
+        }
+        if (!found) { msg.style.color = '#FFB4A9'; msg.textContent = 'QR tidak terbaca di foto. Ambil foto lebih dekat, tegak lurus, dan tidak silau.'; return; }
+        if (navigator.vibrate) navigator.vibrate(80); done(/^HM[KS]1/.test(found) ? found : normTag(found));
+      } catch (x) { msg.style.color = '#FFB4A9'; msg.textContent = 'Foto tidak bisa dibaca.'; }
+    });
     start();
   });
 }
