@@ -697,3 +697,7 @@ grant execute on function public.in_tim(uuid) to authenticated;
 alter policy wi on public.tag with check ((public.has_role('admin','owner','exdas','bumdes') and public.can_see_blok(blok_id)) or public.in_tim(periode_id));
 alter policy wu on public.tag using ((public.has_role('admin','owner','exdas','bumdes') and public.can_see_blok(blok_id)) or public.in_tim(periode_id));
 alter policy w on public.tag_event with check ((public.has_role('admin','owner','exdas','bumdes') or public.in_tim(periode_id)) and oleh = auth.uid());
+-- SPV boleh memberi nama blok BASTL (memulai penanaman): ubah blok, buat permintaan bibit, buat periode Cek 1
+alter policy w on public.blok using (public.has_role('admin','exdas','bumdes','owner','suptend','spv')) with check (public.has_role('admin','suptend','spv') or public.can_see_layer(layer));
+alter policy w on public.minta using (public.has_role('admin','owner','nursery','exdas','bumdes','spv')) with check (public.has_role('admin','owner','nursery','exdas','bumdes','spv'));
+alter policy wi on public.periode with check (public.has_role('admin','owner','exdas','bumdes','suptend','spv') and public.can_see_blok(blok_id));
