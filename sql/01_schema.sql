@@ -729,3 +729,6 @@ select b.kode, 'BST', coalesce((select min(l.tgl_masuk) from public.lot l where 
 from public.bedengan b
 where b.kode in ('PB-01','PB-02','PB-03','PB-04','PB-05','PB-10','PB-11','PB-12','PB-13','PB-14','PB-15','PB-16','PB-17')
   and not exists (select 1 from public.bedengan_pinjam x where x.bedengan = b.kode and x.selesai_at is null);
+
+-- ===== Blok gabungan beberapa petak/BASTL (dari SHP): rincian bagian {bastl, split, ha} =====
+alter table public.blok add column if not exists bagian jsonb;

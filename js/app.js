@@ -148,6 +148,7 @@ export function tugasList() {
     if (!seesBlok(b) || b.layer === 'berhasil') continue;
     const p = L.aktif(b.id);
     if (isRole('spv') && b.layer === 'bastl' && !b.nama) { out.push({ b, p: null, t: 'Beri nama blok BASTL', k: 'warn' }); continue; }
+    if (isRole('spv') && b.layer === 'bastl' && b.nama && !L.periodes(b.id).length && !S.minta.some(m => m.blok_id === b.id)) { out.push({ b, p: null, t: 'Mulai penanaman', k: 'idle' }); continue; }
     if (isRole('suptend')) {
       if (b.layer === 'bastl' && !b.nama) continue;
       if (p && p.status === 'menunggu_persetujuan') out.push({ b, p, t: 'Setujui dan terbitkan BA', k: 'warn' });
@@ -261,6 +262,10 @@ function renderBlok(id) {
   const plist = L.periodes(id); const tags = L.tags(id);
   let act = '';
   // --- admin: beri nama BASTL ---
+  // blok dari SHP sudah bernama: SPV memulai penanaman (permintaan bibit ke nursery + pekerjaan ExDAS)
+  if (b.layer === 'bastl' && b.nama && !L.periodes(b.id).length && !S.minta.some(m => m.blok_id === b.id)) {
+    act += (isRole('admin') || isRole('spv') || isRole('suptend')) ? `<div class="card stack"><h2>Mulai penanaman</h2><p class="small" style="margin:0">Luas ${fmt(b.ha, 2)} Ha · bibit ${fmt(n.pio)} pionir + ${fmt(n.sis)} sisipan.</p><p class="note" style="margin:0">Setelah dimulai, permintaan bibit langsung masuk ke nursery dan pekerjaan ExDAS dimulai.</p><button class="btn block" id="bStart">Mulai penanaman ${esc(b.nama)}</button></div>` : '<div class="alert">Blok ini belum dimulai oleh SPV.</div>';
+  }
   if (b.layer === 'bastl' && !b.nama) {
     act += (isRole('admin') || isRole('spv')) ? `<div class="card stack"><h2>Beri nama blok</h2><p class="note">Melanjutkan urutan terakhir blok. Setelah disimpan, permintaan bibit penanaman langsung masuk ke nursery dan pekerjaan ExDAS dimulai.</p><div class="row" style="flex-wrap:nowrap"><input id="bnm" value="${esc(nextHRP())}" aria-label="Nama blok"><button class="btn" id="bnmOk">Simpan</button></div></div>` : '<div class="alert">Petak ini belum diberi nama oleh administrator.</div>';
   }
@@ -313,7 +318,8 @@ function renderBlok(id) {
   if ((isRole('admin') || isRole('spv')) && b.layer === 'perawatan') {
     act += `<details class="card"><summary><b>Input manual admin</b></summary><div class="stack" style="margin-top:10px"><div class="grid2"><label class="f" for="aT">Tanggal closing BA tanam<input type="date" id="aT" value="${esc(b.tgl_tanam || '')}"></label><label class="f" for="aR">Realisasi rotasi terakhir<input type="date" id="aR" value="${esc(b.tgl_rotasi_terakhir || '')}"></label></div><button class="btn ghost" id="aSave">Simpan tanggal</button></div></details>`;
   }
-  const info = `<dl class="kv"><dt>Luas</dt><dd>${fmt(b.ha, 2)} Ha</dd>${b.kode_bastl ? `<dt>Kode BASTL</dt><dd class="mono">${esc(b.kode_bastl)}</dd>` : ''}${b.no_bastl ? `<dt>No. BASTL</dt><dd>${esc(b.no_bastl)}</dd>` : ''}
+  const bag = (b.bagian || []).filter(x => x.bastl || x.split); const bagH = bag.length && (bag.length > 1 || bag[0].split) ? `<dt>Bagian petak</dt><dd>${bag.map(x => `${esc(x.bastl || '–')}${x.split ? ' · split ' + esc(x.split) : ''} (${fmt(x.ha, 2)} Ha)`).join('<br>')}</dd>` : '';
+  const info = `<dl class="kv"><dt>Luas</dt><dd>${fmt(b.ha, 2)} Ha</dd>${bagH}${b.kode_bastl ? `<dt>Kode BASTL</dt><dd class="mono">${esc(b.kode_bastl)}</dd>` : ''}${b.no_bastl ? `<dt>No. BASTL</dt><dd>${esc(b.no_bastl)}</dd>` : ''}
     ${ri ? `<dt>Tanggal tanam</dt><dd>${tgl(ri.tanam.tgl)}${ri.tanam.perkiraan ? ' *' : ''}</dd><dt>Umur</dt><dd>${fmt(ri.umur / 30.4)} bulan</dd><dt>Kegiatan</dt><dd>${ri.kegiatan}</dd><dt>Rotasi terakhir</dt><dd>${ri.last ? tgl(ri.last) : 'belum diisi'}</dd><dt>Rotasi berikutnya</dt><dd>${tgl(ri.next)}</dd>` : ''}</dl>${ri?.tanam.perkiraan ? '<p class="note">* Perkiraan dari bulan tanam di shapefile.</p>' : ''}`;
   const need = b.layer === 'bastl' ? `<div class="sec"><h3>Kebutuhan penanaman</h3><dl class="kv"><dt>Ajir & lubang</dt><dd>${fmt(n.lubang)}</dd><dt>Pupuk dasar</dt><dd>${fmt(n.pupuk)} kg · ${fmt(n.sakKohe)} sak</dd><dt>NPK</dt><dd>${fmt(n.npk)} kg</dd><dt>Pioneer / sisipan</dt><dd>${fmt(n.pio)} / ${fmt(n.sis)}</dd><dt>LCC (ditabur)</dt><dd>${fmt(n.lcc)} kg</dd><dt>Perkiraan durasi</dt><dd>${n.hariKerja} hari</dd></dl></div>` : `<div class="sec"><h3>Kebutuhan per rotasi</h3><dl class="kv"><dt>Populasi</dt><dd>${fmt(G.STD.lubang * b.ha)} pohon</dd><dt>NPK 50 g/pohon</dt><dd>${fmt(G.STD.npk * b.ha)} kg</dd></dl></div>`;
   const stokHtml = Object.keys(stok).length || dk.length ? `<div class="sec"><div class="row between"><h3>Bibit di lapangan</h3>${kembaliDue(id) != null && Object.keys(stok).length ? `<span class="pill ${kembaliDue(id) < 0 ? 's-bad' : 's-warn'}">${kembaliDue(id) < 0 ? 'Lewat ' + (-kembaliDue(id)) + ' hari' : 'Kembalikan ≤ ' + kembaliDue(id) + ' hari'}</span>` : ''}</div><div class="chips">${Object.entries(stok).map(([k, v]) => `<span class="chip">${esc(S.jenisMap[k]?.nama || k)} ${fmt(v)}</span>`).join('')}${dk.map(k => `<span class="chip">dikirim: ${esc(S.jenisMap[k.jenis]?.nama)} ${fmt(k.n)}</span>`).join('')}</div>${Object.keys(stok).length && isRole('admin', 'owner', 'exdas', 'bumdes') ? '<button class="btn ghost block" id="kbBtn">Kembalikan ke nursery (sisa / afkir)</button>' : ''}</div>` : '';
@@ -334,6 +340,12 @@ function renderBlok(id) {
   $$('[data-tag]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); tagSheet(a.dataset.tag); }));
   // aksi
   const on = (sel, fn) => { const x = $(sel); if (x) x.addEventListener('click', async () => { x.disabled = true; try { await fn(); } catch (e) { toast(e.message); } finally { x.disabled = false; } }); };
+  on('#bStart', async () => {
+    if (!(await confirmSheet(`Mulai penanaman ${esc(b.nama)} (${fmt(b.ha, 2)} Ha)? Permintaan ${fmt(n.pio + n.sis)} bibit dikirim ke nursery.`, 'Mulai'))) return;
+    await ins('minta', { id: uid(), blok_id: id, tipe: 'tanam', pio: n.pio, sis: n.sis });
+    await ins('periode', { id: uid(), blok_id: id, tipe: 'cek1', nomor: 1, vendor: 'exdas', status: 'pelaksanaan', mulai_at: new Date().toISOString() });
+    toast(`${b.nama} dimulai. Permintaan ${fmt(n.pio + n.sis)} bibit dikirim ke nursery.`); route();
+  });
   on('#bnmOk', async () => {
     const v = $('#bnm').value.trim().toUpperCase(); if (!v) return toast('Isi nama blok.');
     if (S.blok.some(x => x.nama === v)) return toast(`Nama ${v} sudah dipakai.`);

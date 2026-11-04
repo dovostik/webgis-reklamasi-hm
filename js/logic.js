@@ -115,7 +115,7 @@ export function makeLogic(S) {
     const p = aktif(b.id);
     if (b.layer === 'bastl') {
       if (!b.nama) return { k: 'idle', t: 'Belum diberi nama' };
-      if (!p) return { k: 'idle', t: 'Menunggu pekerjaan' };
+      if (!p) return periodes(b.id).length ? { k: 'idle', t: 'Menunggu pekerjaan' } : { k: 'idle', t: 'Belum dimulai' };
       if (p.status === 'pelaksanaan' && p.tipe === 'cek1') { const st = stokTampung(b.id); return Object.keys(st).length || S.tampung_log.some(l => l.blok_id === b.id) ? { k: 'warn', t: 'Penanaman berjalan' } : { k: 'idle', t: 'Menunggu bibit' }; }
       return { k: p.status === 'menunggu_persetujuan' ? 'warn' : 'pend', t: TIPE_LBL[p.tipe] + ' · ' + STATUS_LBL[p.status] };
     }
