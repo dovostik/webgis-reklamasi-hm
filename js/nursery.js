@@ -208,16 +208,44 @@ function capSheet(b, shell) {
 }
 function moveSheet(l, shell, mode) {
   if (activeOpname()) return toast('Stock opname sedang berjalan. Pindah tahap dikunci sampai opname selesai.', 4000);
+  const st = L.stage(l), cl = S.jenisMap[l.jenis]?.tipe === 'pionir' ? 'BF' : 'BL';
+  // bedengan tujuan yang sah: tahap berikutnya (BST sesuai golongan jenis + bedengan pinjaman BST)
+  const targets = (mode === 'real' ? L.realBST(cl) : st.next === 'Pembesaran' ? S.bedengan.filter(b => L.tahapOf(b.kode) === 'Pembesaran') : [...L.realBST(st.next || cl), ...L.pinjamBST()])
+    .filter(b => b.status === 'aktif' && b.kode !== l.bedengan).sort((a, b) => a.kode.localeCompare(b.kode));
+  const capOf = b => b.kapasitas || 1300, roomOf = b => capOf(b) - L.fill(b.kode);
+  const label = b => { const js = [...new Set(L.lotsIn(b.kode).map(x => jn(x.jenis)))]; return `${b.kode}${L.pinjamOf(b.kode) ? ' (pinjaman)' : ''} · sisa ${fmt(Math.max(0, roomOf(b)))} · ${js.length ? js.join(', ') : 'kosong'}`; };
+  const opt = sel => `<option value="">— pilih bedengan —</option>${targets.map(b => `<option value="${b.kode}" ${b.kode === sel ? 'selected' : ''} ${roomOf(b) <= 0 ? 'disabled' : ''}>${esc(label(b))}</option>`).join('')}`;
   const sg = L.suggestTargets(l, mode);
-  sheet(`<div class="stack"><h2>${mode === 'real' ? 'Pindah ke BST asli' : 'Pindah tahap'} · ${esc(l.bedengan)}</h2>${mode === 'real' ? '<p class="note" style="margin:0">Umur BST tetap dihitung dari tanggal masuk semula.</p>' : ''}<p class="small" style="margin:0">${esc(jn(l.jenis))} ${fmt(l.jumlah)} bibit</p>
-    <div class="alert ${sg.rest ? 'warn' : 'ok'}"><b>Saran tujuan</b><br>${sg.plan.map(p => `${p.bed}: ${fmt(p.n)} bibit (${p.why})`).join('<br>') || 'Tidak ada bedengan yang muat.'}${sg.rest ? `<br>Sisa ${fmt(sg.rest)} bibit belum mendapat tempat.` : ''}</div>
-    ${crewName()}<div class="grid2"><button class="btn ghost" data-close>Batal</button><button class="btn" id="mvOk" ${sg.plan.length ? '' : 'disabled'}>Pindahkan</button></div></div>`, (box, close) => {
-    const ok = box.querySelector('#mvOk'); if (ok) ok.addEventListener('click', async () => {
-      const who = getCrew(box); if (!who) return toast('Isi nama pencatat.');
-      for (const p of sg.plan) { const id = uid(); await ins('lot', { id, bedengan: p.bed, jenis: l.jenis, jumlah: p.n, tgl_sapih: l.tgl_sapih, tgl_masuk: mode === 'real' ? l.tgl_masuk : G.today(), created_by: S.me.id }); await ins('lot_log', { lot_id: id, tipe: 'pindah_masuk', n: p.n, ket: 'dari ' + l.bedengan, oleh: S.me.id, nama_pencatat: who }); }
-      const moved = sg.plan.reduce((a, p) => a + p.n, 0);
-      await upd('lot', { id: l.id }, { jumlah: l.jumlah - moved }); await ins('lot_log', { lot_id: l.id, tipe: 'pindah_keluar', n: moved, ket: 'ke ' + sg.plan.map(p => p.bed).join(', '), oleh: S.me.id, nama_pencatat: who });
-      close(); toast('Dipindah ke ' + sg.plan.map(p => p.bed).join(', ')); renderNursery(shell);
+  const rowH = (bed = '', n = '') => `<div class="grid2 mvrow" style="grid-template-columns:1fr 110px auto;align-items:end"><label class="f">Bedengan tujuan<select class="mvB">${opt(bed)}</select></label><label class="f">Jumlah<input class="mvN" type="number" min="1" inputmode="numeric" value="${n}"></label><button type="button" class="btn ghost sm mvDel" aria-label="Hapus baris">✕</button></div>`;
+  const toLbl = mode === 'real' ? 'BST asli' : st.next === 'Pembesaran' ? 'Pembesaran' : 'BST';
+  sheet(`<form class="stack" id="mv"><h2>Pindah ke ${toLbl} · ${esc(l.bedengan)}</h2><p class="small" style="margin:0">${esc(jn(l.jenis))} <b>${fmt(l.jumlah)}</b> bibit${mode === 'real' ? ' · umur BST tetap dari tanggal masuk semula' : ''}</p>
+    <p class="note" style="margin:0">Pilih sendiri bedengan tujuan dan jumlahnya. Isian awal hanya saran aplikasi${sg.plan.length ? '' : ' (tidak ada saran yang muat)'}. Boleh dibagi ke beberapa bedengan; sisa yang tidak dipindah tetap di ${esc(l.bedengan)}.</p>
+    <div id="mvRows">${(sg.plan.length ? sg.plan : [{ bed: '', n: '' }]).map(x => rowH(x.bed, x.n)).join('')}</div>
+    <button type="button" class="btn ghost sm" id="mvAdd">+ Bedengan tujuan lain</button>
+    <p class="small" id="mvSum" style="margin:0"></p>${crewName()}
+    <p class="err" id="mvE" hidden></p><div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit" id="mvOk">Pindahkan</button></div></form>`, (box, close) => {
+    const q = x => box.querySelector(x), rows = () => [...box.querySelectorAll('.mvrow')].map(r => ({ r, bed: r.querySelector('.mvB').value, n: Math.round(Number(r.querySelector('.mvN').value) || 0) }));
+    const sum = () => { const t = rows().reduce((a, x) => a + x.n, 0); q('#mvSum').innerHTML = `Dipindah <b>${fmt(t)}</b> · tersisa di ${esc(l.bedengan)} <b>${fmt(l.jumlah - t)}</b>`; q('#mvSum').style.color = t > l.jumlah ? 'var(--bad)' : ''; };
+    const bind = r => { r.querySelector('.mvDel').addEventListener('click', () => { if (box.querySelectorAll('.mvrow').length > 1) r.remove(); else { r.querySelector('.mvB').value = ''; r.querySelector('.mvN').value = ''; } sum(); }); r.querySelector('.mvN').addEventListener('input', sum); r.querySelector('.mvB').addEventListener('change', () => { const b = S.bedMap[r.querySelector('.mvB').value]; const ni = r.querySelector('.mvN'); if (b && !ni.value) { const used = rows().filter(x => x.r !== r).reduce((a, x) => a + x.n, 0); ni.value = Math.max(0, Math.min(roomOf(b), l.jumlah - used)); } sum(); }); };
+    box.querySelectorAll('.mvrow').forEach(bind); sum();
+    q('#mvAdd').addEventListener('click', () => { q('#mvRows').insertAdjacentHTML('beforeend', rowH()); bind([...box.querySelectorAll('.mvrow')].pop()); });
+    q('#mv').addEventListener('submit', async e => {
+      e.preventDefault(); const er = q('#mvE'), fail = m => { er.textContent = m; er.hidden = false; };
+      const who = getCrew(box); if (!who) return fail('Isi nama pencatat.');
+      const plan = rows().filter(x => x.bed || x.n); if (!plan.length) return fail('Pilih minimal satu bedengan tujuan.');
+      if (plan.some(x => !x.bed)) return fail('Ada baris tanpa bedengan tujuan.'); if (plan.some(x => !(x.n > 0))) return fail('Ada baris tanpa jumlah.');
+      const tot = plan.reduce((a, x) => a + x.n, 0); if (tot > l.jumlah) return fail(`Total ${fmt(tot)} melebihi isi lot ${fmt(l.jumlah)}.`);
+      const per = {}; plan.forEach(x => { per[x.bed] = (per[x.bed] || 0) + x.n; });
+      for (const [k, n] of Object.entries(per)) {
+        const b = S.bedMap[k]; if (n > roomOf(b)) return fail(`${k} hanya muat ${fmt(roomOf(b))} lagi.`);
+        const ls = L.lotsIn(k); if (ls.length && !ls.some(x => x.jenis === l.jenis)) { const empty = targets.some(x => x.kode !== k && L.fill(x.kode) === 0 && !per[x.kode]); if (empty || L.fill(k) > capOf(b) / 2 || new Set(ls.map(x => x.jenis)).size >= 2) return fail(`${k}: ${jn(l.jenis)} belum ada di bedengan itu. Jenis baru hanya boleh dicampur bila tidak ada bedengan kosong dan bedengan terisi ≤ ½.`); }
+      }
+      q('#mvOk').disabled = true;
+      try {
+        for (const [k, n] of Object.entries(per)) { const id = uid(); await ins('lot', { id, bedengan: k, jenis: l.jenis, jumlah: n, tgl_sapih: l.tgl_sapih, tgl_masuk: mode === 'real' ? l.tgl_masuk : G.today(), sumber: l.sumber || 'mandiri', beli_id: l.beli_id || null, created_by: S.me.id }); await ins('lot_log', { lot_id: id, tipe: 'pindah_masuk', n, ket: 'dari ' + l.bedengan, oleh: S.me.id, nama_pencatat: who }); }
+        await upd('lot', { id: l.id }, { jumlah: l.jumlah - tot }); await ins('lot_log', { lot_id: l.id, tipe: 'pindah_keluar', n: tot, ket: 'ke ' + Object.keys(per).join(', '), oleh: S.me.id, nama_pencatat: who });
+        close(); toast(`${fmt(tot)} bibit dipindah ke ${Object.keys(per).join(', ')}.`); renderNursery(shell);
+      } catch (x) { q('#mvOk').disabled = false; fail(x.message); }
     });
   });
 }
