@@ -66,10 +66,15 @@ export async function uploadOrtho({ file, slot, tanggal, action = 'ganti' }, onP
   tree.push({ path: 'upload/info.json', mode: '100644', type: 'blob', content: JSON.stringify(info, null, 1) });
   // berbasis main agar cabang membawa berkas workflow (Actions hanya jalan bila workflow ada di commit itu)
   const head = await gh('/git/ref/heads/main'), base = await gh('/git/commits/' + head.object.sha);
-  const t = await gh('/git/trees', { method: 'POST', body: JSON.stringify({ base_tree: base.tree.sha, tree }) });
+  let t; try { t = await gh('/git/trees', { method: 'POST', body: JSON.stringify({ base_tree: base.tree.sha, tree }) }); }
+  catch (e) { if (/422/.test(e.message) && key) { try { localStorage.removeItem(key); } catch (x) {} throw new Error('Potongan file lama sudah tidak tersimpan di GitHub. Ketuk Unggah lagi; file akan dikirim ulang dari awal.'); } throw e; }
   const c = await gh('/git/commits', { method: 'POST', body: JSON.stringify({ message: `Ortho ${slot} ${tanggal || ''} (${action})`, tree: t.sha, parents: [head.object.sha] }) });
   const branch = `ortho-upload-${slot}-${Date.now()}`;
-  await gh('/git/refs', { method: 'POST', body: JSON.stringify({ ref: 'refs/heads/' + branch, sha: c.sha }) });
+  // commit besar kadang belum tersalin ke semua server GitHub ("Object does not exist") → tunggu lalu ulangi
+  for (let i = 0; ; i++) {
+    try { await gh('/git/refs', { method: 'POST', body: JSON.stringify({ ref: 'refs/heads/' + branch, sha: c.sha }) }); break; }
+    catch (e) { if (!/Object does not exist|422/.test(e.message) || i >= 9) throw new Error('GitHub belum siap menerima unggahan (' + e.message.slice(0, 80) + '). Ketuk Unggah lagi dengan file yang sama; potongan yang sudah terkirim tidak diulang.'); onProg && onProg({ i: n, n, msg: `Menunggu GitHub memproses file… (${i + 1}/10)` }); await new Promise(ok => setTimeout(ok, 6000 * (i + 1))); }
+  }
   if (key) try { localStorage.removeItem(key); } catch (e) {}
   const job = { branch, slot, tanggal, action, at: new Date().toISOString() }; saveJob(job);
   return job;
