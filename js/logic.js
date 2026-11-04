@@ -175,7 +175,7 @@ export function makeLogic(S) {
   function suggestTargets(l, mode) {
     const beds = targetCluster(l, mode).filter(b => b.status === 'aktif' && b.kode !== l.bedengan);
     const cap = b => b.kapasitas || CAP_DEFAULT;
-    const same = beds.filter(b => { const ls = lotsIn(b.kode); return ls.length && ls.every(x => x.jenis === l.jenis) && fill(b.kode) < cap(b); });
+    const same = beds.filter(b => { const ls = lotsIn(b.kode); return ls.length && ls.some(x => x.jenis === l.jenis) && fill(b.kode) < cap(b); }); // bedengan yang sudah berisi jenis ini boleh ditambah
     const empty = beds.filter(b => fill(b.kode) === 0);
     const partial = beds.filter(b => { const f = fill(b.kode); return f > 0 && f <= cap(b) / 2 && !same.includes(b) && new Set(lotsIn(b.kode).map(x => x.jenis)).size < 2; });
     const plan = []; let rest = l.jumlah;
