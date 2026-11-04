@@ -527,6 +527,31 @@ let gTab = 'material', gQ = '';
 const KEP = ['Pemupukan', 'Penyemprotan', 'Penanaman', 'Penyulaman', 'Pengisian polybag', 'Penyapihan', 'Spraying fungisida', 'Spraying insektisida', 'Improvement', 'Lainnya'];
 const LOK = ['Nursery', 'Highwall', 'Enviro', 'Area improvement', 'Area keterlanjuran', 'Setpond', 'Pembuangan'];
 const grp = (list, row) => { const g = {}; list.forEach(x => { const k = x.kategori || 'Tanpa kategori'; (g[k] = g[k] || []).push(x); }); return Object.keys(g).sort().map(k => `<h3 style="margin:12px 0 4px">${esc(k)} (${g[k].length})</h3><div class="list">${g[k].map(row).join('')}</div>`).join('') || '<p class="muted">Tidak ada.</p>'; };
+let gKond = 'semua';
+// kondisi alat: tandai rusak, sudah diperbaiki, dibuang (afkir), hilang — semua tercatat di riwayat alat
+function kondisiSheet(a, shell) {
+  const rs = Number(a.rusak) || 0, stok = Number(a.stok) || 0, dip = S.pinjam.filter(p => !p.kembali_at && p.alat_id === a.id).length, baikSisa = stok - rs - dip;
+  const T = { rusak: ['Tandai rusak', baikSisa, 'unit baik di gudang'], baik: ['Sudah diperbaiki', rs, 'unit rusak'], buang: ['Dibuang / afkir', rs, 'unit rusak'], hilang: ['Hilang', baikSisa, 'unit baik di gudang'] };
+  const log = (S.alat_log || []).filter(x => x.alat_id === a.id).sort((x, y) => String(y.at).localeCompare(String(x.at))).slice(0, 10);
+  let t = baikSisa > 0 ? 'rusak' : 'baik';
+  sheet(`<form class="stack" id="ak"><h2>${esc(a.nama)}</h2><p class="small" style="margin:0">Stok ${fmt(stok)} ${esc(a.satuan || '')} · baik ${fmt(stok - rs)} · rusak ${fmt(rs)}${dip ? ' · dipinjam ' + dip : ''}</p>
+    <div class="seg" style="flex-wrap:wrap">${Object.entries(T).map(([k, v]) => `<button type="button" data-t="${k}" class="${k === t ? 'on' : ''}" ${v[1] > 0 ? '' : 'disabled'}>${v[0]}</button>`).join('')}</div>
+    <label class="f" for="akN">Jumlah <small id="akM"></small><input id="akN" type="number" min="1" inputmode="numeric" value="1"></label>
+    <label class="f" for="akK">Keterangan <small>wajib</small><input id="akK" placeholder="mis. gagang patah, mesin mati, dibuang ke TPS"></label>${crewName()}
+    ${log.length ? `<details class="sec"><summary class="small"><b>Riwayat kondisi (${log.length})</b></summary><ul class="small" style="margin:6px 0 0;padding-left:18px">${log.map(x => `<li>${tgl(x.at)} · ${esc(T[x.tipe]?.[0] || x.tipe)} ${fmt(x.n)} · ${esc(x.ket || '')} · ${esc(x.nama_pencatat || nm(x.oleh))}</li>`).join('')}</ul></details>` : ''}
+    <p class="err" id="akE" hidden></p><div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit">Simpan</button></div></form>`, (box, close) => {
+    const q = x => box.querySelector(x); const sync = () => { q('#akM').textContent = `maks ${fmt(T[t][1])} ${T[t][2]}`; };
+    box.querySelectorAll('[data-t]').forEach(x => x.addEventListener('click', () => { t = x.dataset.t; box.querySelectorAll('[data-t]').forEach(y => y.classList.toggle('on', y === x)); sync(); })); sync();
+    q('#ak').addEventListener('submit', async e => {
+      e.preventDefault(); const er = q('#akE'), fail = m => { er.textContent = m; er.hidden = false; };
+      const n = Math.round(Number(q('#akN').value)), ket = q('#akK').value.trim(), who = getCrew(box);
+      if (!who) return fail('Isi nama pencatat.'); if (!(n > 0)) return fail('Isi jumlah.'); if (n > T[t][1]) return fail(`Maksimal ${fmt(T[t][1])} ${T[t][2]}.`); if (!ket) return fail('Isi keterangan.');
+      const patch = t === 'rusak' ? { rusak: rs + n } : t === 'baik' ? { rusak: rs - n } : t === 'buang' ? { rusak: rs - n, stok: stok - n } : { stok: stok - n };
+      try { await upd('alat', { id: a.id }, patch, { offline: false }); await ins('alat_log', { alat_id: a.id, tipe: t, n, ket, oleh: S.me.id, nama_pencatat: who }); close(); toast(`${a.nama}: ${T[t][0].toLowerCase()} ${fmt(n)}.`); renderGudang(shell); }
+      catch (x) { fail(x.net ? 'Butuh sinyal.' : x.message); }
+    });
+  });
+}
 export function renderGudang(shell) {
   const can = isRole('admin', 'nursery', 'crew');
   const st = m => m.stok == null ? ['s-idle', 'Perlu opname'] : Number(m.stok) < Number(m.minimum) ? ['s-warn', 'Di bawah minimum'] : ['s-ok', 'Aman'];
@@ -535,9 +560,13 @@ export function renderGudang(shell) {
   shell('Gudang', null, `<div class="stack">
     <div class="seg"><button data-g="material" class="${gTab === 'material' ? 'on' : ''}">Habis pakai</button><button data-g="alat" class="${gTab === 'alat' ? 'on' : ''}">Alat dipinjam</button></div>
     ${gTab === 'material' ? `<input id="gq" placeholder="Cari barang" value="${esc(gQ)}" aria-label="Cari barang">${isRole('admin', 'nursery') ? `<button class="btn ghost block" id="gNew">+ Tambah barang baru${gQ && !S.barang.some(m => m.nama.toLowerCase().includes(gQ.toLowerCase())) ? ` "${esc(gQ)}"` : ''}</button>` : ''}${grp(S.barang.filter(m => m.aktif !== false && (!gQ || (m.nama + ' ' + (m.kategori || '')).toLowerCase().includes(gQ.toLowerCase()))), m => { const [c, t] = st(m); return `<div class="item"><div class="grow"><b>${esc(m.nama)}</b><span>${m.stok == null ? '–' : fmt(m.stok, Number(m.stok) % 1 ? 2 : 0)} ${esc(m.satuan)} · min ${fmt(m.minimum)} ${esc(m.satuan)}</span></div><span class="pill ${c}">${t}</span>${can ? `<button class="btn ghost sm" data-bx="${esc(m.nama)}">Catat</button>` : ''}</div>`; })}<p class="note">Stok dihitung dari masuk − keluar. Item "Perlu opname" menunggu hitung fisik. Kohe 25 kg/sak, arang sekam 25 kg/sak.</p>`
-      : `<input id="gq" placeholder="Cari alat" value="${esc(gQ)}" aria-label="Cari alat"><div class="card stack"><h2>Sedang dipinjam (${dip.length})</h2>${dip.map(p => `<div class="item"><div class="grow"><b>${esc(S.alat.find(a => a.id === p.alat_id)?.nama)}</b><span>${esc(p.peminjam)} · ${esc(p.ket)} · ${tgl(p.at)}${p.oleh !== S.me.id ? ' · dicatat ' + esc(nm(p.oleh)) : ''}</span></div>${isRole('viewer') ? '' : `<button class="btn sm" data-kb="${p.id}">Kembali</button>`}</div>`).join('') || '<p class="muted small" style="margin:0">Tidak ada.</p>'}</div>
-        ${grp(alat, a => { const n = dip.filter(p => p.alat_id === a.id).length; const avail = (Number(a.stok) || 0) - n; return `<div class="item"><div class="grow"><b>${esc(a.nama)}</b><span>${esc(a.kategori || '')} · stok ${a.stok ?? '–'} ${esc(a.satuan || '')}${n ? ' · dipinjam ' + n : ''}${a.ket ? ' · ' + esc(a.ket) : ''}</span></div>${isRole('viewer') ? '' : `<button class="btn ghost sm" data-pj="${a.id}" ${avail > 0 ? '' : 'disabled'}>Pinjam</button>`}</div>`; })}`}</div>`);
+      : `<input id="gq" placeholder="Cari alat" value="${esc(gQ)}" aria-label="Cari alat">
+        <div class="seg" role="group" aria-label="Kondisi"><button data-kf="semua" class="${gKond === 'semua' ? 'on' : ''}">Semua</button><button data-kf="baik" class="${gKond === 'baik' ? 'on' : ''}">Baik</button><button data-kf="rusak" class="${gKond === 'rusak' ? 'on' : ''}">Rusak (${S.alat.filter(a => a.aktif !== false && Number(a.rusak) > 0).length})</button></div>
+        <div class="card stack"><h2>Sedang dipinjam (${dip.length})</h2>${dip.map(p => `<div class="item"><div class="grow"><b>${esc(S.alat.find(a => a.id === p.alat_id)?.nama)}</b><span>${esc(p.peminjam)} · ${esc(p.ket)} · ${tgl(p.at)}${p.oleh !== S.me.id ? ' · dicatat ' + esc(nm(p.oleh)) : ''}</span></div>${isRole('viewer') ? '' : `<button class="btn sm" data-kb="${p.id}">Kembali</button>`}</div>`).join('') || '<p class="muted small" style="margin:0">Tidak ada.</p>'}</div>
+        ${grp(alat.filter(a => gKond === 'semua' || (gKond === 'rusak' ? Number(a.rusak) > 0 : (Number(a.stok) || 0) - (Number(a.rusak) || 0) > 0)), a => { const n = dip.filter(p => p.alat_id === a.id).length, rs = Number(a.rusak) || 0, baik = (Number(a.stok) || 0) - rs, avail = baik - n; return `<div class="item"><div class="grow"><b>${esc(a.nama)}</b><span>${esc(a.kategori || '')} · stok ${a.stok ?? '–'} ${esc(a.satuan || '')} · <b style="color:var(--ok)">baik ${fmt(baik)}</b>${rs ? ` · <b style="color:var(--bad)">rusak ${fmt(rs)}</b>` : ''}${n ? ' · dipinjam ' + n : ''}${a.ket ? ' · ' + esc(a.ket) : ''}</span></div>${isRole('viewer') ? '' : `<div class="row" style="gap:6px;flex-wrap:nowrap"><button class="btn ghost sm" data-ak="${a.id}">Kondisi</button><button class="btn ghost sm" data-pj="${a.id}" ${avail > 0 ? '' : 'disabled'}>Pinjam</button></div>`}</div>`; })}`}</div>`);
   $$('[data-g]').forEach(b => b.addEventListener('click', () => { gTab = b.dataset.g; renderGudang(shell); }));
+  $$('[data-kf]').forEach(b => b.addEventListener('click', () => { gKond = b.dataset.kf; renderGudang(shell); }));
+  $$('[data-ak]').forEach(b => b.addEventListener('click', () => kondisiSheet(S.alat.find(x => x.id === +b.dataset.ak), shell)));
   const q = $('#gq'); if (q) q.addEventListener('change', e => { gQ = e.target.value; renderGudang(shell); });
   const gn = $('#gNew'); if (gn) gn.addEventListener('click', async () => { const { barangSheet } = await import('./master.js'); const exists = gQ && S.barang.some(m => m.nama.toLowerCase().includes(gQ.toLowerCase())); barangSheet(null, shell, { nama: exists ? '' : gQ.trim().replace(/^./, c => c.toUpperCase()), after: n => { gQ = n; renderGudang(shell); } }); });
   $$('[data-pj]').forEach(b => b.addEventListener('click', () => {
@@ -548,7 +577,13 @@ export function renderGudang(shell) {
   }));
   $$('[data-kb]').forEach(b => b.addEventListener('click', () => {
     sheet(`<div class="stack"><h2>Pengembalian alat</h2><label class="f" for="kd">Kondisi<select id="kd"><option>Baik</option><option>Rusak</option><option>Hilang</option></select></label><div class="grid2"><button class="btn ghost" data-close>Batal</button><button class="btn" id="kdOk">Simpan</button></div></div>`, (box, close) => {
-      box.querySelector('#kdOk').addEventListener('click', async () => { await upd('pinjam', { id: b.dataset.kb }, { kembali_at: new Date().toISOString(), kondisi: box.querySelector('#kd').value }); close(); toast('Alat kembali.'); renderGudang(shell); });
+      box.querySelector('#kdOk').addEventListener('click', async () => {
+        const kd = box.querySelector('#kd').value, pj = S.pinjam.find(x => x.id === b.dataset.kb), a = S.alat.find(x => x.id === pj?.alat_id);
+        await upd('pinjam', { id: b.dataset.kb }, { kembali_at: new Date().toISOString(), kondisi: kd });
+        if (a && kd === 'Rusak') { await upd('alat', { id: a.id }, { rusak: (Number(a.rusak) || 0) + 1 }); await ins('alat_log', { alat_id: a.id, tipe: 'rusak', n: 1, ket: `kembali rusak dari ${pj.peminjam}`, oleh: S.me.id }).catch(() => {}); }
+        if (a && kd === 'Hilang') { await upd('alat', { id: a.id }, { stok: Math.max(0, (Number(a.stok) || 0) - 1) }); await ins('alat_log', { alat_id: a.id, tipe: 'hilang', n: 1, ket: `hilang saat dipinjam ${pj.peminjam}`, oleh: S.me.id }).catch(() => {}); }
+        close(); toast(kd === 'Baik' ? 'Alat kembali.' : kd === 'Rusak' ? 'Alat kembali, tercatat rusak.' : 'Tercatat hilang, stok dikurangi 1.'); renderGudang(shell);
+      });
     });
   }));
   $$('[data-bx]').forEach(b => b.addEventListener('click', () => {

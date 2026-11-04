@@ -732,3 +732,22 @@ where b.kode in ('PB-01','PB-02','PB-03','PB-04','PB-05','PB-10','PB-11','PB-12'
 
 -- ===== Blok gabungan beberapa petak/BASTL (dari SHP): rincian bagian {bastl, split, ha} =====
 alter table public.blok add column if not exists bagian jsonb;
+-- ===== Gudang: kondisi alat (baik / rusak) + riwayat =====
+alter table public.alat add column if not exists rusak numeric not null default 0;
+create table if not exists public.alat_log (
+  id bigserial primary key,
+  alat_id integer not null references public.alat(id) on delete cascade,
+  tipe text not null check (tipe in ('rusak','baik','buang','hilang')),
+  n numeric not null, ket text, oleh uuid default auth.uid() references public.profiles(id), nama_pencatat text, at timestamptz default now()
+);
+alter table public.alat_log enable row level security;
+drop policy if exists al_r on public.alat_log;
+drop policy if exists al_i on public.alat_log;
+create policy al_r on public.alat_log for select to authenticated using (public.my_role() <> 'none');
+create policy al_i on public.alat_log for insert to authenticated with check (public.has_role('admin','nursery','crew'));
+grant select, insert on public.alat_log to authenticated;
+grant usage, select on sequence public.alat_log_id_seq to authenticated;
+drop trigger if exists alat_log_t on public.alat_log;
+create trigger alat_log_t before insert on public.alat_log for each row execute function set_server_time('at');
+-- crew gudang boleh mencatat kondisi alat
+alter policy w on public.alat using (public.has_role('admin','nursery','crew'));
