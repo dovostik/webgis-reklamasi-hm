@@ -43,24 +43,47 @@ function group(list, row) {
 }
 const allCats = () => cats([...S.barang, ...S.alat]);
 
-function barangSheet(m, shell) {
-  const isNew = !m;
+// satuan umum + faktor konversi otomatis antar satuan sejenis
+const SATUAN = ['kg', 'gram', 'sak', 'liter', 'ml', 'pcs', 'botol', 'jerigen', 'roll', 'lembar', 'batang', 'kaleng', 'meter', 'unit', 'set', 'pak', 'dus', 'karung'];
+const BASE = { kg: ['g', 1000], gram: ['g', 1], g: ['g', 1], gr: ['g', 1], liter: ['ml', 1000], l: ['ml', 1000], ml: ['ml', 1] };
+const faktor = (dari, ke) => { const a = BASE[String(dari).toLowerCase()], b = BASE[String(ke).toLowerCase()]; return a && b && a[0] === b[0] ? a[1] / b[1] : null; };
+export const f0 = x => Number(x) > 0;
+export function barangSheet(m, shell, opts = {}) {
+  const isNew = !m; const after = opts.after || (() => renderMaster(shell));
   sheet(`<form class="stack" id="fb"><h2>${isNew ? 'Barang habis pakai baru' : esc(m.nama)}</h2>
-    <label class="f" for="bN">Nama<input id="bN" required value="${esc(m?.nama || '')}"></label>
-    <div class="grid2"><label class="f" for="bK">Kategori <small>ketik baru atau pilih</small><input id="bK" list="dlk" value="${esc(m?.kategori || '')}" placeholder="mis. Sparepart"></label><label class="f" for="bS">Satuan<input id="bS" required value="${esc(m?.satuan || '')}" placeholder="kg, sak, pcs"></label></div>
+    <label class="f" for="bN">Nama<input id="bN" required value="${esc(m?.nama || opts.nama || '')}"></label>
+    <div class="grid2"><label class="f" for="bK">Kategori <small>ketik baru atau pilih</small><input id="bK" list="dlk" value="${esc(m?.kategori || '')}" placeholder="mis. Sparepart"></label><label class="f" for="bS">Satuan <small>pilih atau ketik</small><input id="bS" required list="dls" value="${esc(m?.satuan || '')}" placeholder="kg, gram, sak, liter"></label></div>
+    ${dl('dls', SATUAN)}
+    ${isNew ? '' : `<div class="sec" id="bKv" hidden><h3>Konversi stok ke satuan baru</h3><p class="small" style="margin:0" id="bKvT"></p><div class="grid2"><label class="f" for="bKf">1 <span class="bKa"></span> = berapa <span class="bKb"></span><input id="bKf" type="number" step="any" min="0" inputmode="decimal"></label><label class="f" for="bKs">Stok baru (<span class="bKb"></span>)<input id="bKs" type="number" step="any" min="0" inputmode="decimal"></label></div><p class="note" style="margin:0">Stok minimum ikut dikonversi. Perubahan satuan tercatat di riwayat gudang.</p></div>`}
     <div class="grid2"><label class="f" for="bM">Stok minimum<input id="bM" type="number" step="any" min="0" inputmode="decimal" value="${m?.minimum ?? ''}"></label>${isNew ? `<label class="f" for="bT">Stok awal <small>kosongkan bila belum dihitung</small><input id="bT" type="number" step="any" min="0" inputmode="decimal"></label>` : `<label class="f" for="bA">Status<select id="bA"><option value="1" ${aktif(m) ? 'selected' : ''}>Aktif</option><option value="0" ${aktif(m) ? '' : 'selected'}>Nonaktif</option></select></label>`}</div>
     ${dl('dlk', allCats())}
     ${isNew ? '' : '<p class="note">Stok diubah lewat Gudang (masuk, keluar, opname), bukan di sini. Riwayat transaksi ikut nama baru bila nama diganti.</p><button type="button" class="btn ghost block" id="toAlat">Pindahkan ke Alat dipinjam</button>'}
     <p class="err" id="bE" hidden></p><div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit">Simpan</button></div></form>`, (box, close) => {
     const v = id => box.querySelector(id)?.value.trim();
+    const kv = box.querySelector('#bKv');
+    const syncKv = () => { if (!kv) return; const baru = v('#bS'); const beda = baru && baru.toLowerCase() !== String(m.satuan || '').toLowerCase(); kv.hidden = !beda; if (!beda) return;
+      box.querySelectorAll('.bKa').forEach(x => x.textContent = m.satuan || '?'); box.querySelectorAll('.bKb').forEach(x => x.textContent = baru);
+      box.querySelector('#bKvT').textContent = m.stok == null ? 'Stok belum pernah dihitung, tidak perlu dikonversi.' : `Stok sekarang ${m.stok} ${m.satuan}.`;
+      const f = faktor(m.satuan, baru); const fi = box.querySelector('#bKf'); if (f && !fi.dataset.touched) fi.value = +f.toFixed(6); upStok(); };
+    const upStok = () => { const f = Number(v('#bKf')); const s = box.querySelector('#bKs'); if (m?.stok != null && f > 0 && !s.dataset.touched) s.value = +(Number(m.stok) * f).toFixed(4); };
+    if (kv) { box.querySelector('#bS').addEventListener('input', syncKv); box.querySelector('#bKf').addEventListener('input', e => { e.target.dataset.touched = 1; upStok(); }); box.querySelector('#bKs').addEventListener('input', e => { e.target.dataset.touched = 1; }); }
     box.querySelector('#fb').addEventListener('submit', async e => {
       e.preventDefault(); const er = box.querySelector('#bE'); const nama = v('#bN');
       if (S.barang.some(x => x.nama.toLowerCase() === nama.toLowerCase() && x !== m)) { er.textContent = 'Nama sudah ada.'; er.hidden = false; return; }
       const row = { nama, kategori: v('#bK') || null, satuan: v('#bS'), minimum: v('#bM') === '' ? null : Number(v('#bM')) };
       try {
         if (isNew) await ins('barang', { ...row, stok: v('#bT') === '' ? null : Number(v('#bT')), aktif: true }, { offline: false });
-        else await upd('barang', { nama: m.nama }, { ...row, aktif: v('#bA') === '1' }, { offline: false });
-        close(); toast('Tersimpan.'); renderMaster(shell);
+        else {
+          const ganti = row.satuan.toLowerCase() !== String(m.satuan || '').toLowerCase();
+          if (ganti && m.stok != null) {
+            const f = Number(v('#bKf')), s = v('#bKs');
+            if (s === '' || !(Number(s) >= 0)) { er.textContent = `Isi stok dalam satuan ${row.satuan}.`; er.hidden = false; return; }
+            row.stok = Number(s); if (row.minimum != null && f > 0 && v('#bM') === String(m.minimum ?? '')) row.minimum = +(row.minimum * f).toFixed(4);
+          } else if (ganti && f0(v('#bKf')) && row.minimum != null && v('#bM') === String(m.minimum ?? '')) row.minimum = +(row.minimum * Number(v('#bKf'))).toFixed(4);
+          await upd('barang', { nama: m.nama }, { ...row, aktif: v('#bA') === '1' }, { offline: false });
+          if (ganti) await ins('barang_tx', { barang: nama, tipe: 'opname', n: 0, keperluan: `Ganti satuan ${m.satuan} → ${row.satuan}${m.stok != null ? ` (stok ${m.stok} ${m.satuan} = ${row.stok} ${row.satuan})` : ''}`, lokasi: 'Gudang', oleh: S.me.id }).catch(() => {});
+        }
+        close(); toast(isNew ? `${nama} ditambahkan.` : 'Tersimpan.'); after(nama);
       } catch (x) { er.textContent = x.net ? 'Mengubah master data butuh sinyal.' : x.message; er.hidden = false; }
     });
     const ta = box.querySelector('#toAlat'); if (ta) ta.addEventListener('click', async () => {
