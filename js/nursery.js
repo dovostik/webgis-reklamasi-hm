@@ -132,6 +132,8 @@ function fillSheet(kode, shell) {
     <div id="fsBody"><label class="f" for="fsL">Lot asal<select id="fsL">${opts()}</select></label><p class="note" id="fsNone" hidden></p>
       <label class="f" for="fsN">Jumlah dipindah<input id="fsN" type="number" min="1" inputmode="numeric"></label>
       <label class="f" for="fsA" id="fsAW" hidden>Alasan pindah lebih awal <small>wajib</small><input id="fsA" placeholder="mis. bibit sudah cukup tinggi, pembesaran penuh"></label>
+      <div id="fsSel" class="sec" hidden><label style="display:flex;gap:10px;align-items:center;font-weight:600" id="fsSisaW"><input type="checkbox" id="fsSisa" style="width:22px;height:22px;min-height:0;flex:none;margin:0"> <span id="fsSisaT"></span></label>
+        <label class="f" for="fsC">Catatan selisih <small>wajib</small><input id="fsC" placeholder="mis. toleransi hitungan"></label></div>
       ${crewName()}<p class="note" id="fsInfo" style="margin:0"></p></div>
     <div id="fsBeli" hidden><p class="small" style="margin:0">Bibit beli masuk lewat kartu <b>Bibit beli</b> di halaman Nursery: terima kiriman pemasok (foto bukti), aklimatisasi 7 hari, lalu hitung. Bedengan BST tujuan dipilih di sana.</p></div>
     <p class="err" id="fsE" hidden></p><div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit" id="fsOk">Pindahkan</button></div></form>`, (box, close) => {
@@ -141,16 +143,20 @@ function fillSheet(kode, shell) {
       if (beli) return; const list = mode === 'prev' ? dariPrev : dariSama; q('#fsNone').hidden = !!list.length; q('#fsNone').textContent = `Tidak ada lot ${mode === 'prev' ? prev.toLowerCase() : 'di bedengan ' + T + ' lain'} yang cocok untuk bedengan ini.`; q('#fsOk').disabled = !list.length;
       const l = S.lot.find(x => x.id === q('#fsL').value); if (!l) { q('#fsAW').hidden = true; q('#fsInfo').textContent = ''; return; }
       const early = mode === 'prev' && !L.stage(l).due; q('#fsAW').hidden = !early;
-      q('#fsN').max = Math.min(l.jumlah, room); if (!q('#fsN').value || Number(q('#fsN').value) > Math.min(l.jumlah, room)) q('#fsN').value = Math.max(0, Math.min(l.jumlah, room));
+      if (!q('#fsN').value) q('#fsN').value = Math.max(0, Math.min(l.jumlah, room));
+      const n = Math.round(Number(q('#fsN').value) || 0), d = l.jumlah - n; q('#fsSel').hidden = !(n > 0 && d !== 0); q('#fsSisaW').hidden = d <= 0;
+      q('#fsSisaT').textContent = d > 0 ? `Sisa ${fmt(d)} di ${l.bedengan} tidak ada fisiknya (selisih hitung, lot asal jadi 0)` : ''; if (d < 0) q('#fsSel').querySelector('small').textContent = `wajib · fisik lebih ${fmt(-d)} dari catatan`;
       q('#fsInfo').textContent = mode === 'prev' ? `Umur ${T === 'BST' ? 'BST' : 'pembesaran'} mulai dihitung hari ini.` : `Tanggal masuk tetap ${tgl(l.tgl_masuk)}, umur tidak mundur.`;
     };
     box.querySelectorAll('[data-m]').forEach(x => x.addEventListener('click', () => { mode = x.dataset.m; box.querySelectorAll('[data-m]').forEach(y => y.classList.toggle('on', y === x)); if (mode !== 'beli') { q('#fsL').innerHTML = opts(); q('#fsN').value = ''; } sync(); }));
-    q('#fsL').addEventListener('change', () => { q('#fsN').value = ''; sync(); }); sync();
+    q('#fsL').addEventListener('change', () => { q('#fsN').value = ''; sync(); }); q('#fsN').addEventListener('input', sync); sync();
     q('#fs').addEventListener('submit', async e => {
       e.preventDefault(); const er = q('#fsE'), fail = m => { er.textContent = m; er.hidden = false; };
       const l = S.lot.find(x => x.id === q('#fsL').value); if (!l) return fail('Pilih lot asal.');
       const n = Math.round(Number(q('#fsN').value)); const who = getCrew(box); if (!who) return fail('Isi nama pencatat.');
-      if (!(n > 0)) return fail('Isi jumlah.'); if (n > l.jumlah) return fail(`Lot asal hanya ${fmt(l.jumlah)} bibit.`); if (n > room) return fail(`Bedengan ini hanya muat ${fmt(room)} lagi.`);
+      if (!(n > 0)) return fail('Isi jumlah.'); if (n > room) return fail(`Bedengan ini hanya muat ${fmt(room)} lagi.`);
+      const lebih = n > l.jumlah, buang = n < l.jumlah && q('#fsSisa').checked, cat = q('#fsC').value.trim();
+      if ((lebih || buang) && !cat) return fail(lebih ? `Fisik ${fmt(n - l.jumlah)} lebih banyak dari catatan lot asal. Isi catatan selisihnya.` : 'Isi catatan selisih untuk sisa yang tidak ada fisiknya.');
       const early = mode === 'prev' && !L.stage(l).due, alasan = q('#fsA').value.trim(); if (early && !alasan) return fail('Isi alasan memindah lebih awal.');
       const ls = L.lotsIn(kode); if (ls.length && !ls.some(x => x.jenis === l.jenis)) { const empty = (T === 'BST' ? L.realBST(b.cluster) : S.bedengan.filter(x => L.tahapOf(x.kode) === T)).some(x => x.status === 'aktif' && x.kode !== kode && L.fill(x.kode) === 0); if (empty || L.fill(kode) > cap / 2 || new Set(ls.map(x => x.jenis)).size >= 2) return fail(`${jn(l.jenis)} belum ada di bedengan ini. Jenis baru hanya boleh dicampur bila tidak ada bedengan kosong dan bedengan ini terisi ≤ ½.`); }
       q('#fsOk').disabled = true;
@@ -158,8 +164,10 @@ function fillSheet(kode, shell) {
         const id = uid(); const ket = 'dari ' + l.bedengan + (early ? ` (lebih awal ${L.stage(l).left} hari: ${alasan})` : '');
         await ins('lot', { id, bedengan: kode, jenis: l.jenis, jumlah: n, tgl_sapih: l.tgl_sapih, tgl_masuk: mode === 'prev' ? G.today() : l.tgl_masuk, sumber: l.sumber || 'mandiri', beli_id: l.beli_id || null, created_by: S.me.id });
         await ins('lot_log', { lot_id: id, tipe: 'pindah_masuk', n, ket, oleh: S.me.id, nama_pencatat: who });
-        await upd('lot', { id: l.id }, { jumlah: l.jumlah - n });
-        await ins('lot_log', { lot_id: l.id, tipe: 'pindah_keluar', n, ket: 'ke ' + kode + (early ? ` (lebih awal: ${alasan})` : ''), oleh: S.me.id, nama_pencatat: who });
+        if (lebih) await ins('lot_log', { lot_id: l.id, tipe: 'opname', n: n - l.jumlah, ket: 'selisih hitung saat pindah (lebih): ' + cat, oleh: S.me.id, nama_pencatat: who });
+        if (buang) await ins('lot_log', { lot_id: l.id, tipe: 'opname', n: -(l.jumlah - n), ket: 'selisih hitung saat pindah (kurang): ' + cat, oleh: S.me.id, nama_pencatat: who });
+        await upd('lot', { id: l.id }, { jumlah: lebih || buang ? 0 : l.jumlah - n });
+        await ins('lot_log', { lot_id: l.id, tipe: 'pindah_keluar', n, ket: 'ke ' + kode + (early ? ` (lebih awal: ${alasan})` : '') + ((lebih || buang) && cat ? ' · ' + cat : ''), oleh: S.me.id, nama_pencatat: who });
         close(); toast(`${fmt(n)} ${jn(l.jenis)} dipindah dari ${l.bedengan} ke ${kode}.`); renderNursery(shell);
       } catch (x) { q('#fsOk').disabled = false; fail(x.message); }
     });
@@ -222,10 +230,14 @@ function moveSheet(l, shell, mode) {
     <p class="note" style="margin:0">Pilih sendiri bedengan tujuan dan jumlahnya. Isian awal hanya saran aplikasi${sg.plan.length ? '' : ' (tidak ada saran yang muat)'}. Boleh dibagi ke beberapa bedengan; sisa yang tidak dipindah tetap di ${esc(l.bedengan)}.</p>
     <div id="mvRows">${(sg.plan.length ? sg.plan : [{ bed: '', n: '' }]).map(x => rowH(x.bed, x.n)).join('')}</div>
     <button type="button" class="btn ghost sm" id="mvAdd">+ Bedengan tujuan lain</button>
-    <p class="small" id="mvSum" style="margin:0"></p>${crewName()}
+    <p class="small" id="mvSum" style="margin:0"></p>
+    <div id="mvSel" class="sec" hidden><label style="display:flex;gap:10px;align-items:center;font-weight:600" id="mvSisaW"><input type="checkbox" id="mvSisa" style="width:22px;height:22px;min-height:0;flex:none;margin:0"> <span id="mvSisaT"></span></label>
+      <label class="f" for="mvC">Catatan selisih <small id="mvCW">wajib</small><input id="mvC" placeholder="mis. toleransi hitungan, polybag kosong"></label></div>${crewName()}
     <p class="err" id="mvE" hidden></p><div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit" id="mvOk">Pindahkan</button></div></form>`, (box, close) => {
     const q = x => box.querySelector(x), rows = () => [...box.querySelectorAll('.mvrow')].map(r => ({ r, bed: r.querySelector('.mvB').value, n: Math.round(Number(r.querySelector('.mvN').value) || 0) }));
-    const sum = () => { const t = rows().reduce((a, x) => a + x.n, 0); q('#mvSum').innerHTML = `Dipindah <b>${fmt(t)}</b> · tersisa di ${esc(l.bedengan)} <b>${fmt(l.jumlah - t)}</b>`; q('#mvSum').style.color = t > l.jumlah ? 'var(--bad)' : ''; };
+    const sum = () => { const t = rows().reduce((a, x) => a + x.n, 0), d = l.jumlah - t;
+      q('#mvSum').innerHTML = d >= 0 ? `Dipindah <b>${fmt(t)}</b> · tersisa di ${esc(l.bedengan)} <b>${fmt(d)}</b>` : `Dipindah <b>${fmt(t)}</b> · <b>lebih ${fmt(-d)}</b> dari catatan ${fmt(l.jumlah)}`;
+      q('#mvSel').hidden = !(d !== 0 && t > 0); q('#mvSisaW').hidden = d <= 0; q('#mvSisaT').textContent = `Sisa ${fmt(d)} bibit tidak ada fisiknya (selisih hitung, bedengan asal jadi 0)`; };
     const bind = r => { r.querySelector('.mvDel').addEventListener('click', () => { if (box.querySelectorAll('.mvrow').length > 1) r.remove(); else { r.querySelector('.mvB').value = ''; r.querySelector('.mvN').value = ''; } sum(); }); r.querySelector('.mvN').addEventListener('input', sum); r.querySelector('.mvB').addEventListener('change', () => { const b = S.bedMap[r.querySelector('.mvB').value]; const ni = r.querySelector('.mvN'); if (b && !ni.value) { const used = rows().filter(x => x.r !== r).reduce((a, x) => a + x.n, 0); ni.value = Math.max(0, Math.min(roomOf(b), l.jumlah - used)); } sum(); }); };
     box.querySelectorAll('.mvrow').forEach(bind); sum();
     q('#mvAdd').addEventListener('click', () => { q('#mvRows').insertAdjacentHTML('beforeend', rowH()); bind([...box.querySelectorAll('.mvrow')].pop()); });
@@ -234,7 +246,8 @@ function moveSheet(l, shell, mode) {
       const who = getCrew(box); if (!who) return fail('Isi nama pencatat.');
       const plan = rows().filter(x => x.bed || x.n); if (!plan.length) return fail('Pilih minimal satu bedengan tujuan.');
       if (plan.some(x => !x.bed)) return fail('Ada baris tanpa bedengan tujuan.'); if (plan.some(x => !(x.n > 0))) return fail('Ada baris tanpa jumlah.');
-      const tot = plan.reduce((a, x) => a + x.n, 0); if (tot > l.jumlah) return fail(`Total ${fmt(tot)} melebihi isi lot ${fmt(l.jumlah)}.`);
+      const tot = plan.reduce((a, x) => a + x.n, 0), lebih = tot > l.jumlah, buang = !lebih && tot < l.jumlah && q('#mvSisa').checked, cat = q('#mvC').value.trim();
+      if ((lebih || buang) && !cat) return fail(lebih ? `Fisik ${fmt(tot - l.jumlah)} lebih banyak dari catatan. Isi catatan selisihnya.` : 'Isi catatan selisih untuk sisa yang tidak ada fisiknya.');
       const per = {}; plan.forEach(x => { per[x.bed] = (per[x.bed] || 0) + x.n; });
       for (const [k, n] of Object.entries(per)) {
         const b = S.bedMap[k]; if (n > roomOf(b)) return fail(`${k} hanya muat ${fmt(roomOf(b))} lagi.`);
@@ -243,8 +256,11 @@ function moveSheet(l, shell, mode) {
       q('#mvOk').disabled = true;
       try {
         for (const [k, n] of Object.entries(per)) { const id = uid(); await ins('lot', { id, bedengan: k, jenis: l.jenis, jumlah: n, tgl_sapih: l.tgl_sapih, tgl_masuk: mode === 'real' ? l.tgl_masuk : G.today(), sumber: l.sumber || 'mandiri', beli_id: l.beli_id || null, created_by: S.me.id }); await ins('lot_log', { lot_id: id, tipe: 'pindah_masuk', n, ket: 'dari ' + l.bedengan, oleh: S.me.id, nama_pencatat: who }); }
-        await upd('lot', { id: l.id }, { jumlah: l.jumlah - tot }); await ins('lot_log', { lot_id: l.id, tipe: 'pindah_keluar', n: tot, ket: 'ke ' + Object.keys(per).join(', '), oleh: S.me.id, nama_pencatat: who });
-        close(); toast(`${fmt(tot)} bibit dipindah ke ${Object.keys(per).join(', ')}.`); renderNursery(shell);
+        // selisih hitung dicatat di lot asal sebagai penyesuaian (bukan kesalahan)
+        if (lebih) await ins('lot_log', { lot_id: l.id, tipe: 'opname', n: tot - l.jumlah, ket: 'selisih hitung saat pindah (lebih): ' + cat, oleh: S.me.id, nama_pencatat: who });
+        if (buang) await ins('lot_log', { lot_id: l.id, tipe: 'opname', n: -(l.jumlah - tot), ket: 'selisih hitung saat pindah (kurang): ' + cat, oleh: S.me.id, nama_pencatat: who });
+        await upd('lot', { id: l.id }, { jumlah: lebih || buang ? 0 : l.jumlah - tot }); await ins('lot_log', { lot_id: l.id, tipe: 'pindah_keluar', n: tot, ket: 'ke ' + Object.keys(per).join(', ') + (cat && (lebih || buang) ? ' · ' + cat : ''), oleh: S.me.id, nama_pencatat: who });
+        close(); toast(`${fmt(tot)} bibit dipindah ke ${Object.keys(per).join(', ')}.${lebih ? ` Lebih ${fmt(tot - l.jumlah)} dicatat sebagai selisih.` : buang ? ` Selisih ${fmt(l.jumlah - tot)} dicatat.` : ''}`); renderNursery(shell);
       } catch (x) { q('#mvOk').disabled = false; fail(x.message); }
     });
   });
