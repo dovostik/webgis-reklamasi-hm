@@ -60,9 +60,11 @@ function bedSheet(kode, shell) {
     ${pj ? `<div class="alert warn">Bedengan ${esc(b.tahap)} ini <b>dipinjam sebagai ${esc(pj.tahap)}</b> sejak ${tgl(pj.mulai)} (${esc(pj.alasan || '-')}, oleh ${esc(nm(pj.oleh))}). Bibit di sini dihitung sebagai tahap ${esc(pj.tahap)}.${gl ? '' : ''}</div>${gl ? `<button class="btn ghost block" id="pjEnd">Kembalikan jadi ${esc(b.tahap)}</button>` : ''}` : gl ? '<button class="btn ghost block" id="pjNew">Pinjam bedengan untuk tahap lain</button>' : ''}
     <div><div class="row between small"><span>Terisi</span><span class="mono">${fmt(f)} / ${fmt(cap)}${isRole('admin', 'nursery') ? ' <a href="#" id="capEd" class="small">Ubah kapasitas</a>' : ''}</span></div><div class="bar"><span style="width:${Math.min(100, f / cap * 100)}%"></span></div></div>
     ${ls.map(l => { const st = L.stage(l); return `<div class="sec"><div class="row between"><b>${esc(jn(l.jenis))}${l.sumber === 'beli' ? ' <span class="pill s-pend">Beli</span>' : ''}</b>${st.aklim ? `<span class="pill s-warn">Aklimatisasi${st.left > 0 ? ' · ' + st.left + ' hari' : ' · hitung'}</span>` : st.ready ? '<span class="pill s-ok">Siap kirim</span>' : st.due ? '<span class="pill s-warn">Waktunya pindah</span>' : `<span class="pill s-idle">${st.left} hari lagi</span>`}</div><dl class="kv"><dt>Jumlah</dt><dd>${fmt(l.jumlah)}</dd>${l.sumber === 'beli' ? `<dt>Asal</dt><dd>Beli · ${esc(S.beli?.find(x => x.id === l.beli_id)?.pemasok || '')}</dd><dt>Datang</dt><dd>${tgl(l.tgl_sapih)}</dd>` : `<dt>Sapih</dt><dd>${tgl(l.tgl_sapih)}</dd>`}<dt>Masuk bedengan</dt><dd>${tgl(l.tgl_masuk)}</dd>${l.sumber === 'beli' ? '' : `<dt>Umur</dt><dd>${fmt(G.diffDays(G.today(), l.tgl_sapih) / 7, 1)} minggu</dd>`}</dl>${can && !st.aklim ? `<div class="grid2"><button class="btn ghost sm" data-afk="${l.id}">Catat mati/afkir</button>${st.due ? `<button class="btn sm" data-move="${l.id}">Pindahkan</button>` : pj && pj.tahap === 'BST' && realRoom(l.jenis) > 0 ? `<button class="btn sm" data-mvreal="${l.id}">Pindah ke BST asli</button>` : '<span></span>'}</div>` : ''}</div>`; }).join('') || '<p class="muted small" style="margin:0">Bedengan kosong.</p>'}
+    ${can && ['Pembesaran', 'BST'].includes(L.tahapOf(kode)) ? `<button class="btn block" id="fillBed">Isi bedengan ini</button>` : ''}
     ${can && L.tahapOf(kode) === 'Penyapihan' ? `<form class="sec" id="nl"><h3>Lot baru (sapih ke polybag)</h3><div class="grid2"><label class="f" for="nlJ">Jenis<select id="nlJ">${S.jenisAktif.filter(j => j.tersedia !== false).map(j => `<option value="${j.kode}">${esc(j.nama)}</option>`).join('')}</select></label><label class="f" for="nlN">Jumlah bibit<input id="nlN" type="number" min="1" inputmode="numeric" value="${Math.max(0, Math.min(1200, cap - f))}"></label></div>${crewName()}<p class="note">Polybag kecil berkurang otomatis sesuai jumlah bibit.</p><p class="err" id="nlErr" hidden></p><button class="btn" type="submit">Tambah lot</button></form>` : ''}
     ${hist.length ? `<details class="sec"><summary class="small"><b>Riwayat pinjam bedengan (${hist.length})</b></summary><ul class="small" style="margin:6px 0 0;padding-left:18px">${hist.map(h => `<li>${tgl(h.mulai)} → ${h.selesai_at ? tgl(h.selesai_at) : 'sekarang'} · dipakai ${esc(h.tahap)} · ${esc(h.alasan || '-')} · ${esc(nm(h.oleh))}${h.selesai_at ? ` · dikembalikan ${esc(h.selesai_alasan || '')}${h.selesai_oleh ? ' oleh ' + esc(nm(h.selesai_oleh)) : ''}` : ''}</li>`).join('')}</ul></details>` : ''}
     <button class="btn ghost block" data-close>Tutup</button></div>`, (box, close) => {
+    const fb = box.querySelector('#fillBed'); if (fb) fb.addEventListener('click', () => { close(); fillSheet(kode, shell); });
     const pn = box.querySelector('#pjNew'); if (pn) pn.addEventListener('click', () => { close(); pinjamSheet(b, shell); });
     const pe = box.querySelector('#pjEnd'); if (pe) pe.addEventListener('click', async () => {
       const ls2 = L.lotsIn(kode); if (!(await confirmSheet(`Kembalikan ${esc(kode)} menjadi bedengan ${esc(b.tahap)}?${ls2.length ? ` Masih ada ${fmt(L.fill(kode))} bibit di sini; tahapnya akan dihitung ulang sebagai ${esc(b.tahap)}.` : ''}`, 'Kembalikan'))) return;
@@ -111,6 +113,57 @@ function pinjamCard() {
   return `<div class="card stack"><div class="row between"><h2>Bedengan dipinjam (${act.length})</h2><span class="small muted">${fmt(tot)} bibit</span></div>
     ${bst.length && (rF > 0 || rL > 0) ? `<div class="alert">BST asli ada tempat: Fastgrow ${fmt(rF)}, Lokal ${fmt(rL)} bibit. Pindahkan bibit dari bedengan pinjaman (buka bedengan → <b>Pindah ke BST asli</b>).</div>` : ''}
     <div class="list">${act.map(p => { const b = S.bedMap[p.bedengan]; return `<a class="item" href="#" data-bed="${esc(p.bedengan)}"><span class="tagid">${esc(p.bedengan)}</span><div class="grow"><b>${esc(b?.tahap || '')} → dipakai ${esc(p.tahap)}</b><span>sejak ${tgl(p.mulai)} · ${fmt(L.fill(p.bedengan))} bibit · ${esc(p.alasan || '')}</span></div></a>`; }).join('')}</div></div>`;
+}
+// Isi bedengan Pembesaran/BST hanya dari asal yang jelas: tahap sebelumnya, bedengan setahap lain, atau pembelian
+function fillSheet(kode, shell) {
+  if (activeOpname()) return toast('Stock opname sedang berjalan. Pemindahan bibit dikunci sampai opname selesai.', 4000);
+  const b = L.bed(kode), T = L.tahapOf(kode), prev = T === 'BST' ? 'Pembesaran' : 'Penyapihan', pj = L.pinjamOf(kode);
+  const cap = b.kapasitas || 1300, room = cap - L.fill(kode);
+  // BST asli: Fastgrow hanya pionir, Lokal hanya lokal/MPTS; bedengan pinjaman menerima keduanya
+  const tipeOk = l => T !== 'BST' || pj || (b.cluster === 'BF') === (S.jenisMap[l.jenis]?.tipe === 'pionir');
+  const src = l => l.jumlah > 0 && l.bedengan !== kode && !L.stage(l).aklim && tipeOk(l);
+  const dariPrev = S.lot.filter(l => src(l) && L.tahapOf(l.bedengan) === prev).sort((a, c) => (L.stage(c).due - L.stage(a).due) || a.bedengan.localeCompare(c.bedengan));
+  const dariSama = S.lot.filter(l => src(l) && L.tahapOf(l.bedengan) === T).sort((a, c) => a.bedengan.localeCompare(c.bedengan));
+  const row = (l, k) => { const st = L.stage(l); return `<option value="${l.id}" data-k="${k}">${esc(l.bedengan)} · ${esc(jn(l.jenis))} · ${fmt(l.jumlah)}${k === 'prev' ? (st.due ? ' · sudah waktunya' : ` · belum waktunya (${st.left} hari lagi)`) : ` · masuk ${tgl(l.tgl_masuk)}`}</option>`; };
+  let mode = dariPrev.length ? 'prev' : 'sama';
+  const opts = () => (mode === 'prev' ? dariPrev : dariSama).map(l => row(l, mode)).join('');
+  sheet(`<form class="stack" id="fs"><h2>Isi ${esc(kode)}</h2><p class="small" style="margin:0">${esc(T)}${pj ? ' (pinjaman)' : ''} · terisi ${fmt(L.fill(kode))} / ${fmt(cap)} · sisa tempat <b>${fmt(room)}</b></p>
+    <div class="seg" role="group" aria-label="Asal bibit"><button type="button" data-m="prev" class="${mode === 'prev' ? 'on' : ''}">Dari ${prev.toLowerCase()}</button><button type="button" data-m="sama" class="${mode === 'sama' ? 'on' : ''}">Dari ${T === 'BST' ? 'BST' : 'pembesaran'} lain</button>${T === 'BST' ? '<button type="button" data-m="beli">Pembelian</button>' : ''}</div>
+    <div id="fsBody"><label class="f" for="fsL">Lot asal<select id="fsL">${opts()}</select></label><p class="note" id="fsNone" hidden></p>
+      <label class="f" for="fsN">Jumlah dipindah<input id="fsN" type="number" min="1" inputmode="numeric"></label>
+      <label class="f" for="fsA" id="fsAW" hidden>Alasan pindah lebih awal <small>wajib</small><input id="fsA" placeholder="mis. bibit sudah cukup tinggi, pembesaran penuh"></label>
+      ${crewName()}<p class="note" id="fsInfo" style="margin:0"></p></div>
+    <div id="fsBeli" hidden><p class="small" style="margin:0">Bibit beli masuk lewat kartu <b>Bibit beli</b> di halaman Nursery: terima kiriman pemasok (foto bukti), aklimatisasi 7 hari, lalu hitung. Bedengan BST tujuan dipilih di sana.</p></div>
+    <p class="err" id="fsE" hidden></p><div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit" id="fsOk">Pindahkan</button></div></form>`, (box, close) => {
+    const q = s => box.querySelector(s);
+    const sync = () => {
+      const beli = mode === 'beli'; q('#fsBody').hidden = beli; q('#fsBeli').hidden = !beli; q('#fsOk').hidden = beli;
+      if (beli) return; const list = mode === 'prev' ? dariPrev : dariSama; q('#fsNone').hidden = !!list.length; q('#fsNone').textContent = `Tidak ada lot ${mode === 'prev' ? prev.toLowerCase() : 'di bedengan ' + T + ' lain'} yang cocok untuk bedengan ini.`; q('#fsOk').disabled = !list.length;
+      const l = S.lot.find(x => x.id === q('#fsL').value); if (!l) { q('#fsAW').hidden = true; q('#fsInfo').textContent = ''; return; }
+      const early = mode === 'prev' && !L.stage(l).due; q('#fsAW').hidden = !early;
+      q('#fsN').max = Math.min(l.jumlah, room); if (!q('#fsN').value || Number(q('#fsN').value) > Math.min(l.jumlah, room)) q('#fsN').value = Math.max(0, Math.min(l.jumlah, room));
+      q('#fsInfo').textContent = mode === 'prev' ? `Umur ${T === 'BST' ? 'BST' : 'pembesaran'} mulai dihitung hari ini.` : `Tanggal masuk tetap ${tgl(l.tgl_masuk)}, umur tidak mundur.`;
+    };
+    box.querySelectorAll('[data-m]').forEach(x => x.addEventListener('click', () => { mode = x.dataset.m; box.querySelectorAll('[data-m]').forEach(y => y.classList.toggle('on', y === x)); if (mode !== 'beli') { q('#fsL').innerHTML = opts(); q('#fsN').value = ''; } sync(); }));
+    q('#fsL').addEventListener('change', () => { q('#fsN').value = ''; sync(); }); sync();
+    q('#fs').addEventListener('submit', async e => {
+      e.preventDefault(); const er = q('#fsE'), fail = m => { er.textContent = m; er.hidden = false; };
+      const l = S.lot.find(x => x.id === q('#fsL').value); if (!l) return fail('Pilih lot asal.');
+      const n = Math.round(Number(q('#fsN').value)); const who = getCrew(box); if (!who) return fail('Isi nama pencatat.');
+      if (!(n > 0)) return fail('Isi jumlah.'); if (n > l.jumlah) return fail(`Lot asal hanya ${fmt(l.jumlah)} bibit.`); if (n > room) return fail(`Bedengan ini hanya muat ${fmt(room)} lagi.`);
+      const early = mode === 'prev' && !L.stage(l).due, alasan = q('#fsA').value.trim(); if (early && !alasan) return fail('Isi alasan memindah lebih awal.');
+      const ls = L.lotsIn(kode); if (ls.length && !ls.some(x => x.jenis === l.jenis)) { const empty = (T === 'BST' ? L.realBST(b.cluster) : S.bedengan.filter(x => L.tahapOf(x.kode) === T)).some(x => x.status === 'aktif' && x.kode !== kode && L.fill(x.kode) === 0); if (empty || L.fill(kode) > cap / 2 || new Set(ls.map(x => x.jenis)).size >= 2) return fail(`${jn(l.jenis)} belum ada di bedengan ini. Jenis baru hanya boleh dicampur bila tidak ada bedengan kosong dan bedengan ini terisi ≤ ½.`); }
+      q('#fsOk').disabled = true;
+      try {
+        const id = uid(); const ket = 'dari ' + l.bedengan + (early ? ` (lebih awal ${L.stage(l).left} hari: ${alasan})` : '');
+        await ins('lot', { id, bedengan: kode, jenis: l.jenis, jumlah: n, tgl_sapih: l.tgl_sapih, tgl_masuk: mode === 'prev' ? G.today() : l.tgl_masuk, sumber: l.sumber || 'mandiri', beli_id: l.beli_id || null, created_by: S.me.id });
+        await ins('lot_log', { lot_id: id, tipe: 'pindah_masuk', n, ket, oleh: S.me.id, nama_pencatat: who });
+        await upd('lot', { id: l.id }, { jumlah: l.jumlah - n });
+        await ins('lot_log', { lot_id: l.id, tipe: 'pindah_keluar', n, ket: 'ke ' + kode + (early ? ` (lebih awal: ${alasan})` : ''), oleh: S.me.id, nama_pencatat: who });
+        close(); toast(`${fmt(n)} ${jn(l.jenis)} dipindah dari ${l.bedengan} ke ${kode}.`); renderNursery(shell);
+      } catch (x) { q('#fsOk').disabled = false; fail(x.message); }
+    });
+  });
 }
 // GL Nursery: pinjam bedengan untuk tahap lain (tanpa persetujuan, riwayat tercatat)
 function pinjamSheet(b, shell) {
