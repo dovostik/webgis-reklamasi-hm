@@ -527,6 +527,49 @@ let gTab = 'material', gQ = '';
 const KEP = ['Pemupukan', 'Penyemprotan', 'Penanaman', 'Penyulaman', 'Pengisian polybag', 'Penyapihan', 'Spraying fungisida', 'Spraying insektisida', 'Improvement', 'Lainnya'];
 const LOK = ['Nursery', 'Highwall', 'Enviro', 'Area improvement', 'Area keterlanjuran', 'Setpond', 'Pembuangan'];
 const grp = (list, row) => { const g = {}; list.forEach(x => { const k = x.kategori || 'Tanpa kategori'; (g[k] = g[k] || []).push(x); }); return Object.keys(g).sort().map(k => `<h3 style="margin:12px 0 4px">${esc(k)} (${g[k].length})</h3><div class="list">${g[k].map(row).join('')}</div>`).join('') || '<p class="muted">Tidak ada.</p>'; };
+// Penerimaan barang: satu surat jalan / PO untuk banyak barang, satu foto bukti; barang baru bisa langsung ditambahkan
+function terimaBarangSheet(shell) {
+  const can = isRole('admin', 'nursery'); const names = S.barang.filter(m => m.aktif !== false).map(m => m.nama).sort();
+  const cats = [...new Set(S.barang.map(m => m.kategori).filter(Boolean))].sort();
+  const row = () => `<div class="sec tbrow stack" style="gap:6px"><div class="grid2" style="grid-template-columns:1fr 100px auto;align-items:end"><label class="f">Barang<input class="tbB" list="dlBrg" placeholder="ketik nama barang"></label><label class="f">Jumlah<input class="tbN" type="number" min="0" step="any" inputmode="decimal"></label><button type="button" class="btn ghost sm tbDel" aria-label="Hapus">✕</button></div>
+    <p class="small tbInfo" style="margin:0"></p><div class="grid2 tbNew" hidden><label class="f">Kategori<input class="tbK" list="dlKat"></label><label class="f">Satuan<input class="tbS" list="dlSat" placeholder="kg, roll, lembar"></label></div></div>`;
+  sheet(`<form class="stack" id="tb"><h2>Penerimaan barang</h2>
+    <div class="grid2"><label class="f" for="tbV">Pemasok<input id="tbV" placeholder="nama toko / vendor"></label><label class="f" for="tbD">No. surat jalan / PO<input id="tbD" placeholder="mis. SJ-0123"></label></div>
+    <button type="button" class="btn ghost block" id="tbF">Foto bukti (surat jalan / DO / PO)</button><p class="note" id="tbFs" style="margin:0">Belum ada bukti.</p>
+    <datalist id="dlBrg">${names.map(n => `<option value="${esc(n)}">`).join('')}</datalist><datalist id="dlKat">${cats.map(n => `<option value="${esc(n)}">`).join('')}</datalist><datalist id="dlSat">${['kg', 'gram', 'sak', 'liter', 'ml', 'pcs', 'roll', 'lembar', 'meter', 'botol', 'pak', 'dus', 'karung', 'unit'].map(n => `<option value="${n}">`).join('')}</datalist>
+    <div id="tbRows">${row()}</div><button type="button" class="btn ghost sm" id="tbAdd">+ Barang lain</button>
+    ${crewName()}<p class="err" id="tbE" hidden></p><div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit" id="tbOk">Simpan semua</button></div></form>`, (box, close) => {
+    const q = x => box.querySelector(x); let bukti = null;
+    const find = n => S.barang.find(m => m.nama.toLowerCase() === String(n).trim().toLowerCase());
+    const bind = r => { const upd1 = () => { const nm1 = r.querySelector('.tbB').value.trim(), m = find(nm1), info = r.querySelector('.tbInfo'); r.querySelector('.tbNew').hidden = !nm1 || !!m;
+        info.innerHTML = !nm1 ? '' : m ? `Stok sekarang ${m.stok == null ? 'belum dihitung' : fmt(m.stok, 2)} ${esc(m.satuan || '')} · masuk dalam satuan <b>${esc(m.satuan || '-')}</b>` : can ? '<b>Barang baru</b>: isi kategori dan satuan, otomatis ditambahkan ke daftar.' : '<b style="color:var(--bad)">Barang belum terdaftar.</b> Barang baru hanya bisa ditambah GL Nursery.'; };
+      r.querySelector('.tbB').addEventListener('input', upd1); r.querySelector('.tbDel').addEventListener('click', () => { if (box.querySelectorAll('.tbrow').length > 1) r.remove(); else { r.querySelectorAll('input').forEach(x => x.value = ''); upd1(); } }); };
+    box.querySelectorAll('.tbrow').forEach(bind);
+    q('#tbAdd').addEventListener('click', () => { q('#tbRows').insertAdjacentHTML('beforeend', row()); bind([...box.querySelectorAll('.tbrow')].pop()); [...box.querySelectorAll('.tbB')].pop().focus(); });
+    q('#tbF').addEventListener('click', async () => { const f = await pickPhoto({ gallery: true, title: 'Foto bukti penerimaan barang' }); if (!f) return; q('#tbFs').textContent = 'Mengunggah…'; try { const path = `bukti/terima-${Date.now()}.jpg`; await SB.upload('scan', path, f); bukti = path; q('#tbFs').textContent = 'Bukti terunggah.'; } catch (e) { bukti = null; q('#tbFs').textContent = e.net ? 'Gagal unggah: tidak ada sinyal.' : 'Gagal unggah: ' + e.message; } });
+    q('#tb').addEventListener('submit', async e => {
+      e.preventDefault(); const er = q('#tbE'), fail = m => { er.textContent = m; er.hidden = false; };
+      const who = getCrew(box); if (!who) return fail('Isi nama pencatat.');
+      const vend = q('#tbV').value.trim(), doc = q('#tbD').value.trim(); if (!vend && !doc) return fail('Isi pemasok atau nomor surat jalan / PO.');
+      if (!bukti) return fail('Lampirkan foto bukti (surat jalan / DO / PO).');
+      const items = {}, baru = {};
+      for (const r of box.querySelectorAll('.tbrow')) {
+        const nm1 = r.querySelector('.tbB').value.trim(), n = Number(r.querySelector('.tbN').value); if (!nm1 && !r.querySelector('.tbN').value) continue;
+        if (!nm1) return fail('Ada baris tanpa nama barang.'); if (!(n > 0)) return fail(`Isi jumlah ${nm1}.`);
+        const m = find(nm1);
+        if (!m) { if (!can) return fail(`${nm1} belum terdaftar. Minta GL Nursery menambahkannya.`); const kat = r.querySelector('.tbK').value.trim(), sat = r.querySelector('.tbS').value.trim(); if (!kat || !sat) return fail(`Isi kategori dan satuan untuk barang baru ${nm1}.`); baru[nm1.toLowerCase()] = { nama: nm1.replace(/^./, c => c.toUpperCase()), kategori: kat, satuan: sat }; }
+        const key = (m ? m.nama : nm1).toLowerCase(); items[key] = { nama: m ? m.nama : baru[nm1.toLowerCase()].nama, n: (items[key]?.n || 0) + n };
+      }
+      const list = Object.values(items); if (!list.length) return fail('Isi minimal satu barang.');
+      q('#tbOk').disabled = true; const ket = ['Penerimaan', doc, vend].filter(Boolean).join(' · ') + ' · ' + who;
+      try {
+        for (const b of Object.values(baru)) await ins('barang', { nama: b.nama, kategori: b.kategori, satuan: b.satuan, minimum: null, stok: null, aktif: true }, { offline: false });
+        for (const it of list) { const m = find(it.nama); await ins('barang_tx', { barang: it.nama, tipe: 'masuk', n: it.n, keperluan: ket, lokasi: 'Gudang', bukti, oleh: S.me.id }); await upd('barang', { nama: it.nama }, { stok: Number(m?.stok || 0) + it.n }); }
+        close(); toast(`${list.length} barang diterima${Object.keys(baru).length ? `, ${Object.keys(baru).length} barang baru ditambahkan` : ''}.`, 3500); renderGudang(shell);
+      } catch (x) { q('#tbOk').disabled = false; fail(x.net ? 'Butuh sinyal untuk menambah barang baru.' : x.message); }
+    });
+  });
+}
 let gKond = 'semua';
 // kondisi alat: tandai rusak, sudah diperbaiki, dibuang (afkir), hilang — semua tercatat di riwayat alat
 function kondisiSheet(a, shell) {
@@ -559,7 +602,7 @@ export function renderGudang(shell) {
   const alat = S.alat.filter(a => a.aktif !== false && (!gQ || a.nama.toLowerCase().includes(gQ.toLowerCase())));
   shell('Gudang', null, `<div class="stack">
     <div class="seg"><button data-g="material" class="${gTab === 'material' ? 'on' : ''}">Habis pakai</button><button data-g="alat" class="${gTab === 'alat' ? 'on' : ''}">Alat dipinjam</button></div>
-    ${gTab === 'material' ? `<input id="gq" placeholder="Cari barang" value="${esc(gQ)}" aria-label="Cari barang">${isRole('admin', 'nursery') ? `<button class="btn ghost block" id="gNew">+ Tambah barang baru${gQ && !S.barang.some(m => m.nama.toLowerCase().includes(gQ.toLowerCase())) ? ` "${esc(gQ)}"` : ''}</button>` : ''}${grp(S.barang.filter(m => m.aktif !== false && (!gQ || (m.nama + ' ' + (m.kategori || '')).toLowerCase().includes(gQ.toLowerCase()))), m => { const [c, t] = st(m); return `<div class="item"><div class="grow"><b>${esc(m.nama)}</b><span>${m.stok == null ? '–' : fmt(m.stok, Number(m.stok) % 1 ? 2 : 0)} ${esc(m.satuan)} · min ${fmt(m.minimum)} ${esc(m.satuan)}</span></div><span class="pill ${c}">${t}</span>${can ? `<button class="btn ghost sm" data-bx="${esc(m.nama)}">Catat</button>` : ''}</div>`; })}<p class="note">Stok dihitung dari masuk − keluar. Item "Perlu opname" menunggu hitung fisik. Kohe 25 kg/sak, arang sekam 25 kg/sak.</p>`
+    ${gTab === 'material' ? `<input id="gq" placeholder="Cari barang" value="${esc(gQ)}" aria-label="Cari barang">${isRole('admin', 'nursery', 'crew') ? '<button class="btn block" id="gTrm">Penerimaan barang (satu surat jalan, banyak barang)</button>' : ''}${isRole('admin', 'nursery') ? `<button class="btn ghost block" id="gNew">+ Tambah barang baru${gQ && !S.barang.some(m => m.nama.toLowerCase().includes(gQ.toLowerCase())) ? ` "${esc(gQ)}"` : ''}</button>` : ''}${grp(S.barang.filter(m => m.aktif !== false && (!gQ || (m.nama + ' ' + (m.kategori || '')).toLowerCase().includes(gQ.toLowerCase()))), m => { const [c, t] = st(m); return `<div class="item"><div class="grow"><b>${esc(m.nama)}</b><span>${m.stok == null ? '–' : fmt(m.stok, Number(m.stok) % 1 ? 2 : 0)} ${esc(m.satuan)} · min ${fmt(m.minimum)} ${esc(m.satuan)}</span></div><span class="pill ${c}">${t}</span>${can ? `<button class="btn ghost sm" data-bx="${esc(m.nama)}">Catat</button>` : ''}</div>`; })}<p class="note">Stok dihitung dari masuk − keluar. Item "Perlu opname" menunggu hitung fisik. Kohe 25 kg/sak, arang sekam 25 kg/sak.</p>`
       : `<input id="gq" placeholder="Cari alat" value="${esc(gQ)}" aria-label="Cari alat">
         <div class="seg" role="group" aria-label="Kondisi"><button data-kf="semua" class="${gKond === 'semua' ? 'on' : ''}">Semua</button><button data-kf="baik" class="${gKond === 'baik' ? 'on' : ''}">Baik</button><button data-kf="rusak" class="${gKond === 'rusak' ? 'on' : ''}">Rusak (${S.alat.filter(a => a.aktif !== false && Number(a.rusak) > 0).length})</button></div>
         <div class="card stack"><h2>Sedang dipinjam (${dip.length})</h2>${dip.map(p => `<div class="item"><div class="grow"><b>${esc(S.alat.find(a => a.id === p.alat_id)?.nama)}</b><span>${esc(p.peminjam)} · ${esc(p.ket)} · ${tgl(p.at)}${p.oleh !== S.me.id ? ' · dicatat ' + esc(nm(p.oleh)) : ''}</span></div>${isRole('viewer') ? '' : `<button class="btn sm" data-kb="${p.id}">Kembali</button>`}</div>`).join('') || '<p class="muted small" style="margin:0">Tidak ada.</p>'}</div>
@@ -568,6 +611,7 @@ export function renderGudang(shell) {
   $$('[data-kf]').forEach(b => b.addEventListener('click', () => { gKond = b.dataset.kf; renderGudang(shell); }));
   $$('[data-ak]').forEach(b => b.addEventListener('click', () => kondisiSheet(S.alat.find(x => x.id === +b.dataset.ak), shell)));
   const q = $('#gq'); if (q) q.addEventListener('change', e => { gQ = e.target.value; renderGudang(shell); });
+  const gt = $('#gTrm'); if (gt) gt.addEventListener('click', () => terimaBarangSheet(shell));
   const gn = $('#gNew'); if (gn) gn.addEventListener('click', async () => { const { barangSheet } = await import('./master.js'); const exists = gQ && S.barang.some(m => m.nama.toLowerCase().includes(gQ.toLowerCase())); barangSheet(null, shell, { nama: exists ? '' : gQ.trim().replace(/^./, c => c.toUpperCase()), after: n => { gQ = n; renderGudang(shell); } }); });
   $$('[data-pj]').forEach(b => b.addEventListener('click', () => {
     const a = S.alat.find(x => x.id === +b.dataset.pj);
