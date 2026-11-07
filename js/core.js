@@ -248,11 +248,17 @@ export function scanQR(title = 'Arahkan kamera ke QR tag') {
 export function normTag(v) { const m = /(\d{1,6})\s*$/.exec(v); if (/^HM-T-\d{6}$/.test(v)) return v; if (m && /HM|T|^\d+$/.test(v)) return 'HM-T-' + m[1].padStart(6, '0'); return v; }
 
 // ---------- foto ----------
-export function pickPhoto() {
+// opts.gallery: tawarkan pilihan Kamera atau Galeri (untuk foto bukti dokumen); tanpa itu langsung kamera (foto lapangan)
+export function pickPhoto(opts = {}) {
   return new Promise(res => {
-    const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.capture = 'environment';
-    i.onchange = async () => { const f = i.files && i.files[0]; if (!f) return res(null); res(await compress(f)); };
-    i.click();
+    const open = cam => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; if (cam) i.capture = 'environment';
+      i.onchange = async () => { const f = i.files && i.files[0]; if (!f) return res(null); res(await compress(f)); }; i.click(); };
+    if (!opts.gallery) return open(true);
+    sheet(`<div class="stack"><h2>${esc(opts.title || 'Ambil foto bukti')}</h2><div class="grid2"><button class="btn" id="ppCam">Kamera</button><button class="btn ghost" id="ppGal">Galeri / file</button></div><button class="btn ghost block" data-close>Batal</button></div>`, (box, close) => {
+      box.querySelector('#ppCam').addEventListener('click', () => { close(); open(true); });
+      box.querySelector('#ppGal').addEventListener('click', () => { close(); open(false); });
+      box.querySelector('[data-close]').addEventListener('click', () => res(null));
+    });
   });
 }
 // foto dari galeri (boleh foto lama) beserta lokasi & waktu ambil dari EXIF

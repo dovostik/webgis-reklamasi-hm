@@ -597,7 +597,7 @@ export function renderGudang(shell) {
       let tipe = 'keluar', bukti = null;
       const be = box.querySelector('#bxEd'); if (be) be.addEventListener('click', async () => { close(); const { barangSheet } = await import('./master.js'); barangSheet(m, shell, { after: n => { gQ = n; renderGudang(shell); } }); });
       box.querySelectorAll('[data-t]').forEach(x => x.addEventListener('click', () => { tipe = x.dataset.t; box.querySelectorAll('[data-t]').forEach(y => y.classList.toggle('on', y === x)); box.querySelector('#bxK').hidden = tipe !== 'keluar'; box.querySelector('#bxM').hidden = tipe !== 'masuk'; box.querySelector('#bxL').textContent = tipe === 'opname' ? `Hasil hitung fisik (${m.satuan})` : `Jumlah (${m.satuan})`; }));
-      box.querySelector('#bxF').addEventListener('click', async () => { const f = await pickPhoto(); if (!f) return; try { bukti = `bukti/${Date.now()}.jpg`; await SB.upload('scan', bukti, f); box.querySelector('#bxFs').textContent = 'Bukti terunggah.'; } catch (e) { bukti = null; toast(e.message); } });
+      box.querySelector('#bxF').addEventListener('click', async () => { const f = await pickPhoto({ gallery: true, title: 'Foto bukti barang masuk' }); if (!f) return; try { bukti = `bukti/${Date.now()}.jpg`; await SB.upload('scan', bukti, f); box.querySelector('#bxFs').textContent = 'Bukti terunggah.'; } catch (e) { bukti = null; toast(e.message); } });
       box.querySelector('#bx').addEventListener('submit', async e => {
         e.preventDefault(); const n = Number(box.querySelector('#bxN').value), er = box.querySelector('#bxE');
         if (!(n >= 0) || box.querySelector('#bxN').value === '' || (tipe !== 'opname' && n <= 0)) { er.textContent = 'Isi jumlah.'; er.hidden = false; return; }

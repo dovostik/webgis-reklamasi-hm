@@ -66,7 +66,7 @@ function terimaSheet(rerender) {
     q('#tbJ').addEventListener('change', beds);
     q('#tbAdd').addEventListener('click', () => q('#tbBeds').insertAdjacentHTML('beforeend', bedRow(q('#tbJ').value, q('#tbBeds').children.length)));
     q('#tbG').addEventListener('change', () => { const b = S.beli.find(x => x.id === q('#tbG').value); if (b) { q('#tbP').value = b.pemasok; q('#tbJ').value = b.jenis; q('#tbN').value = hutang(b); beds(); } });
-    q('#tbF').addEventListener('click', async () => { const f = await pickPhoto(); if (!f) return; blob = f; bukti = `bukti/beli-${Date.now()}.jpg`; q('#tbFs').textContent = 'Bukti siap disimpan.'; });
+    q('#tbF').addEventListener('click', async () => { const f = await pickPhoto({ gallery: true, title: 'Foto bukti kiriman bibit' }); if (!f) return; blob = f; bukti = `bukti/beli-${Date.now()}.jpg`; q('#tbFs').textContent = 'Bukti siap disimpan.'; });
     q('#tb').addEventListener('submit', async e => {
       e.preventDefault(); er.hidden = true;
       const who = getCrew(box), n = Number(q('#tbN').value), jk = q('#tbJ').value, pem = q('#tbP').value.trim();
