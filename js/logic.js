@@ -1,5 +1,6 @@
 // Aturan bisnis reklamasi & nursery (dipakai semua layar).
-export const STD = { lubang: 881, pupuk: 1762, npk: 44, pio: 625, sis: 256, lcc: 15, kohe: 25, sekam: 25, ambang: 90 };
+// standar per pohon: pupuk kandang 1 kg, NPK 50 g; LCC 20 kg per Ha
+export const STD = { lubang: 881, koheKg: 1, npkG: 50, pupuk: 881, npk: 44.05, pio: 625, sis: 256, lcc: 20, kohe: 25, sekam: 25, ambang: 90 };
 export const CAP_DEFAULT = 1300;
 export const KONDISI = [['pmk', 'PMK spreading'], ['tergenang', 'Tergenang'], ['berpasir', 'Berpasir'], ['ob', 'Tanah OB']];
 export const KONDLBL = Object.fromEntries(KONDISI);
@@ -36,7 +37,7 @@ export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;'
 // ---------- blok ----------
 export function blokName(b) { if (!b) return '–'; if (b.layer === 'bastl') return b.nama || `${b.kode_bastl} · petak ${b.id.slice(2)}`; return b.nama; }
 export const vendorOf = b => b.layer === 'bastl' ? 'exdas' : 'bumdes';
-export function needs(ha) { return { lubang: Math.round(STD.lubang * ha), pupuk: Math.round(STD.pupuk * ha), npk: Math.round(STD.npk * ha), pio: Math.round(STD.pio * ha), sis: Math.round(STD.sis * ha), lcc: Math.round(STD.lcc * ha), sakKohe: Math.ceil(STD.pupuk * ha / STD.kohe), hariKerja: Math.ceil(ha / 10 * 30) }; }
+export function needs(ha) { return { lubang: Math.round(STD.lubang * ha), pupuk: Math.round(STD.pupuk * ha), npk: Math.round(STD.npk * ha * 10) / 10, pio: Math.round(STD.pio * ha), sis: Math.round(STD.sis * ha), lcc: Math.round(STD.lcc * ha), sakKohe: Math.ceil(STD.pupuk * ha / STD.kohe), hariKerja: Math.ceil(ha / 10 * 30) }; }
 
 export function makeLogic(S) {
   const J = () => S.jenisMap;
@@ -196,14 +197,14 @@ export function makeLogic(S) {
     const rows = [['Pioneer', rl.pio, mp], ['Sisipan', rl.sis, ms], ['Jumlah', rl.pio + rl.sis, mp + ms]].map(([n, r, m]) => ({ n, r, m, h: r - m, p: r ? (r - m) / r * 100 : 0 }));
     return { rows, pct: rows[2].p, aktual: rl.aktual };
   }
-  // kebutuhan material per pekerjaan aktif: BASTL (penanaman) = pupuk kandang + LCC; retensi yang sudah mulai & rotasi = NPK seluruh luas
+  // kebutuhan material per pekerjaan aktif: BASTL (penanaman) = pupuk kandang + NPK + LCC; retensi yang sudah mulai & rotasi = NPK seluruh luas
   const MAT = { kohe: { lbl: 'Pupuk kandang (kohe)', sat: 'sak', match: b => /kohe|kandang/i.test(b.nama) }, lcc: { lbl: 'LCC / cover crop', sat: 'kg', match: b => (b.kategori || '').toUpperCase() === 'LCC' }, npk: { lbl: 'Pupuk NPK', sat: 'kg', match: b => /npk/i.test(b.nama) } };
   const unitK = (sat, to) => { const s = String(sat || '').toLowerCase(); if (to === 'kg') return s === 'gr' || s === 'g' || s === 'gram' ? 0.001 : 1; return 1; };
   function matDemand() {
     const out = [];
     S.periode.filter(p => p.status === 'pelaksanaan').forEach(p => {
       const b = S.blokMap[p.blok_id]; if (!b) return; const n = needs(b.ha); const want = [];
-      if (p.tipe === 'cek1') want.push(['kohe', n.sakKohe], ['lcc', n.lcc]);
+      if (p.tipe === 'cek1') want.push(['kohe', n.sakKohe], ['npk', n.npk], ['lcc', n.lcc]);
       else if (p.tipe === 'rotasi' || (p.tipe === 'retensi' && !(retensiInfo(p)?.left > 0))) want.push(['npk', n.npk]);
       want.forEach(([kel, need]) => {
         const rows = (S.kirim_mat || []).filter(k => k.periode_id === p.id && k.kel === kel);
