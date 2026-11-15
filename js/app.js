@@ -6,7 +6,7 @@ import * as G from './logic.js';
 import { downloadTiles, tileList, tileInfo, tileJob, canInstall, isInstalled, promptInstall, persist, loadOrtho, ORTHO, SLOTS, orthoKey } from './offline.js';
 import { tokenGet, tokenSet, checkToken, uploadOrtho, jobStatus, lastJob } from './ortho-up.js';
 import { renderSesi, openScan, tagSheet, vendorNewTag } from './field.js';
-import { renderNursery, renderKirim, renderTampung, renderGudang, kembaliSheet, kembaliDue } from './nursery.js';
+import { renderNursery, renderKirim, renderTampung, renderGudang, kembaliSheet, kembaliDue, kembaliMatSheet } from './nursery.js';
 import { renderBAList, renderBA, approvePeriode, approvePP, renderCetakTag } from './ba.js';
 import { renderMaster } from './master.js';
 import { renderOpname } from './opname.js';
@@ -77,7 +77,7 @@ function countBadges() {
   if (isRole('admin', 'nursery')) { const n = L.sulamDemand().filter(o => o.kurang > 0).length + L.tanamDemand().length; if (n) b.kirim = n; }
   if (isRole('owner', 'exdas', 'bumdes', 'admin')) { const k = S.kirim.filter(x => x.status === 'dikirim' && seesBlok(S.blokMap[x.blok_id])).length + (S.kirim_mat || []).filter(x => x.status === 'dikirim' && seesBlok(S.blokMap[x.blok_id])).length; if (k) b.kirim = (b.kirim || 0) + k; }
   if (isRole('admin', 'nursery')) { const m = L.matDemand().filter(x => x.kurang > 0).length; if (m) b.kirim = (b.kirim || 0) + m; }
-  if (isRole('admin', 'nursery')) { const k = (S.kembali || []).filter(x => x.status === 'dikirim').length; if (k) b.tampung = k; }
+  if (isRole('admin', 'nursery')) { const k = (S.kembali || []).filter(x => x.status === 'dikirim').length + (S.kirim_mat || []).filter(x => x.kembali_at && !x.sisa_at).length; if (k) b.tampung = k; }
   if (isRole('suptend')) { const a = S.periode.filter(p => p.status === 'menunggu_persetujuan').length; if (a) b.tugas = (b.tugas || 0); }
   return b;
 }
@@ -324,7 +324,7 @@ function renderBlok(id) {
   const need = b.layer === 'bastl' ? `<div class="sec"><h3>Kebutuhan penanaman</h3><dl class="kv"><dt>Ajir & lubang</dt><dd>${fmt(n.lubang)}</dd><dt>Pupuk kandang 1 kg/pohon</dt><dd>${fmt(n.pupuk)} kg · ${fmt(n.sakKohe)} sak</dd><dt>NPK 50 g/pohon</dt><dd>${fmt(n.npk, 1)} kg</dd><dt>Pioneer / sisipan</dt><dd>${fmt(n.pio)} / ${fmt(n.sis)}</dd><dt>LCC 20 kg/Ha</dt><dd>${fmt(n.lcc)} kg</dd><dt>Perkiraan durasi</dt><dd>${n.hariKerja} hari</dd></dl></div>` : `<div class="sec"><h3>Kebutuhan per rotasi</h3><dl class="kv"><dt>Populasi</dt><dd>${fmt(G.STD.lubang * b.ha)} pohon</dd><dt>NPK 50 g/pohon</dt><dd>${fmt(G.STD.npk * b.ha, 1)} kg</dd></dl></div>`;
   const stokHtml = Object.keys(stok).length || dk.length ? `<div class="sec"><div class="row between"><h3>Bibit di lapangan</h3>${kembaliDue(id) != null && Object.keys(stok).length ? `<span class="pill ${kembaliDue(id) < 0 ? 's-bad' : 's-warn'}">${kembaliDue(id) < 0 ? 'Lewat ' + (-kembaliDue(id)) + ' hari' : 'Kembalikan ≤ ' + kembaliDue(id) + ' hari'}</span>` : ''}</div><div class="chips">${Object.entries(stok).map(([k, v]) => `<span class="chip">${esc(S.jenisMap[k]?.nama || k)} ${fmt(v)}</span>`).join('')}${dk.map(k => `<span class="chip">dikirim: ${esc(S.jenisMap[k.jenis]?.nama)} ${fmt(k.n)}</span>`).join('')}</div>${Object.keys(stok).length && isRole('admin', 'owner', 'exdas', 'bumdes') ? '<button class="btn ghost block" id="kbBtn">Kembalikan ke nursery (sisa / afkir)</button>' : ''}</div>` : '';
   const mats = (S.kirim_mat || []).filter(k => k.blok_id === id);
-  const matHtml = mats.length ? `<div class="sec"><h3>Material ke blok ini</h3><div class="chips">${mats.map(k => `<span class="chip">${esc(k.barang)} ${fmt(k.n, 1)} ${esc(S.barang.find(x => x.nama === k.barang)?.satuan || '')}${k.status === 'dikirim' ? ' · dalam pengiriman' : Number(k.sisa) ? ' · sisa ' + fmt(k.sisa, 1) : ''}</span>`).join('')}</div></div>` : '';
+  const matHtml = mats.length ? `<div class="sec"><h3>Material ke blok ini</h3><div class="chips">${mats.map(k => `<span class="chip">${esc(k.barang)} ${fmt(k.n, 1)} ${esc(S.barang.find(x => x.nama === k.barang)?.satuan || '')}${k.status === 'dikirim' ? ' · dalam pengiriman' : k.sisa_at ? (Number(k.sisa) ? ' · sisa ' + fmt(k.sisa, 1) + ' kembali' : ' · habis') : k.kembali_at ? ' · sisa ' + fmt(k.kembali, 1) + ' dikirim kembali' : ''}</span>`).join('')}</div>${mats.some(k => k.status === 'diterima' && !k.sisa_at && !k.kembali_at) && isRole('admin', 'owner', 'exdas', 'bumdes') ? '<button class="btn ghost block" id="kmBtn">Kembalikan sisa material ke gudang</button>' : ''}</div>` : '';
   const hist = plist.length ? `<div class="card stack"><h2>Riwayat pekerjaan</h2><div class="tbl"><table><thead><tr><th>Periode</th><th>Status</th><th class="r">Hasil</th><th>Tgl</th></tr></thead><tbody>${plist.slice().reverse().map(x => `<tr><td>${G.TIPE_LBL[x.tipe]}${x.tipe === 'rotasi' ? ' ' + x.nomor : ''}</td><td>${G.STATUS_LBL[x.status]}</td><td class="r">${x.pct != null ? fmt(x.pct, 2) + '%' : '–'}</td><td>${tgl(x.approved_at || x.vendor_selesai_at || x.mulai_at || x.created_at)}</td></tr>`).join('')}</tbody></table></div>${S.ba.filter(a => a.blok_id === id && seesBA(a)).map(a => `<a class="item" href="#ba/${a.id}"><div class="grow"><b>BA ${esc(a.jenis)} · ${esc(a.nomor)}</b><span>${tgl(a.created_at)}${a.scan_path ? ' · scan diunggah' : ''}</span></div></a>`).join('')}</div>` : '';
   shell(G.blokName(b), b.layer === 'bastl' ? 'BASTL · ' + (b.kode_bastl || '') : b.layer === 'perawatan' ? 'Perawatan BUMDES' : '', `<div class="stack">
     <div class="card"><div class="row between"><div><div class="eyebrow">${b.layer === 'bastl' ? 'BASTL 2026 · ExDAS' : b.layer === 'perawatan' ? 'Perawatan · ' + esc(b.pit || '') : 'Berhasil penilaian'}</div><h1>${esc(G.blokName(b))}</h1></div><span class="pill s-${st.k}">${esc(st.t)}</span></div><div class="sec" style="border:0;margin:0">${info}</div>${need}${stokHtml}${matHtml}</div>
@@ -371,6 +371,7 @@ function renderBlok(id) {
   on('#gStart', async () => { const sid = uid(); await ins('sesi', { id: sid, periode_id: p.id, blok_id: id, tipe: p.status === 'verifikasi' ? 'verifikasi' : 'inspeksi', oleh: S.me.id }); await upd('periode', { id: p.id }, { status: 'inspeksi' }); location.hash = '#sesi/' + sid; });
   on('#aOk', async () => { await approvePeriode(p); route(); });
   const kb = $('#kbBtn'); if (kb) kb.addEventListener('click', () => kembaliSheet(id, route));
+  const km = $('#kmBtn'); if (km) km.addEventListener('click', () => kembaliMatSheet(id, route));
   on('#aSave', async () => { await upd('blok', { id }, { tgl_tanam: $('#aT').value || null, tgl_rotasi_terakhir: $('#aR').value || null }); toast('Tanggal tersimpan.'); route(); });
 }
 export const tagColor = t => t.status === 'closed' ? '#2F8A57' : t.status === 'disulam' ? '#4F86C6' : t.sumber === 'gl' ? '#E0473B' : '#F2C230';

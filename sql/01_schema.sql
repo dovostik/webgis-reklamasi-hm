@@ -751,3 +751,6 @@ drop trigger if exists alat_log_t on public.alat_log;
 create trigger alat_log_t before insert on public.alat_log for each row execute function set_server_time('at');
 -- crew gudang boleh mencatat kondisi alat
 alter policy w on public.alat using (public.has_role('admin','nursery','crew'));
+
+-- ===== Sisa material dikembalikan dari lapangan (vendor/GL) lalu ditimbang nursery =====
+alter table public.kirim_mat add column if not exists kembali numeric, add column if not exists kembali_oleh uuid references public.profiles(id), add column if not exists kembali_at timestamptz, add column if not exists kembali_ket text;

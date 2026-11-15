@@ -1,6 +1,6 @@
 // Nursery (bedengan & lot), kirim bibit, penampungan lapangan, gudang.
 import { SB } from './sb.js';
-import { S, L, loadAll, ins, upd, $, $$, toast, sheet, confirmSheet, uid, nm, newMap, pickPhoto, scanQR } from './core.js';
+import { S, L, loadAll, ins, upd, $, $$, toast, sheet, confirmSheet, uid, nm, newMap, pickPhoto, scanQR, notify } from './core.js';
 import * as G from './logic.js';
 import { role, isRole, seesBlok } from './app.js';
 import { beliCard, afkirCard, bindBeli, aklimDue } from './beli.js';
@@ -323,6 +323,44 @@ export async function terimaSuratJalan(text) {
   }
   toast(nb || nm2 ? `Diterima di ${G.blokName(b)}: ${nb ? fmt(nb) + ' bibit' : ''}${nb && nm2 ? ' + ' : ''}${nm2 ? nm2 + ' material' : ''}. ${navigator.onLine ? '' : 'Tersimpan di HP, terkirim saat ada sinyal.'}` : 'Kiriman di surat jalan ini sudah diterima sebelumnya.', 4500);
 }
+// ---------- sisa material kembali ke gudang ----------
+const matBalik = k => k.status === 'diterima' && !k.sisa_at && !k.kembali_at;
+// dari halaman blok: vendor / GL lapangan mengirim sisa material kembali, seperti bibit
+export function kembaliMatSheet(bid, onDone) {
+  const rows = (S.kirim_mat || []).filter(k => k.blok_id === bid && matBalik(k));
+  if (!rows.length) return toast('Tidak ada material di lapangan untuk blok ini.');
+  sheet(`<form class="stack" id="kmf"><h2>Kembalikan sisa material</h2><p class="small" style="margin:0">${esc(G.blokName(S.blokMap[bid]))} · isi sisa yang dibawa kembali ke gudang (kosongkan bila habis terpakai atau masih dipakai).</p>
+    ${rows.map(k => `<label class="f">${esc(k.barang)} <small>dikirim ${fmt(k.n, 1)} ${esc(satB(k.barang))} · ${tgl(k.diterima_at)}</small><input type="number" min="0" max="${k.n}" step="any" inputmode="decimal" data-kmt="${k.id}" placeholder="sisa (${esc(satB(k.barang))})"></label>`).join('')}
+    <label class="f" for="kmK">Keterangan <small>opsional</small><input id="kmK" placeholder="mis. 2 sak utuh, 1 sak sobek"></label>
+    <p class="note" style="margin:0">Sisa masuk penampungan nursery dulu. Stok gudang bertambah setelah GL Nursery menimbang dan menerima.</p><p class="err" id="kmE" hidden></p>
+    <div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit">Kirim ke gudang</button></div></form>`, (box, close) => {
+    box.querySelector('#kmf').addEventListener('submit', async e => {
+      e.preventDefault(); const er = box.querySelector('#kmE'), fail = m => { er.textContent = m; er.hidden = false; }; const out = [];
+      for (const k of rows) { const v = box.querySelector(`[data-kmt="${k.id}"]`).value; if (v === '') continue; const n = Number(v); if (!(n > 0) || n > Number(k.n)) return fail(`${k.barang}: isi 0–${fmt(k.n, 1)}.`); out.push([k, n]); }
+      if (!out.length) return fail('Isi jumlah sisa minimal satu material.');
+      const ket = box.querySelector('#kmK').value.trim() || null;
+      try { for (const [k, n] of out) await upd('kirim_mat', { id: k.id }, { kembali: n, kembali_oleh: S.me.id, kembali_at: new Date().toISOString(), kembali_ket: ket });
+        notify(S.profiles.filter(x => x.role === 'nursery' && x.aktif !== false).map(x => x.id), 'Sisa material kembali', `${G.blokName(S.blokMap[bid])}: ${out.map(([k, n]) => `${k.barang} ${fmt(n, 1)} ${satB(k.barang)}`).join(', ')}`, '#tampung');
+        close(); toast('Sisa material dikirim, menunggu diterima nursery.'); onDone && onDone(); } catch (x) { fail(x.message); }
+    });
+  });
+}
+// GL Nursery menimbang & menerima sisa: stok gudang bertambah
+function sisaMatSheet(k, rerender) {
+  const sat = satB(k.barang), pre = k.kembali_at ? Number(k.kembali) : 0;
+  sheet(`<form class="stack" id="msf"><h2>Sisa ${esc(k.barang)}</h2><p class="small" style="margin:0">Dikirim ${fmt(k.n, 1)} ${esc(sat)} ke ${esc(G.blokName(S.blokMap[k.blok_id]))}.${k.kembali_at ? ` Dikembalikan ${fmt(k.kembali, 1)} ${esc(sat)} oleh ${esc(nm(k.kembali_oleh))} ${tgl(k.kembali_at)}${k.kembali_ket ? ' · ' + esc(k.kembali_ket) : ''}.` : ''} Isi hasil timbang sisa (0 bila habis terpakai).</p><label class="f" for="msN">Sisa ditimbang (${esc(sat)})<input id="msN" type="number" min="0" max="${k.n}" step="any" inputmode="decimal" value="${pre}"></label><div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit">Terima ke gudang</button></div></form>`, (box, close) => {
+    box.querySelector('#msf').addEventListener('submit', async e => {
+      e.preventDefault(); const n = Number(box.querySelector('#msN').value); if (!(n >= 0) || n > Number(k.n)) return toast(`Isi 0–${fmt(k.n, 1)}.`);
+      await upd('kirim_mat', { id: k.id }, { sisa: n, sisa_oleh: S.me.id, sisa_at: new Date().toISOString() });
+      if (n > 0) { const bg = S.barang.find(z => z.nama === k.barang); await upd('barang', { nama: k.barang }, { stok: Number(bg?.stok || 0) + n }); await ins('barang_tx', { barang: k.barang, tipe: 'masuk', n, keperluan: 'Sisa dari lapangan', lokasi: G.blokName(S.blokMap[k.blok_id]), oleh: S.me.id }); }
+      close(); toast(n > 0 ? `Sisa ${fmt(n, 1)} ${sat} masuk gudang.` : 'Tercatat habis terpakai.'); rerender();
+    });
+  });
+}
+function matBalikCard(nurs) {
+  const r = (S.kirim_mat || []).filter(k => k.kembali_at && !k.sisa_at && seesBlok(S.blokMap[k.blok_id]));
+  return `<div class="card stack"><h2>Sisa material dari lapangan (${r.length})</h2>${r.map(k => `<div class="sec"><div class="row between"><b>${esc(k.barang)}</b><span class="mono">${fmt(k.kembali, 1)} ${esc(satB(k.barang))}</span></div><p class="small" style="margin:0">dari ${esc(G.blokName(S.blokMap[k.blok_id]))} · ${tgl(k.kembali_at)} · oleh ${esc(nm(k.kembali_oleh))}${k.kembali_ket ? ' · ' + esc(k.kembali_ket) : ''}</p>${nurs ? `<button class="btn sm" data-ms="${k.id}">Timbang & terima ke gudang</button>` : '<span class="small muted">menunggu nursery</span>'}</div>`).join('') || '<p class="muted small" style="margin:0">Tidak ada.</p>'}</div>`;
+}
 // ---------- material ke lapangan ----------
 const satB = nama => S.barang.find(x => x.nama === nama)?.satuan || '';
 function matSection() {
@@ -337,7 +375,7 @@ function matSection() {
       ${nurs && x.kurang > 0 ? (opts.length ? `<div class="row" style="flex-wrap:nowrap"><select id="mb-${key}" aria-label="Barang">${opts.map(bg => `<option value="${esc(bg.nama)}">${esc(bg.nama)} (stok ${bg.stok == null ? '–' : fmt(bg.stok, 1)} ${esc(bg.satuan)})</option>`).join('')}</select><input type="number" min="0" step="any" inputmode="decimal" id="mn-${key}" value="${x.kurang ? +(x.kurang / L.unitK(opts[0].satuan, x.sat)).toFixed(2) : ''}" style="width:96px" aria-label="Jumlah"><button class="btn sm" data-mm="${key}">Kirim</button></div>` : `<p class="err" style="margin:0">Belum ada barang ${x.kel === 'lcc' ? 'berkategori LCC' : 'yang cocok'} di master gudang.</p>`) : ''}</div>`; }).join('') || '<p class="muted small" style="margin:0">Tidak ada.</p>'}
     <p class="note">Otomatis: petak BASTL mulai penanaman → pupuk kandang 1 kg/pohon, NPK 50 g/pohon & LCC 20 kg/Ha; retensi ExDAS mulai dan rotasi BUMDES → NPK 50 g/pohon untuk seluruh luas. Stok gudang berkurang saat dikirim.</p></div>
     <div class="card stack"><h2>Material dalam pengiriman (${jalan.length})</h2>${jalan.map(k => `<div class="row between"><span class="small"><b>${esc(k.barang)} ${fmt(k.n, 1)} ${esc(satB(k.barang))}</b> → ${esc(G.blokName(S.blokMap[k.blok_id]))}</span>${isRole('admin', 'owner', 'exdas', 'bumdes') ? `<button class="btn sm" data-mt="${k.id}">Terima</button>` : '<span class="small muted">menunggu lapangan</span>'}</div>`).join('') || '<p class="muted small" style="margin:0">Tidak ada.</p>'}</div>
-    ${nurs && sisaOk.length ? `<div class="card stack"><h2>Sisa material kembali ke gudang</h2><p class="note" style="margin:0">Timbang sisa yang dibawa kembali dari lapangan, lalu catat. Stok gudang bertambah sesuai sisa.</p>${sisaOk.map(k => `<div class="row between"><span class="small"><b>${esc(k.barang)}</b> ${fmt(k.n, 1)} ${esc(satB(k.barang))} · ${esc(G.blokName(S.blokMap[k.blok_id]))} · diterima ${tgl(k.diterima_at)}</span><button class="btn ghost sm" data-ms="${k.id}">Catat sisa</button></div>`).join('')}</div>` : ''}`;
+    ${nurs && sisaOk.length ? `<div class="card stack"><h2>Sisa material kembali ke gudang</h2><p class="note" style="margin:0">Timbang sisa yang dibawa kembali dari lapangan, lalu catat. Stok gudang bertambah sesuai sisa.</p>${sisaOk.map(k => `<div class="row between"><span class="small"><b>${esc(k.barang)}</b> ${fmt(k.n, 1)} ${esc(satB(k.barang))} · ${esc(G.blokName(S.blokMap[k.blok_id]))} · diterima ${tgl(k.diterima_at)}${k.kembali_at ? ` · <b>dikembalikan ${fmt(k.kembali, 1)}</b>` : ''}</span><button class="btn ghost sm" data-ms="${k.id}">${k.kembali_at ? 'Timbang & terima' : 'Catat sisa'}</button></div>`).join('')}</div>` : ''}`;
 }
 function bindMat(rerender) {
   $$('[data-mm]').forEach(b => b.addEventListener('click', async () => {
@@ -353,17 +391,7 @@ function bindMat(rerender) {
     toast(`${nama} ${fmt(n, 1)} ${bg.satuan} dikirim ke ${G.blokName(x.b)}.`); rerender();
   }));
   $$('[data-mt]').forEach(b => b.addEventListener('click', async () => { b.disabled = true; await upd('kirim_mat', { id: b.dataset.mt }, { status: 'diterima', diterima_oleh: S.me.id, diterima_at: new Date().toISOString() }); toast('Material diterima di lapangan.'); rerender(); }));
-  $$('[data-ms]').forEach(b => b.addEventListener('click', () => {
-    const k = S.kirim_mat.find(x => x.id === b.dataset.ms); const sat = satB(k.barang);
-    sheet(`<form class="stack" id="msf"><h2>Sisa ${esc(k.barang)}</h2><p class="small" style="margin:0">Dikirim ${fmt(k.n, 1)} ${esc(sat)} ke ${esc(G.blokName(S.blokMap[k.blok_id]))}. Isi hasil timbang sisa (0 bila habis terpakai).</p><label class="f" for="msN">Sisa ditimbang (${esc(sat)})<input id="msN" type="number" min="0" max="${k.n}" step="any" inputmode="decimal" value="0"></label><div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit">Simpan</button></div></form>`, (box, close) => {
-      box.querySelector('#msf').addEventListener('submit', async e => {
-        e.preventDefault(); const n = Number(box.querySelector('#msN').value); if (!(n >= 0) || n > Number(k.n)) return toast(`Isi 0–${fmt(k.n, 1)}.`);
-        await upd('kirim_mat', { id: k.id }, { sisa: n, sisa_oleh: S.me.id, sisa_at: new Date().toISOString() });
-        if (n > 0) { const bg = S.barang.find(z => z.nama === k.barang); await upd('barang', { nama: k.barang }, { stok: Number(bg?.stok || 0) + n }); await ins('barang_tx', { barang: k.barang, tipe: 'masuk', n, keperluan: 'Sisa dari lapangan', lokasi: G.blokName(S.blokMap[k.blok_id]), oleh: S.me.id }); }
-        close(); toast(n > 0 ? `Sisa ${fmt(n, 1)} ${sat} masuk gudang.` : 'Tercatat habis terpakai.'); rerender();
-      });
-    });
-  }));
+  $$('[data-ms]').forEach(b => b.addEventListener('click', () => sisaMatSheet(S.kirim_mat.find(x => x.id === b.dataset.ms), rerender)));
 }
 // ---------- kirim bibit ----------
 // nursery memilih bedengan BST asal; saran awal = lot yang paling lama mengendap
@@ -506,6 +534,7 @@ export function renderTampung(shell) {
     <div class="card stack"><h2>Dalam perjalanan kembali (${jalan.length})</h2>${jalan.map(k => `<div class="row between"><span class="small"><b>${esc(jn(k.jenis))} ${fmt(k.n)}</b> · ${k.kondisi === 'afkir' ? 'afkir' : 'sisa sehat'} · dari ${esc(G.blokName(S.blokMap[k.blok_id]))}</span>${nurs ? `<button class="btn sm" data-kt="${k.id}">Terima</button>` : '<span class="small muted">menunggu nursery</span>'}</div>`).join('') || '<p class="muted small" style="margin:0">Tidak ada.</p>'}</div>
     <div class="card stack"><h2>Sisa sehat · menunggu persetujuan GL Nursery (${sehat.length})</h2>${sehat.map(k => row(k, nurs ? `<div class="grid2"><button class="btn ghost sm" data-km="${k.id}">Mati / afkir, dibuang</button><button class="btn sm" data-ks="${k.id}">Setujui → bedengan BST</button></div>` : '')).join('')}${sehat.length && nurs ? '<p class="note" style="margin:0">Bila sebagian bibit ternyata mati saat diperiksa (mis. kembali 100, hidup 60), catat dulu yang mati lewat <b>Mati / afkir, dibuang</b>, lalu setujui sisanya ke bedengan BST.</p>' : ''}${sehat.length ? '' : '<p class="muted small" style="margin:0">Tidak ada.</p>'}</div>
     <div class="card stack"><h2>Afkir dari lapangan · dirawat (${afkir.length})</h2>${afkir.map(k => row(k, care ? `<div class="grid2"><button class="btn ghost sm" data-km="${k.id}">Mati, dibuang</button><button class="btn sm" data-kp="${k.id}">Pulih → BST</button></div>` : '')).join('') || '<p class="muted small" style="margin:0">Tidak ada.</p>'}</div>
+    ${matBalikCard(nurs)}
     ${afkirCard()}
     ${lap.length ? `<div class="card stack"><h2>Masih di lapangan (${lap.length} blok)</h2><div class="alert warn">Sebelum stock opname bulanan, semua bibit di lapangan harus sudah kembali ke nursery. Setelah blok closing, sisa dikembalikan ≤ 3 hari.</div><div class="list">${lap.map(x => `<a class="item" href="#blok/${encodeURIComponent(x.b.id)}"><div class="grow"><b>${esc(G.blokName(x.b))}</b><span>${Object.entries(x.st).map(([k, v]) => esc(jn(k)) + ' ' + fmt(v)).join(' · ')}</span></div>${x.due != null ? `<span class="pill ${x.due < 0 ? 's-bad' : 's-warn'}">${x.due < 0 ? 'Lewat ' + (-x.due) + ' hari' : 'Kembalikan ≤ ' + x.due + ' hari'}</span>` : '<span class="pill s-pend">Berjalan</span>'}</a>`).join('')}</div><p class="note">Pengembalian dicatat oleh vendor atau GL dari halaman blok (tombol Kembalikan ke nursery).</p></div>` : ''}
   </div>`);
@@ -515,6 +544,7 @@ export function renderTampung(shell) {
   $$('[data-ks]').forEach(b => b.addEventListener('click', () => procSheet(find(b.dataset.ks), 'bst', shell)));
   $$('[data-kp]').forEach(b => b.addEventListener('click', () => procSheet(find(b.dataset.kp), 'bst', shell)));
   $$('[data-km]').forEach(b => b.addEventListener('click', () => procSheet(find(b.dataset.km), 'mati', shell)));
+  $$('[data-ms]').forEach(b => b.addEventListener('click', () => sisaMatSheet(S.kirim_mat.find(x => x.id === b.dataset.ms), () => renderTampung(shell))));
 }
 function qtySheet(title, max, extra, onOk) {
   sheet(`<form class="stack" id="qf"><h2>${esc(title)}</h2><label class="f" for="qN">Jumlah <small>maks ${fmt(max)}</small><input id="qN" type="number" min="1" max="${max}" inputmode="numeric" value="${max}"></label>${extra || ''}<p class="note">Dikonfirmasi bersama orang nursery dan orang lapangan.</p><div class="grid2"><button type="button" class="btn ghost" data-close>Batal</button><button class="btn" type="submit">Simpan</button></div></form>`, (box, close) => {
