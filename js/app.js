@@ -10,6 +10,7 @@ import { renderNursery, renderKirim, renderTampung, renderGudang, kembaliSheet, 
 import { renderBAList, renderBA, approvePeriode, approvePP, renderCetakTag } from './ba.js';
 import { renderMaster } from './master.js';
 import { renderOpname } from './opname.js';
+import { dashHtml, bindDash } from './dash.js';
 const { esc, fmt, tgl, jam } = G;
 
 const app = document.getElementById('app');
@@ -195,13 +196,14 @@ function renderBeranda() {
       <div class="tile"><span>Rata-rata keberhasilan</span><b>${avg == null ? '–' : fmt(avg, 1) + '%'}</b><span>${done.length} BA keberhasilan</span></div>
       <div class="tile"><span>Bibit siap kirim</span><b>${fmt(tr)}</b><span>≥ 2 minggu di BST</span></div>
     </div>
+    ${dashHtml(seesBlok, { tanam: !isRole('bumdes') || isRole('admin'), rawat: !isRole('exdas') || isRole('admin') })}
     <div class="card stack"><h2>Perlu perhatian</h2>
       ${wait.map(p => `<a class="item" href="#blok/${esc(p.blok_id)}"><div class="grow"><b>${esc(G.blokName(S.blokMap[p.blok_id]))}</b><span>${G.TIPE_LBL[p.tipe]} · hasil ${fmt(p.pct, 2)}%</span></div><span class="pill s-warn">Menunggu persetujuan</span></a>`).join('')}
       ${late.map(b => `<a class="item" href="#blok/${esc(b.id)}"><div class="grow"><b>${esc(b.nama)}</b><span>Rotasi jatuh tempo ${tgl(L.rotasiInfo(b).next)}</span></div><span class="pill s-bad">Lewat jadwal</span></a>`).join('')}
       ${!wait.length && !late.length ? '<p class="muted small" style="margin:0">Tidak ada yang mendesak.</p>' : ''}
     </div>
     <p class="note">Reklamasi berhasil penilaian: ${bh.length} blok, ${fmt(sum(bh), 2)} Ha (tampilan peta saja).</p></div>`);
-  void el;
+  void el; bindDash(renderBeranda);
 }
 
 // ---------- tugas ----------

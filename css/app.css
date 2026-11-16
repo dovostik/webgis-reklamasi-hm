@@ -161,3 +161,6 @@ td.r,th.r{text-align:right}
 .doc p.sidik{font-family:Arial,sans-serif;font-size:9.5px;color:#555;margin-top:14px;border-top:1px dashed #bbb;padding-top:6px}
 header.top .bell{position:relative;display:flex;color:var(--ink);padding:4px}header.top .bell svg{width:22px;height:22px}header.top .bell .badge{position:absolute;top:-3px;right:-5px;background:var(--bad);color:#fff;font-size:10px;font-weight:700;border-radius:99px;padding:0 5px;line-height:16px;min-width:16px;text-align:center}
 .notif-new{border-left:3px solid var(--accent)}
+
+.dchart{width:100%;height:auto;display:block}.dchart text{font-size:9px;fill:var(--muted);font-family:var(--f)}
+.dot{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px;vertical-align:-1px}
