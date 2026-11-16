@@ -16,6 +16,40 @@ const getCrew = box => { const i = box.querySelector('#cn'); return i ? i.value.
 
 // ---------- nursery ----------
 let nurseryView = null;
+// ---------- stok per kelompok (FG / Lokal / MPTS) × tahap, dan cukup untuk berapa Ha ----------
+const KG = [['pionir', 'FG', 'var(--ok)'], ['lokal', 'Lokal', 'var(--warn)'], ['mpts', 'MPTS', 'var(--pend)']], TH = [['Penyapihan', 'Sapih'], ['Pembesaran', 'Besar'], ['BST', 'BST']];
+function kelompokCard() {
+  const kg = j => { const k = String(S.jenisMap[j]?.kelompok || '').toLowerCase(); return KG.some(x => x[0] === k) ? k : (S.jenisMap[j]?.tipe === 'pionir' ? 'pionir' : 'lokal'); };
+  const M = {}, J = {}; let tot = 0;
+  S.lot.filter(l => l.jumlah > 0).forEach(l => { const t = L.tahapOf(l.bedengan), k = kg(l.jenis), n = Number(l.jumlah); if (!TH.some(x => x[0] === t)) return;
+    M[k] = M[k] || {}; M[k][t] = (M[k][t] || 0) + n; J[k] = J[k] || {}; J[k][l.jenis] = J[k][l.jenis] || {}; J[k][l.jenis][t] = (J[k][l.jenis][t] || 0) + n; tot += n; });
+  if (!tot) return '';
+  const sumK = k => TH.reduce((a, [t]) => a + (M[k]?.[t] || 0), 0), sumT = t => KG.reduce((a, [k]) => a + (M[k]?.[t] || 0), 0), c = v => v ? fmt(v) : '–';
+  // sisa BASTL: luas belum tertanam = luas − (bibit diterima − dikembalikan) / populasi per Ha
+  const bs = S.blok.filter(b => b.layer === 'bastl'); let sisaHa = 0;
+  bs.forEach(b => { const net = S.kirim.filter(k => k.blok_id === b.id && k.status === 'diterima').reduce((a, k) => a + Number(k.n), 0) - (S.kembali || []).filter(k => k.blok_id === b.id).reduce((a, k) => a + Number(k.n), 0);
+    sisaHa += Math.max(0, Number(b.ha) - Math.max(0, net) / G.STD.lubang); });
+  const fgB = M.pionir?.BST || 0, siB = (M.lokal?.BST || 0) + (M.mpts?.BST || 0), fgAll = sumK('pionir');
+  const needFG = Math.round(sisaHa * G.STD.pio), needSI = Math.round(sisaHa * G.STD.sis);
+  const gauge = (lbl, have, need, per, extra, bg) => { const ha = have / per, ok = have >= need; return `<div class="sec"><div class="row between small"><b>${lbl}</b><span class="pill ${ok ? 's-ok' : 's-warn'}">${fmt(ha, 1)} Ha · ${ok ? 'lebih ' + fmt(have - need) : 'kurang ' + fmt(need - have)}</span></div>
+    <div class="bar" style="margin:6px 0 4px"><span style="width:${need ? Math.min(100, have / need * 100) : 100}%;background:${bg}"></span></div><p class="small muted" style="margin:0">${fmt(have)} dari ${fmt(need)} dibutuhkan${extra || ''}</p></div>`; };
+  const ratio = fgB + siB ? Math.round(fgB / (fgB + siB) * 100) : 0, std = Math.round(G.STD.pio / (G.STD.pio + G.STD.sis) * 100);
+  return `<div class="card stack"><div><h2 style="margin:0">Stok bibit per kelompok</h2><span class="small muted">Semua tahap · ${fmt(tot)} bibit</span></div>
+    <div class="tiles t3">${KG.map(([k, l, col]) => `<div class="tile" style="border-top:4px solid ${col}"><span>${l}</span><b>${fmt(sumK(k))}</b><span>${fmt(sumK(k) / tot * 100)}% stok</span></div>`).join('')}</div>
+    <div class="sec"><h3>Per tahap</h3>${TH.map(([t, s]) => { const n = sumT(t); return `<div class="row between small"><b>${t === 'BST' ? 'BST (siap tanam)' : t}</b><span class="muted">${fmt(n)}</span></div>
+      <div class="stk">${n ? KG.filter(([k]) => M[k]?.[t]).map(([k, l, col]) => { const w = M[k][t] / n * 100; return `<i style="width:${w}%;background:${col}" title="${l} ${fmt(M[k][t])}">${w > 18 ? `${l} ${fmt(M[k][t])}` : ''}</i>`; }).join('') : ''}</div>`; }).join('')}
+      <div class="small muted">${KG.map(([, l, col]) => `<i class="dot" style="background:${col}"></i>${l}`).join(' &nbsp;')}</div></div>
+    <div class="sec"><div class="row between"><h3 style="margin:0">Rincian</h3><span class="small muted">ketuk kelompok untuk rincian jenis</span></div>
+      <div class="tbl"><table class="kgt"><thead><tr><th>Kelompok / jenis</th>${TH.map(([, s]) => `<th class="r">${s}</th>`).join('')}<th class="r">Total</th></tr></thead><tbody>
+      ${KG.filter(([k]) => M[k]).map(([k, l, col]) => `<tr class="kg" data-kg="${k}"><td><i class="dot" style="background:${col}"></i>${l} <span class="car">▸</span></td>${TH.map(([t]) => `<td class="r">${c(M[k][t])}</td>`).join('')}<td class="r">${fmt(sumK(k))}</td></tr>
+        ${Object.entries(J[k]).sort((a, b) => TH.reduce((s, [t]) => s + (b[1][t] || 0), 0) - TH.reduce((s, [t]) => s + (a[1][t] || 0), 0)).map(([j, v]) => `<tr class="kj" data-kgj="${k}" hidden><td>${esc(jn(j))}</td>${TH.map(([t]) => `<td class="r">${c(v[t])}</td>`).join('')}<td class="r">${fmt(TH.reduce((s, [t]) => s + (v[t] || 0), 0))}</td></tr>`).join('')}`).join('')}
+      <tr class="kt"><td>Jumlah</td>${TH.map(([t]) => `<td class="r">${fmt(sumT(t))}</td>`).join('')}<td class="r">${fmt(tot)}</td></tr></tbody></table></div></div>
+    ${bs.length ? `<div class="sec"><h3>Cukup untuk berapa Ha?</h3><p class="small muted" style="margin:0 0 4px">Sisa BASTL ±${fmt(sisaHa, 1)} Ha · standar FG ${G.STD.pio}/Ha, sisipan (lokal + MPTS) ${G.STD.sis}/Ha</p>
+      ${gauge('FG siap tanam (BST)', fgB, needFG, G.STD.pio, fgAll > fgB ? ` · + ${fmt(fgAll - fgB)} di sapih/besar → cukup ±${fmt(fgAll / G.STD.pio)} Ha bila semua naik ke BST` : '', 'var(--ok)')}
+      ${gauge('Sisipan siap tanam (BST)', siB, needSI, G.STD.sis, '', `linear-gradient(90deg,var(--warn) ${siB ? (M.lokal?.BST || 0) / siB * 100 : 0}%,var(--pend) 0)`)}
+      ${fgB + siB ? `<div class="alert ${Math.abs(ratio - std) > 8 ? 'warn' : ''}" style="margin-top:8px">Komposisi BST sekarang <b>${ratio} : ${100 - ratio}</b> (FG : sisipan), standar tanam <b>${std} : ${100 - std}</b>.${ratio < std - 8 ? ' Penyapihan sebaiknya fokus FG.' : ratio > std + 8 ? ' Penyapihan sebaiknya fokus lokal/MPTS.' : ''}</div>` : ''}</div>` : ''}
+  </div>`;
+}
 export function renderNursery(shell) {
   autoKembali();
   const can = isRole('admin', 'nursery', 'crew');
@@ -24,6 +58,7 @@ export function renderNursery(shell) {
   const tot = t => S.lot.filter(l => l.jumlah > 0 && L.tahapOf(l.bedengan) === t).reduce((a, l) => a + l.jumlah, 0);
   shell('Nursery', null, `<div class="stack">
     <div class="tiles"><div class="tile"><span>Siap kirim</span><b>${fmt(tr)}</b><span>≥ 2 minggu di BST</span></div><div class="tile"><span>Penyapihan</span><b>${fmt(tot('Penyapihan'))}</b><span>bibit</span></div><div class="tile"><span>Pembesaran</span><b>${fmt(tot('Pembesaran'))}</b><span>bibit</span></div><div class="tile"><span>Pindah tahap</span><b>${due.length}</b><span>lot jatuh tempo</span></div></div>
+    ${kelompokCard()}
     ${(() => { const v = lsGet('hm-nview', 'denah'); return `<div class="row between"><div class="seg" role="group" aria-label="Tampilan" style="min-width:200px"><button type="button" data-nv="denah" class="${v === 'denah' ? 'on' : ''}" aria-pressed="${v === 'denah'}">Denah</button><button type="button" data-nv="peta" class="${v === 'peta' ? 'on' : ''}" aria-pressed="${v === 'peta'}">Peta asli</button></div>${v === 'denah' ? '<div class="row" style="gap:6px"><button class="btn ghost sm" id="dnOut" aria-label="Perkecil">−</button><button class="btn ghost sm" id="dnIn" aria-label="Perbesar">+</button></div>' : ''}</div>
     ${v === 'denah' ? `<input id="dnQ" type="search" placeholder="Cari kode bedengan atau jenis, mis. BF-03 atau sengon" value="${esc(denahQ)}" aria-label="Cari bedengan"><div class="chips" id="dnHits"></div><div class="dn-wrap" id="dnWrap"></div><p class="note" id="dnFac" style="margin:0"></p>` : '<div class="map" id="nmap"></div>'}`; })()}
     <div class="legend"><span><i class="sw" style="background:${CLC.SP}"></i>Penyapihan</span><span><i class="sw" style="background:${CLC.PB}"></i>Pembesaran</span><span><i class="sw" style="background:${CLC.BF}"></i>BST Fastgrow</span><span><i class="sw" style="background:${CLC.BL}"></i>BST Lokal</span><span><i class="sw" style="background:#E0473B;border-radius:50%"></i>Waktunya pindah</span><span><i class="sw" style="background:#FFD400;border-radius:50%"></i>Siap kirim</span><span><i class="sw" style="background:#111;border-radius:50%"></i>Aklimatisasi</span><span><b>B</b> = bibit beli</span><span><i class="sw" style="background:repeating-linear-gradient(45deg,#999 0 3px,#fff 3px 6px)"></i>Arsir = bedengan dipinjam (warna = tahap pinjaman)</span><span>Bar warna = persen isi terhadap kapasitas bedengan</span></div>
@@ -33,6 +68,7 @@ export function renderNursery(shell) {
     ${pinjamCard()}${opnameCard()}${beliCard()}${afkirCard()}
     ${can ? '<p class="note">Tap bedengan di peta untuk mencatat lot baru, mati/afkir, atau pindah tahap.</p>' : ''}</div>`);
   $$('[data-nv]').forEach(b => b.addEventListener('click', () => { lsSet('hm-nview', b.dataset.nv); renderNursery(shell); }));
+  $$('[data-kg]').forEach(r => r.addEventListener('click', () => { const k = r.dataset.kg, open = r.classList.toggle('open'); $$(`[data-kgj="${k}"]`).forEach(x => x.hidden = !open); }));
   if (lsGet('hm-nview', 'denah') === 'denah') { bindDenah(shell); $$('[data-bed]').forEach(a => { if (!a.closest('#dnWrap')) a.addEventListener('click', e => { e.preventDefault(); bedSheet(a.dataset.bed, shell); }); }); bindBeli(document.getElementById('main'), () => renderNursery(shell)); bindOpnameCard(); return; }
   const map = newMap($('#nmap'), { maxZoom: 23 });
   const grp = window.L.featureGroup();
