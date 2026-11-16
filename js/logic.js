@@ -1,5 +1,6 @@
 // Aturan bisnis reklamasi & nursery (dipakai semua layar).
 // standar per pohon: pupuk kandang 1 kg, NPK 50 g; LCC 20 kg per Ha
+export const JALUR = j => j === 'pioneer' ? 'FG' : j === 'sisipan' ? 'Sisipan' : (j || '');
 export const STD = { lubang: 881, koheKg: 1, npkG: 50, pupuk: 881, npk: 44.05, pio: 625, sis: 256, lcc: 20, kohe: 25, sekam: 25, ambang: 90 };
 export const CAP_DEFAULT = 1300;
 export const KONDISI = [['pmk', 'PMK spreading'], ['tergenang', 'Tergenang'], ['berpasir', 'Berpasir'], ['ob', 'Tanah OB']];
@@ -194,7 +195,7 @@ export function makeLogic(S) {
     if (latest) S.tag_event.filter(e => e.sesi_id === latest.id && e.tipe === 'mati').forEach(e => deadIds.add(e.tag_id));
     const dead = [...deadIds].map(id => S.tag.find(t => t.id === id)).filter(Boolean);
     const mp = dead.filter(t => t.jalur === 'pioneer').length, ms = dead.length - mp;
-    const rows = [['Pioneer', rl.pio, mp], ['Sisipan', rl.sis, ms], ['Jumlah', rl.pio + rl.sis, mp + ms]].map(([n, r, m]) => ({ n, r, m, h: r - m, p: r ? (r - m) / r * 100 : 0 }));
+    const rows = [['Fast growing (FG)', rl.pio, mp], ['Sisipan', rl.sis, ms], ['Jumlah', rl.pio + rl.sis, mp + ms]].map(([n, r, m]) => ({ n, r, m, h: r - m, p: r ? (r - m) / r * 100 : 0 }));
     return { rows, pct: rows[2].p, aktual: rl.aktual };
   }
   // kebutuhan material per pekerjaan aktif: BASTL (penanaman) = pupuk kandang + NPK + LCC; retensi yang sudah mulai & rotasi = NPK seluruh luas
