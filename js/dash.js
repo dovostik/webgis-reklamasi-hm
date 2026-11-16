@@ -9,14 +9,16 @@ const addD = (d, n) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.ge
 const diffD = (a, b) => Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 864e5);
 let mode = (() => { try { return localStorage.getItem('hm-dash') || 'bulan'; } catch (e) { return 'bulan'; } })();
 
+// minggu ke-n dihitung dari 1 Januari (minggu 1, Senin–Minggu); akhir tahun bisa minggu 53/54
+const dow = d => (new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7;
+export const mingguKe = d => { const j = d.slice(0, 4) + '-01-01'; return Math.floor((diffD(j, d) + dow(j)) / 7) + 1; };
 function range(m) {
-  const today = day(new Date().toISOString()), [y, mo, dd] = today.split('-').map(Number);
-  if (m === 'minggu') { const dow = (new Date(today + 'T00:00:00Z').getUTCDay() + 6) % 7, a = addD(today, -dow);
-    return { a, b: today, lbl: 'Minggu ini', sub: `${G.tgl(a)} – ${G.tgl(today)}`, buckets: HARI.map((h, i) => ({ k: addD(a, i), l: h })), key: d => d }; }
-  if (m === 'bulan') { const a = `${y}-${String(mo).padStart(2, '0')}-01`, n = Math.ceil(dd / 7);
-    return { a, b: today, lbl: 'Bulan ini', sub: `${BLN[mo - 1]} ${y}`, buckets: Array.from({ length: Math.max(n, 4) }, (_, i) => ({ k: i + 1, l: 'Mg ' + (i + 1) })), key: d => Math.ceil(Number(d.slice(8, 10)) / 7) }; }
-  const a = `${y}-01-01`;
-  return { a, b: today, lbl: 'Year to date', sub: `1 Jan – ${G.tgl(today)}`, buckets: BLN.slice(0, mo).map((l, i) => ({ k: i + 1, l })), key: d => Number(d.slice(5, 7)) };
+  const today = day(new Date().toISOString()), [y, mo] = today.split('-').map(Number), jan1 = `${y}-01-01`, wk = mingguKe(today);
+  if (m === 'minggu') { const mon = addD(today, -dow(today)), a = mon < jan1 ? jan1 : mon;
+    return { a, b: today, lbl: 'Minggu ini', sub: `Minggu ke-${wk} · ${G.tgl(a)} – ${G.tgl(addD(mon, 6))}`, buckets: HARI.map((h, i) => ({ k: addD(mon, i), l: h })), key: d => d }; }
+  if (m === 'bulan') { const a = `${y}-${String(mo).padStart(2, '0')}-01`, w0 = mingguKe(a);
+    return { a, b: today, lbl: 'Bulan ini', sub: `${BLN[mo - 1]} ${y} · minggu ke-${w0}–${wk}`, buckets: Array.from({ length: wk - w0 + 1 }, (_, i) => ({ k: w0 + i, l: 'Mg ' + (w0 + i) })), key: mingguKe }; }
+  return { a: jan1, b: today, lbl: 'Year to date', sub: `1 Jan – ${G.tgl(today)} · s.d. minggu ke-${wk}`, buckets: BLN.slice(0, mo).map((l, i) => ({ k: i + 1, l })), key: d => Number(d.slice(5, 7)) };
 }
 
 function data(r, sees) {
