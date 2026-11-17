@@ -342,3 +342,26 @@ export function locateControl(map) {
   map.on('unload', unsub);
   return unsub;
 }
+
+// ---------- unduh gambar PNG dari kartu / grafik / tabel (tombol .pngbtn[data-png] di dalam .pngbox) ----------
+let h2c = null;
+const loadH2C = () => h2c || (h2c = new Promise((ok, no) => { if (window.html2canvas) return ok(window.html2canvas); const s = document.createElement('script'); s.src = 'lib/html2canvas.min.js'; s.onload = () => ok(window.html2canvas); s.onerror = () => { h2c = null; no(new Error('Pustaka gambar gagal dimuat (butuh sinyal sekali).')); }; document.head.appendChild(s); }));
+export async function savePng(el, name) {
+  const fn = await loadH2C();
+  const bg = getComputedStyle(el).backgroundColor; const solid = bg && !/rgba\(.*,\s*0\)|transparent/.test(bg) ? bg : getComputedStyle(document.body).backgroundColor || '#fff';
+  const c = await fn(el, { backgroundColor: solid, scale: Math.min(3, Math.max(2, window.devicePixelRatio || 2)), useCORS: true, logging: false,
+    onclone: (doc, cl) => { // SVG dirender sebagai gambar terpisah: CSS var & kelas tidak ikut, jadi salin gaya terhitung ke atribut
+      const o = el.querySelectorAll('svg, svg *'), k = (cl || doc).querySelectorAll('svg, svg *');
+      o.forEach((n, i) => { const c = k[i]; if (!c) return; const cs = getComputedStyle(n);
+        ['fill', 'stroke', 'stroke-width', 'opacity', 'font-size', 'font-weight', 'font-family', 'paint-order', 'stroke-linejoin'].forEach(pr => { const v = cs.getPropertyValue(pr); if (v && v !== 'none' || pr === 'fill' || pr === 'stroke') c.setAttribute(pr, v || 'none'); });
+        if (n.tagName.toLowerCase() === 'svg') { const r = n.getBoundingClientRect(); c.setAttribute('width', r.width); c.setAttribute('height', r.height); } }); }, ignoreElements: e => e.classList && (e.classList.contains('pngbtn') || e.classList.contains('seg')) });
+  const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${name}-${new Date().toISOString().slice(0, 10)}.png`; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+}
+document.addEventListener('click', async e => {
+  const b = e.target.closest && e.target.closest('button[data-png]'); if (!b) return;
+  e.preventDefault(); const box = b.closest('.pngbox'); if (!box) return;
+  const t = b.innerHTML; b.disabled = true; b.textContent = '…';
+  try { await savePng(box, b.dataset.png); toast('Gambar PNG diunduh.'); } catch (x) { toast(x.message || 'Gagal membuat gambar.'); } finally { b.disabled = false; b.innerHTML = t; }
+});

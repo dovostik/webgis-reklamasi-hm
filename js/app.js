@@ -12,10 +12,12 @@ import { renderMaster } from './master.js';
 import { renderOpname } from './opname.js';
 import { dashHtml, bindDash } from './dash.js';
 import { renderCetakPeta } from './cetakpeta.js';
+import { renderLaporan } from './laporan.js';
 const { esc, fmt, tgl, jam } = G;
 
 const app = document.getElementById('app');
 const ICON = {
+  laporan: '<path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4M10 17v-3m3 3v-6m3 6v-4"/>',
   cetakpeta: '<path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/>',
   beranda: '<path d="M3 11l9-7 9 7v9H3z"/><path d="M9 20v-6h6v6"/>',
   peta: '<path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/>',
@@ -28,7 +30,7 @@ const ICON = {
   ba: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h7"/>',
   lainnya: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
 };
-const LBL = { beranda: 'Beranda', peta: 'Peta', tugas: 'Tugas', scan: 'Scan tag', nursery: 'Nursery', kirim: 'Kirim', tampung: 'Penampungan', gudang: 'Gudang', ba: 'BA', lainnya: 'Lainnya', admin: 'Pengguna', cetak: 'Cetak tag', cetakpeta: 'Cetak peta', akun: 'Akun saya', master: 'Master data' };
+const LBL = { beranda: 'Beranda', peta: 'Peta', tugas: 'Tugas', scan: 'Scan tag', nursery: 'Nursery', kirim: 'Kirim', tampung: 'Penampungan', gudang: 'Gudang', ba: 'BA', lainnya: 'Lainnya', admin: 'Pengguna', cetak: 'Cetak tag', cetakpeta: 'Cetak peta', laporan: 'Laporan lengkap', akun: 'Akun saya', master: 'Master data' };
 const MENU = {
   admin: ['beranda', 'tugas', 'peta', 'kirim', 'lainnya'],
   spv: ['beranda', 'tugas', 'peta', 'nursery', 'lainnya'],
@@ -42,15 +44,15 @@ const MENU = {
   viewer: ['beranda', 'peta', 'nursery', 'ba', 'lainnya'],
 };
 const MORE = {
-  admin: ['nursery', 'tampung', 'gudang', 'ba', 'scan', 'admin', 'master', 'cetakpeta', 'cetak', 'akun'],
-  spv: ['kirim', 'tampung', 'gudang', 'ba', 'cetakpeta', 'cetak', 'akun'],
-  admrek: ['tugas', 'kirim', 'tampung', 'gudang', 'cetakpeta', 'cetak', 'akun'],
-  suptend: ['nursery', 'kirim', 'tampung', 'gudang', 'cetakpeta', 'akun'],
-  owner: ['tampung', 'ba', 'gudang', 'cetakpeta', 'akun'],
+  admin: ['nursery', 'tampung', 'gudang', 'ba', 'scan', 'admin', 'master', 'laporan', 'cetakpeta', 'cetak', 'akun'],
+  spv: ['kirim', 'tampung', 'gudang', 'ba', 'laporan', 'cetakpeta', 'cetak', 'akun'],
+  admrek: ['tugas', 'kirim', 'tampung', 'gudang', 'laporan', 'cetakpeta', 'cetak', 'akun'],
+  suptend: ['nursery', 'kirim', 'tampung', 'gudang', 'laporan', 'cetakpeta', 'akun'],
+  owner: ['tampung', 'ba', 'gudang', 'laporan', 'cetakpeta', 'akun'],
   nursery: ['ba', 'master', 'scan', 'akun'],
   crew: ['kirim', 'tampung', 'akun'],
   exdas: ['tampung', 'ba', 'akun'], bumdes: ['tampung', 'ba', 'akun'],
-  viewer: ['kirim', 'tampung', 'gudang', 'cetakpeta', 'akun'],
+  viewer: ['kirim', 'tampung', 'gudang', 'laporan', 'cetakpeta', 'akun'],
 };
 export const role = () => S.me?.role || 'none';
 // job pending: pelimpahan tugas yang sedang aktif (tanggal hari ini di antara mulai–sampai, belum dicabut)
@@ -198,7 +200,7 @@ function renderBeranda() {
       <div class="tile"><span>Rata-rata keberhasilan</span><b>${avg == null ? '–' : fmt(avg, 1) + '%'}</b><span>${done.length} BA keberhasilan</span></div>
       <div class="tile"><span>Bibit siap kirim</span><b>${fmt(tr)}</b><span>≥ 2 minggu di BST</span></div>
     </div>
-    ${dashHtml(seesBlok, { tanam: !isRole('bumdes') || isRole('admin'), rawat: !isRole('exdas') || isRole('admin') })}
+    ${dashHtml(seesBlok, { tanam: !isRole('bumdes') || isRole('admin'), rawat: !isRole('exdas') || isRole('admin'), laporan: menuMore().includes('laporan') })}
     <div class="card stack"><h2>Perlu perhatian</h2>
       ${wait.map(p => `<a class="item" href="#blok/${esc(p.blok_id)}"><div class="grow"><b>${esc(G.blokName(S.blokMap[p.blok_id]))}</b><span>${G.TIPE_LBL[p.tipe]} · hasil ${fmt(p.pct, 2)}%</span></div><span class="pill s-warn">Menunggu persetujuan</span></a>`).join('')}
       ${late.map(b => `<a class="item" href="#blok/${esc(b.id)}"><div class="grow"><b>${esc(b.nama)}</b><span>Rotasi jatuh tempo ${tgl(L.rotasiInfo(b).next)}</span></div><span class="pill s-bad">Lewat jadwal</span></a>`).join('')}
@@ -608,7 +610,7 @@ export function route() {
     beranda: renderBeranda, tugas: renderTugas, peta: renderPeta, blok: () => renderBlok(decodeURIComponent(a)),
     sesi: () => renderSesi(a, shell), scan: () => openScan(shell), nursery: () => renderNursery(shell), opname: () => renderOpname(shell), kirim: () => renderKirim(shell),
     tampung: () => renderTampung(shell), gudang: () => renderGudang(shell), ba: () => a ? renderBA(a, shell) : renderBAList(shell),
-    lainnya: renderLainnya, notif: renderNotif, akun: renderAkun, admin: renderAdmin, cetak: () => renderCetakTag(shell), cetakpeta: () => renderCetakPeta(shell), master: () => renderMaster(shell),
+    lainnya: renderLainnya, notif: renderNotif, akun: renderAkun, admin: renderAdmin, cetak: () => renderCetakTag(shell), cetakpeta: () => renderCetakPeta(shell), laporan: () => renderLaporan(shell, seesBlok), master: () => renderMaster(shell),
   }[key] || renderLainnya)();
 }
 window.addEventListener('hashchange', route);

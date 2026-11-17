@@ -59,26 +59,31 @@ function data(r, sees) {
     perHa };
 }
 
-function chart(series) {
-  const W = 340, H = 150, pl = 30, pb = 22, pt = 8, max = Math.max(0.5, ...series.flatMap(s => [s.a, s.b, s.r || 0]));
+export function chart(series) {
+  const W = 340, H = 160, pl = 38, pb = 22, pt = 16, max = Math.max(0.5, ...series.flatMap(s => [s.a, s.b, s.r || 0]));
   const nice = (() => { const p = Math.pow(10, Math.floor(Math.log10(max))), m = max / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p; })();
   const n = series.length, gw = (W - pl - 4) / n, bw = Math.min(14, gw / 2.6), y = v => pt + (H - pt - pb) * (1 - v / nice);
   const ticks = [0, nice / 2, nice];
   return `<svg viewBox="0 0 ${W} ${H}" class="dchart" role="img" aria-label="Grafik luasan per periode">
+    <text x="9" y="${pt + (H - pt - pb) / 2}" text-anchor="middle" transform="rotate(-90 9 ${pt + (H - pt - pb) / 2})" class="ax">Luas (Ha)</text>
     ${ticks.map(t => `<line x1="${pl}" x2="${W - 4}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)" stroke-width="1"/><text x="${pl - 4}" y="${y(t) + 3}" text-anchor="end">${fmt(t, t < 10 && t % 1 ? 1 : 0)}</text>`).join('')}
     ${series.map((s, i) => { const cx = pl + gw * i + gw / 2; return `<g><title>${esc(s.l)}: penanaman ${fmt(s.a, 2)} Ha · perawatan ${fmt(s.b, 2)} Ha</title>
       <rect x="${cx - bw - 1}" y="${y(s.a)}" width="${bw}" height="${Math.max(0, y(0) - y(s.a))}" rx="3" fill="var(--accent)"/>
       <rect x="${cx + 1}" y="${y(s.b)}" width="${bw}" height="${Math.max(0, y(0) - y(s.b))}" rx="3" fill="var(--pb)"/>
+      ${s.a > 0.005 ? `<text x="${cx - bw / 2 - 1}" y="${y(s.a) - 3}" text-anchor="middle" class="vl">${fmt(s.a, s.a < 10 ? 2 : 1)}</text>` : ''}
+      ${s.b > 0.005 ? `<text x="${cx + bw / 2 + 1}" y="${y(s.b) - 3}" text-anchor="middle" class="vl">${fmt(s.b, s.b < 10 ? 2 : 1)}</text>` : ''}
       ${s.r ? `<line x1="${cx - 1}" x2="${cx + bw + 3}" y1="${y(s.r)}" y2="${y(s.r)}" stroke="var(--ink)" stroke-width="2" stroke-dasharray="3 2"/>` : ''}
       <text x="${cx}" y="${H - 6}" text-anchor="middle">${esc(s.l)}</text></g>`; }).join('')}
   </svg><div class="row small muted" style="gap:14px"><span><i class="dot" style="background:var(--accent)"></i>Penanaman (Ha setara)</span><span><i class="dot" style="background:var(--pb)"></i>Perawatan (Ha rotasi)</span>${series.some(s => s.r) ? '<span><i class="dot" style="background:none;border-top:2px dashed var(--ink);border-radius:0;height:0;width:12px"></i>Rencana</span>' : ''}</div>`;
 }
 
-const kv = rows => `<dl class="kv">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+export const pngBtn = (name, lbl = 'PNG') => `<button type="button" class="pngbtn" data-png="${esc(name)}" aria-label="Unduh gambar PNG"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg>${lbl}</button>`;
+export function dashFor(m, sees) { const r = range(m); return { r, d: data(r, sees) }; }
+export const kv = rows => `<dl class="kv">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
 export function dashHtml(sees, opts = {}) {
   const r = range(mode), d = data(r, sees), tanam = opts.tanam !== false, rawat = opts.rawat !== false;
   const pct = d.bastlHa ? Math.min(100, d.allSetara / d.bastlHa * 100) : 0;
-  return `<div class="card stack" id="dash"><div class="row between" style="align-items:flex-start"><div><h2 style="margin:0">Progres pekerjaan</h2><span class="small muted">${esc(r.sub)}</span></div></div>
+  return `<div class="card stack pngbox" id="dash"><div class="row between" style="align-items:flex-start"><div><h2 style="margin:0">Progres pekerjaan</h2><span class="small muted">${esc(r.sub)}</span></div><div class="row" style="gap:6px">${pngBtn('progres-' + mode)}${opts.laporan ? '<a class="pngbtn" href="#laporan">Laporan PDF</a>' : ''}</div></div>
     <div class="seg" role="tablist">${[['minggu', 'Minggu'], ['bulan', 'Bulan'], ['ytd', 'YTD']].map(([k, l]) => `<button type="button" data-dm="${k}" class="${mode === k ? 'on' : ''}" aria-pressed="${mode === k}">${l}</button>`).join('')}</div>
     <div class="tiles">
       ${tanam ? `<div class="tile"><span>Penanaman</span><b>${fmt(d.haSetara, 2)} Ha</b><span>${fmt(d.bibit)} bibit tertanam</span></div>` : ''}
@@ -86,14 +91,14 @@ export function dashHtml(sees, opts = {}) {
       <div class="tile"><span>Inspeksi</span><b>${fmt(d.sesiHa, 2)} Ha</b><span>${d.sesiN} sesi · ${fmt(d.mati)} mati ditemukan</span></div>
       <div class="tile"><span>Penyulaman</span><b>${fmt(d.sulam)}</b><span>pohon disulam</span></div>
     </div>
-    ${chart(d.series)}
+    <div class="pngbox"><div class="row between"><b class="small">Grafik luasan · ${esc(r.lbl)}</b>${pngBtn('grafik-' + mode)}</div>${chart(d.series)}</div>
     ${tanam && d.bastlHa ? `<div class="sec"><div class="row between small"><b>Progres BASTL 2026 (kumulatif)</b><span>${fmt(d.allSetara, 2)} / ${fmt(d.bastlHa, 2)} Ha · ${fmt(pct, 1)}%</span></div><div class="bar" style="margin-top:6px"><span style="width:${pct}%"></span></div></div>` : ''}
-    <div class="sec"><h3>Pemakaian bahan</h3>${kv([
+    <div class="sec pngbox"><div class="row between"><h3>Pemakaian bahan</h3>${pngBtn('bahan-' + mode)}</div>${kv([
       ...(tanam ? [['Pupuk kandang', `${fmt(d.kohe, 1)} sak · ${fmt(d.kohe * G.STD.kohe)} kg`], ['LCC', `${fmt(d.lcc, 1)} kg`]] : []),
       ['NPK', `${fmt(d.npk, 1)} kg`],
       ...(tanam ? [['Bibit', `${fmt(d.bibit)} pohon`]] : [])])}
       ${tanam && d.bibit > 0 ? `<p class="small muted" style="margin:6px 0 0">Per pohon tertanam: kohe ${fmt(d.kohe * G.STD.kohe / d.bibit, 2)} kg (standar ${G.STD.koheKg}) · LCC ${fmt(d.lcc / d.haSetara, 1)} kg/Ha (standar ${G.STD.lcc})</p>` : ''}</div>
-    <div class="sec"><h3>Produktivitas</h3>${kv([
+    <div class="sec pngbox"><div class="row between"><h3>Produktivitas</h3>${pngBtn('produktivitas-' + mode)}</div>${kv([
       ...(tanam ? [['Penanaman', d.hariTanam ? `${fmt(d.bibit / d.hariTanam)} pohon/hari · ${fmt(d.haSetara / d.hariTanam, 2)} Ha/hari <small class="muted">(${d.hariTanam} hari kerja)</small>` : '–']] : []),
       ...(rawat ? [['Rotasi perawatan', d.rotDur != null ? `rata-rata ${fmt(d.rotDur, 1)} hari/blok` : d.manual && d.bulanN ? `rata-rata ${fmt(d.rotHa / d.bulanN, 2)} Ha/bulan` : d.rotN ? `${fmt(d.rotHa / d.rotN, 2)} Ha/blok` : '–']] : []),
       ['Inspeksi', d.jam > 0 ? `${fmt(d.sesiHa / d.jam, 2)} Ha/jam · ${fmt(d.jam, 1)} jam` : '–']])}</div>
