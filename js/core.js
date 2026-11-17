@@ -261,21 +261,43 @@ export function pickPhoto(opts = {}) {
     });
   });
 }
-// foto dari galeri (boleh foto lama) beserta lokasi & waktu ambil dari EXIF
-export function pickPhotoGeo() {
+// posisi HP saat ini (akurasi tinggi), null bila tidak bisa
+export function posisiHP(timeout = 20000) {
+  return new Promise(res => { if (!navigator.geolocation) return res(null);
+    navigator.geolocation.getCurrentPosition(p => res({ lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy }), () => res(null), { enableHighAccuracy: true, timeout, maximumAge: 30000 }); });
+}
+// foto bukti berlokasi: Kamera (lokasi = GPS HP saat memotret) atau Galeri (lokasi dari EXIF; Android sering menghapusnya,
+// maka bila kosong dipakai GPS HP saat foto dipilih). Lokasi & waktu dicetak di foto sebagai cap.
+export function pickPhotoGeo(opts = {}) {
   return new Promise(res => {
-    const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/jpeg,image/*';
-    i.onchange = async () => { const f = i.files && i.files[0]; if (!f) return res(null); const { readExif } = await import('./exif.js'); const exif = await readExif(f); res({ blob: await compress(f), exif }); };
-    i.click();
+    const run = cam => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/jpeg,image/*'; if (cam) i.capture = 'environment';
+      const posP = cam ? posisiHP() : null; // mulai cari GPS bersamaan dengan membuka kamera
+      i.onchange = async () => { const f = i.files && i.files[0]; if (!f) return res(null); toast('Membaca lokasi…', 1500);
+        let exif = { lat: null, lon: null, time: null };
+        if (!cam) { const { readExif } = await import('./exif.js'); exif = await readExif(f); }
+        if (cam || exif.lat == null) { const g = await (posP || posisiHP()); if (g) exif = { ...exif, lat: g.lat, lon: g.lon, acc: g.acc, time: cam ? new Date().toISOString() : exif.time, src: 'hp' }; }
+        else exif.src = 'foto';
+        const blob = await compress(f, 1600, 0.72, exif.lat != null ? [opts.label || '', `${exif.lat.toFixed(6)}, ${exif.lon.toFixed(6)}${exif.acc ? ` ±${Math.round(exif.acc)} m` : ''}`, new Date(exif.time || Date.now()).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) + ' WIB · ' + (exif.src === 'foto' ? 'lokasi foto' : 'GPS HP')].filter(Boolean) : null);
+        res({ blob, exif, cam }); };
+      i.click(); };
+    sheet(`<div class="stack"><h2>${esc(opts.title || 'Foto kegiatan')}</h2><p class="small" style="margin:0">Paling pasti: <b>Kamera</b> saat berada di dalam blok. Lokasi diambil dari GPS HP dan dicetak di foto.</p>
+      <div class="grid2"><button class="btn" id="pgCam">Kamera</button><button class="btn ghost" id="pgGal">Galeri</button></div><p class="note" style="margin:0">Galeri: bila lokasi di foto tidak terbaca (sering terjadi di Android), dipakai lokasi HP saat ini, jadi pilih foto selagi masih di dalam blok.</p><button class="btn ghost block" data-close>Batal</button></div>`, (box, close) => {
+      box.querySelector('#pgCam').addEventListener('click', () => { close(); run(true); });
+      box.querySelector('#pgGal').addEventListener('click', () => { close(); run(false); });
+      box.querySelector('[data-close]').addEventListener('click', () => res(null));
+    });
   });
 }
-export async function compress(file, max = 1600, q = 0.72) {
+export async function compress(file, max = 1600, q = 0.72, cap = null) {
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = url; });
     const k = Math.min(1, max / Math.max(img.width, img.height));
     const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0, c.width, c.height);
+    if (cap && cap.length) { const fs = Math.max(14, Math.round(c.width / 42)), lh = fs * 1.3, h = lh * cap.length + fs * 0.8;
+      g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, c.height - h, c.width, h); g.fillStyle = '#fff'; g.font = `600 ${fs}px system-ui,sans-serif`; g.textBaseline = 'top';
+      cap.forEach((t, k) => g.fillText(t, fs * 0.6, c.height - h + fs * 0.4 + k * lh)); }
     return await new Promise(r => c.toBlob(r, 'image/jpeg', q));
   } finally { URL.revokeObjectURL(url); }
 }
