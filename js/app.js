@@ -220,11 +220,11 @@ function renderTugas() {
 const blokItem = b => { const s = L.blokStatus(b); return `<a class="item" href="#blok/${esc(b.id)}"><div class="grow"><b>${esc(G.blokName(b))}</b><span>${fmt(b.ha, 2)} Ha · ${b.layer === 'bastl' ? esc(b.kode_bastl) : esc(b.pit || '')}</span></div><span class="pill s-${s.k}">${esc(s.t)}</span></a>`; };
 
 // ---------- peta ----------
-const COL = { ok: '#2F8A57', warn: '#D99A1B', bad: '#C8452F', pend: '#4F86C6', idle: '#B49A6A', done: '#9AA59D' };
+const COL = { ok: '#2F8A57', warn: '#D99A1B', bad: '#C8452F', pend: '#4F86C6', idle: '#B49A6A', done: '#9AA59D', tanam: '#8E44AD' };
 let mapState = null;
 function renderPeta() {
   const el = shell('Peta reklamasi', null, `<div class="stack"><div class="map" id="map"></div>
-    <div class="legend"><span><i class="sw" style="background:${COL.ok}"></i>Terjadwal</span><span><i class="sw" style="background:${COL.warn}"></i>Segera / menunggu</span><span><i class="sw" style="background:${COL.bad}"></i>Lewat jadwal</span><span><i class="sw" style="background:${COL.pend}"></i>Dalam pekerjaan</span><span><i class="sw" style="background:${COL.idle}"></i>BASTL siap tanam</span><span><i class="sw" style="background:${COL.done}"></i>Berhasil penilaian</span><span><i class="sw" style="background:#E0473B;border-radius:50%"></i>Tag GL</span><span><i class="sw" style="background:#F2C230;border-radius:50%"></i>Tag vendor</span></div>
+    <div class="legend"><span><i class="sw" style="background:${COL.ok}"></i>Terjadwal</span><span><i class="sw" style="background:${COL.warn}"></i>Segera / menunggu</span><span><i class="sw" style="background:${COL.bad}"></i>Lewat jadwal</span><span><i class="sw" style="background:${COL.tanam}"></i>Penanaman berjalan</span><span><i class="sw" style="background:${COL.pend}"></i>Dalam pekerjaan</span><span><i class="sw" style="background:${COL.idle}"></i>BASTL siap tanam</span><span><i class="sw" style="background:${COL.done}"></i>Berhasil penilaian</span><span><i class="sw" style="background:#E0473B;border-radius:50%"></i>Tag GL</span><span><i class="sw" style="background:#F2C230;border-radius:50%"></i>Tag vendor</span></div>
     <div id="pdet"></div></div>`);
   const map = newMap($('#map'));
   const groups = {};
