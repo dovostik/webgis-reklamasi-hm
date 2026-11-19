@@ -249,12 +249,33 @@ function renderPeta() {
   S.tag.filter(t => t.lat && seesBlok(S.blokMap[t.blok_id]) && t.status !== 'closed').forEach(t => window.L.circleMarker([t.lat, t.lon], { radius: 5, color: '#fff', weight: 1, fillColor: t.sumber === 'gl' ? '#E0473B' : '#F2C230', fillOpacity: 1 }).on('click', () => tagSheet(t.id)).addTo(tg));
   tg.addTo(map); ov['Tag terbuka'] = tg;
   const nur = window.L.featureGroup(); S.bedengan.forEach(b => window.L.geoJSON(b.geom, { style: { color: '#333', weight: .6, fillColor: '#A9D08E', fillOpacity: .8 } }).addTo(nur)); nur.addTo(map); ov['Nursery'] = nur;
+  if (!isRole('exdas', 'bumdes')) ov['TORA Kalteng'] = toraLayer();
   Object.entries(ov).forEach(([k, l]) => map._lc.addOverlay(l, k));
   const all = window.L.featureGroup(Object.values(groups));
   if (mapState) map.setView(mapState.c, mapState.z); else if (all.getLayers().length) map.fitBounds(all.getBounds(), { padding: [10, 10] });
   map.on('moveend', () => { mapState = { c: map.getCenter(), z: map.getZoom() }; });
   locateControl(map);
   void el;
+}
+// ---------- overlay TORA Kalimantan Tengah (PPTPKH AR 250K Rev IV), dimuat saat lapisan dinyalakan ----------
+const TORA_COL = { 'Realisasi': '#2F8A57', 'SK BIRU': '#4F86C6', 'Proses Penyediaan TORA': '#E0A21B', 'Indikatif PPTPKH': '#D2452F', 'Alokasi 20%&Pencad HPKTP': '#8E44AD' };
+let toraData = null;
+async function toraGet() {
+  if (toraData) return toraData; const key = 'https://hm.local/overlay/tora_kalteng.json';
+  try { const u = await SB.signedUrl('overlay', 'tora_kalteng.json', 600); const r = await fetch(u); if (!r.ok) throw new Error('HTTP ' + r.status);
+    try { const c = await caches.open('hm-overlay'); await c.put(key, r.clone()); } catch (e) { /* cache opsional */ }
+    return (toraData = await r.json()); }
+  catch (e) { try { const c = await caches.open('hm-overlay'); const r = await c.match(key); if (r) return (toraData = await r.json()); } catch (x) { /* abaikan */ } throw e; }
+}
+function toraLayer() {
+  const lay = window.L.geoJSON(null, { style: f => ({ color: TORA_COL[f.properties.PROGRES] || '#777', weight: 1.2, fillColor: TORA_COL[f.properties.PROGRES] || '#777', fillOpacity: .28, dashArray: '4 3' }),
+    onEachFeature: (f, l) => { const p = f.properties; l.bindPopup(`<b>TORA Kalteng</b><br>${esc(p.PROGRES || '')}<br><small>${esc(p.KRITERIA || '')}</small><br>${p.LUAS != null ? fmt(p.LUAS, 2) + ' Ha · ' : ''}${esc(p.WADMKK || '')}${p.REMARK && p.REMARK !== '-' ? '<br><small>' + esc(p.REMARK) + '</small>' : ''}`); } });
+  let busy = false; const leg = window.L.control({ position: 'bottomleft' });
+  leg.onAdd = () => { const d = window.L.DomUtil.create('div', 'tora-leg'); d.innerHTML = '<b>TORA Kalteng</b>' + Object.entries(TORA_COL).map(([k, c]) => `<div><i style="background:${c}"></i>${esc(k)}</div>`).join(''); return d; };
+  lay.on('remove', () => { if (lay._map || leg._map) leg.remove(); });
+  lay.on('add', async () => { try { leg.addTo(lay._map); } catch (e) { /* abaikan */ } if (busy || lay.getLayers().length) return; busy = true; toast('Memuat TORA Kalteng…', 2000);
+    try { lay.addData(await toraGet()); lay.bringToBack(); } catch (e) { toast('TORA Kalteng gagal dimuat: ' + (e.net ? 'tidak ada sinyal' : e.message), 4000); } finally { busy = false; } });
+  return lay;
 }
 function showBlokSheet(id) {
   const b = S.blokMap[id]; const s = L.blokStatus(b);
