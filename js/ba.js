@@ -121,7 +121,7 @@ export function renderBAList(shell) {
 }
 
 // ---------- dokumen ----------
-const kop = () => `<div class="kop"><img src="img/logo.svg" alt="PT Hamparan Mulya"><small>PT HAMPARAN MULYA · Site Muara Teweh<br>Departemen Reklamasi &amp; Rehabilitasi</small></div>`;
+const kop = () => `<div class="kop"><img src="img/logo.svg" alt="PT Hamparan Mulya"><small>PT HAMPARAN MULYA · Site Muara Teweh<br>Departemen Reklamasi</small></div>`;
 let CUR = null; // BA yang sedang ditampilkan (untuk QR tanda tangan)
 const vUrl = (id, k) => new URL(`v.html?b=${id}&s=${k}`, location.href).href;
 const ttdBox = (cols, items) => `<div class="ttd" style="grid-template-columns:repeat(${cols},1fr)">${items.map(([lbl, s]) => { const k = CUR?.data?.esign && s.at ? Object.keys(CUR.data.ttd || {}).find(x => CUR.data.ttd[x] === s) : null; return `<div>${lbl}<br>${s.for ? 'for ' : ''}${esc(s.jabatan)}${k ? `<div class="sigqr" data-qr="${esc(vUrl(CUR.id, k))}" title="Scan untuk verifikasi"></div><em class="esign q">Ditandatangani elektronik<br>${tgl(s.at)} ${jam(s.at)} WIB</em>` : s.at ? `<em class="esign">✓ Ditandatangani elektronik<br>${tgl(s.at)} ${jam(s.at)} WIB</em>` : ''}<span${s.at ? ' class="es"' : ''}>${esc(s.nama)}</span></div>`; }).join('')}</div>`;
