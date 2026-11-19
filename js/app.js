@@ -13,7 +13,7 @@ import { renderOpname } from './opname.js';
 import { dashHtml, bindDash } from './dash.js';
 import { renderCetakPeta } from './cetakpeta.js';
 import { renderLaporan } from './laporan.js';
-import { hijauRows, hijauLast, orthoBelum, hitungHijau } from './hijau.js';
+import { hijauRows, hijauLast, orthoBelum, autoHijau, hijauRunning } from './hijau.js';
 const { esc, fmt, tgl, jam } = G;
 
 const app = document.getElementById('app');
@@ -201,7 +201,6 @@ function renderBeranda() {
       <div class="tile"><span>Rata-rata keberhasilan</span><b>${avg == null ? '–' : fmt(avg, 1) + '%'}</b><span>${done.length} BA keberhasilan</span></div>
       <div class="tile"><span>Bibit siap kirim</span><b>${fmt(tr)}</b><span>≥ 2 minggu di BST</span></div>
     </div>
-    ${hijauAdminCard()}
     ${dashHtml(seesBlok, { tanam: !isRole('bumdes') || isRole('admin'), rawat: !isRole('exdas') || isRole('admin'), laporan: menuMore().includes('laporan') })}
     <div class="card stack"><h2>Perlu perhatian</h2>
       ${wait.map(p => `<a class="item" href="#blok/${esc(p.blok_id)}"><div class="grow"><b>${esc(G.blokName(S.blokMap[p.blok_id]))}</b><span>${G.TIPE_LBL[p.tipe]} · hasil ${fmt(p.pct, 2)}%</span></div><span class="pill s-warn">Menunggu persetujuan</span></a>`).join('')}
@@ -209,7 +208,7 @@ function renderBeranda() {
       ${!wait.length && !late.length ? '<p class="muted small" style="margin:0">Tidak ada yang mendesak.</p>' : ''}
     </div>
     <p class="note">Reklamasi berhasil penilaian: ${bh.length} blok, ${fmt(sum(bh), 2)} Ha (tampilan peta saja).</p></div>`);
-  void el; bindDash(renderBeranda); bindHijauAdmin();
+  void el; bindDash(renderBeranda);
 }
 
 // ---------- tugas ----------
@@ -265,20 +264,16 @@ function hijauBlokCard(b) {
   const prev = rows.filter(x => x !== last).slice(-1)[0];
   return `<div class="card stack"><div class="row between"><h2>Tingkat kehijauan</h2>${last ? `<b style="font-size:22px;color:${col(last.pct)}">${fmt(last.pct, 1)}%</b>` : ''}</div>
     <p class="small muted" style="margin:0">% luas blok yang tampak hijau pada ortho drone${last ? ` · terakhir ${tgl(last.tanggal)}` : ''}${last && prev ? ` · ${last.pct >= prev.pct ? '▲' : '▼'} ${fmt(Math.abs(last.pct - prev.pct), 1)} poin dari ${tgl(prev.tanggal)}` : ''}</p>
-    <div class="stack" style="gap:6px">${rows.slice().reverse().map(x => `<div><div class="row between small"><span>${tgl(x.tanggal)} · ortho ${esc(x.slot)}${Number(x.cakupan) < 0.995 ? ` <span class="muted">(${fmt(x.cakupan * 100)}% dari ortho ini, sisanya ortho utama)</span>` : ''}</span><b>${fmt(x.pct, 1)}%</b></div><div class="bar"><span style="width:${Math.min(100, x.pct)}%;background:${col(x.pct)}"></span></div></div>`).join('')}</div>
+    <div class="stack" style="gap:6px">${rows.slice().reverse().map(x => `<div><div class="row between small"><span>${tgl(x.tanggal)} · ortho utama</span><b>${fmt(x.pct, 1)}%</b></div><div class="bar"><span style="width:${Math.min(100, x.pct)}%;background:${col(x.pct)}"></span></div></div>`).join('')}</div>
     <p class="note" style="margin:0">Perkiraan dari foto drone biasa (RGB): LCC dan gulma ikut terhitung hijau. Bandingkan antar-tanggal untuk melihat perkembangan.</p></div>`;
 }
-function hijauAdminCard() {
-  if (!isRole('admin')) return ''; const bel = orthoBelum(); if (!bel.length) return '';
-  return `<div class="card stack" id="hjC"><h2>Tingkat kehijauan</h2><p class="small" style="margin:0">Ortho baru belum dihitung: ${bel.map(x => `<b>${esc(x.l)} ${tgl(x.o.tanggal)}</b>`).join(', ')}. Hitung sekarang supaya % hijau tiap blok terarsip.</p>
-    <button class="btn" id="hjGo">Hitung % hijau semua blok</button><div class="bar" id="hjBar" hidden><span style="width:0%"></span></div><p class="small muted" id="hjS" style="margin:0"></p></div>`;
-}
-function bindHijauAdmin() {
-  const b = $('#hjGo'); if (!b) return;
-  b.addEventListener('click', async () => { b.disabled = true; const bar = $('#hjBar'), st = $('#hjS'); bar.hidden = false; let tot = 0;
-    try { for (const x of orthoBelum()) { tot += await hitungHijau(x.k, (i, n, nm1) => { bar.firstElementChild.style.width = (i / n * 100) + '%'; st.textContent = `${x.l}: ${i}/${n} blok${nm1 ? ' · ' + nm1 : ''}`; }); }
-      toast(`% hijau tersimpan untuk ${tot} blok.`, 3500); route(); }
-    catch (e) { b.disabled = false; st.textContent = 'Gagal: ' + (e.net ? 'butuh sinyal' : e.message); } });
+function hijauAuto() {
+  if (!isRole('admin') || viewing() || hijauRunning() || !orthoBelum().length) return;
+  let pill = document.getElementById('hjPill'); if (!pill) { pill = document.createElement('div'); pill.id = 'hjPill'; pill.className = 'hj-pill'; document.body.appendChild(pill); }
+  pill.textContent = 'Menghitung % hijau ortho utama…';
+  autoHijau((x, i, n) => { pill.textContent = `Menghitung % hijau ortho utama ${tgl(x.o.tanggal)}: ${i}/${n} blok`; })
+    .then(n => { pill.remove(); if (n) { toast(`% hijau ortho utama tersimpan untuk ${n} blok.`, 4000); route(); } })
+    .catch(() => { pill.remove(); });
 }
 function showBlokSheet(id) {
   const b = S.blokMap[id]; const s = L.blokStatus(b);
@@ -524,9 +519,9 @@ function viewAsCard() {
 }
 function renderLainnya() {
   const r = role();
-  shell('Lainnya', null, `${viewAsCard()}${simCard()}${orthoCard()}${hijauAdminCard()}${offCard()}<div class="list">${menuMore().map(k => `<a class="item" href="#${k}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">${ICON[k] || ICON.tugas}</svg><div class="grow"><b>${LBL[k]}</b></div></a>`).join('')}</div>`);
+  shell('Lainnya', null, `${viewAsCard()}${simCard()}${orthoCard()}${offCard()}<div class="list">${menuMore().map(k => `<a class="item" href="#${k}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">${ICON[k] || ICON.tugas}</svg><div class="grow"><b>${LBL[k]}</b></div></a>`).join('')}</div>`);
   $$('[data-sim]').forEach(b => b.addEventListener('click', async () => { const d = +b.dataset.sim; const n = d === 0 ? 0 : G.SIM + d; try { await upd('setting', { k: 'sim_days' }, { v: n, updated_by: S.me.id }, { offline: false }); toast(n ? `Tanggal sistem dimajukan ${n} hari.` : 'Kembali ke tanggal asli.'); renderLainnya(); } catch (e) { toast(e.message); } }));
-  bindOff(); bindOrtho(); bindHijauAdmin();
+  bindOff(); bindOrtho();
   const vg = $('#vaGo'); if (vg) vg.addEventListener('click', () => { setViewAs($('#vaSel').value); derive(); location.hash = ''; route(); });
 }
 function renderAkun() {
@@ -658,7 +653,7 @@ async function boot() {
     if (!u) { if (SB.mode === 'demo') await loadAll().catch(() => {}); return renderLogin(); }
     await loadAll();
     if (!S.me) { const u = SB.user() || {}; const dbg = SB.debug ? await SB.debug().catch(e => e.message) : ''; return renderLogin(`Akun Anda belum terdaftar di aplikasi. Hubungi administrator. [cek: ${u.email || '-'} · id ${String(u.id || '-').slice(0, 8)} · profil terbaca ${S.profiles.length} · blok terbaca ${S.blok.length} · ${dbg}]`); }
-    route(); flush(); persist();
+    route(); flush(); persist(); setTimeout(hijauAuto, 6000);
     const ti0 = tileInfo();
     if (SB.mode !== 'demo' && (!ti0 || ti0.ortho !== orthoKey()) && navigator.onLine && !(navigator.connection && navigator.connection.saveData)) setTimeout(() => startTiles(false), 4000);
   } catch (e) {

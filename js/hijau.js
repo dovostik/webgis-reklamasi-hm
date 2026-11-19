@@ -10,10 +10,19 @@ const rings = g => g ? (g.type === 'Polygon' ? [g.coordinates] : g.type === 'Mul
 function bbox(g) { let a = [180, 90, -180, -90]; rings(g).forEach(p => p[0].forEach(([x, y]) => { a = [Math.min(a[0], x), Math.min(a[1], y), Math.max(a[2], x), Math.max(a[3], y)]; })); return a; }
 const loadImg = src => new Promise(ok => { const i = new Image(); i.decoding = 'async'; i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; });
 
-export const hijauRows = bid => (S.blok_hijau || []).filter(x => x.blok_id === bid).sort((a, b) => String(a.tanggal).localeCompare(String(b.tanggal)) || String(a.slot).localeCompare(String(b.slot)));
+export const hijauRows = bid => (S.blok_hijau || []).filter(x => x.blok_id === bid && x.slot === 'utama').sort((a, b) => String(a.tanggal).localeCompare(String(b.tanggal)) || String(a.slot).localeCompare(String(b.slot)));
 export const hijauLast = bid => { const r = hijauRows(bid); return r[r.length - 1] || null; };
 // ortho yang belum dihitung
-export const orthoBelum = () => SLOTS.map(([k, l]) => ({ k, l, o: ORTHO[k] })).filter(x => x.o && !(S.blok_hijau || []).some(r => r.ortho_id === x.o.id));
+// acuan hanya ortho utama (±3 bulanan) supaya progres antar-periode terlihat
+export const orthoBelum = () => SLOTS.filter(([k]) => k === 'utama').map(([k, l]) => ({ k, l, o: ORTHO[k] })).filter(x => x.o && !(S.blok_hijau || []).some(r => r.ortho_id === x.o.id));
+// dijalankan otomatis di perangkat admin begitu ortho utama baru sudah terbit
+let running = false;
+export async function autoHijau(onProg) {
+  if (running) return 0; const bel = orthoBelum(); if (!bel.length || !navigator.onLine) return 0;
+  running = true; let tot = 0; try { for (const x of bel) tot += await hitungHijau(x.k, (i, n, nm) => onProg && onProg(x, i, n, nm)); } finally { running = false; }
+  return tot;
+}
+export const hijauRunning = () => running;
 
 async function blokStat(b, k, o, z) {
   const [w, s, e, n] = bbox(b.geom), ob = o.bounds;
