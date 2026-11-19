@@ -262,10 +262,10 @@ function renderPeta() {
 function hijauBlokCard(b) {
   const rows = hijauRows(b.id); if (!rows.length) return '';
   const last = hijauLast(b.id), col = v => v >= 70 ? 'var(--ok)' : v >= 40 ? 'var(--warn)' : 'var(--bad)';
-  const prev = rows.filter(x => Number(x.cakupan) >= 0.5 && x !== last).slice(-1)[0];
+  const prev = rows.filter(x => x !== last).slice(-1)[0];
   return `<div class="card stack"><div class="row between"><h2>Tingkat kehijauan</h2>${last ? `<b style="font-size:22px;color:${col(last.pct)}">${fmt(last.pct, 1)}%</b>` : ''}</div>
     <p class="small muted" style="margin:0">% luas blok yang tampak hijau pada ortho drone${last ? ` · terakhir ${tgl(last.tanggal)}` : ''}${last && prev ? ` · ${last.pct >= prev.pct ? '▲' : '▼'} ${fmt(Math.abs(last.pct - prev.pct), 1)} poin dari ${tgl(prev.tanggal)}` : ''}</p>
-    <div class="stack" style="gap:6px">${rows.slice().reverse().map(x => `<div><div class="row between small"><span>${tgl(x.tanggal)} · ortho ${esc(x.slot)}${Number(x.cakupan) < 0.5 ? ` <span class="muted">(tercitra ${fmt(x.cakupan * 100)}% blok)</span>` : ''}</span><b>${fmt(x.pct, 1)}%</b></div><div class="bar"><span style="width:${Math.min(100, x.pct)}%;background:${col(x.pct)}"></span></div></div>`).join('')}</div>
+    <div class="stack" style="gap:6px">${rows.slice().reverse().map(x => `<div><div class="row between small"><span>${tgl(x.tanggal)} · ortho ${esc(x.slot)}${Number(x.cakupan) < 0.995 ? ` <span class="muted">(${fmt(x.cakupan * 100)}% dari ortho ini, sisanya ortho utama)</span>` : ''}</span><b>${fmt(x.pct, 1)}%</b></div><div class="bar"><span style="width:${Math.min(100, x.pct)}%;background:${col(x.pct)}"></span></div></div>`).join('')}</div>
     <p class="note" style="margin:0">Perkiraan dari foto drone biasa (RGB): LCC dan gulma ikut terhitung hijau. Bandingkan antar-tanggal untuk melihat perkembangan.</p></div>`;
 }
 function hijauAdminCard() {

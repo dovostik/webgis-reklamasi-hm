@@ -11,7 +11,7 @@ function bbox(g) { let a = [180, 90, -180, -90]; rings(g).forEach(p => p[0].forE
 const loadImg = src => new Promise(ok => { const i = new Image(); i.decoding = 'async'; i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; });
 
 export const hijauRows = bid => (S.blok_hijau || []).filter(x => x.blok_id === bid).sort((a, b) => String(a.tanggal).localeCompare(String(b.tanggal)) || String(a.slot).localeCompare(String(b.slot)));
-export const hijauLast = bid => { const r = hijauRows(bid).filter(x => Number(x.cakupan) >= 0.5); return r[r.length - 1] || null; };
+export const hijauLast = bid => { const r = hijauRows(bid); return r[r.length - 1] || null; };
 // ortho yang belum dihitung
 export const orthoBelum = () => SLOTS.map(([k, l]) => ({ k, l, o: ORTHO[k] })).filter(x => x.o && !(S.blok_hijau || []).some(r => r.ortho_id === x.o.id));
 
@@ -19,31 +19,39 @@ async function blokStat(b, k, o, z) {
   const [w, s, e, n] = bbox(b.geom), ob = o.bounds;
   if (ob && (e < ob[0] || w > ob[2] || n < ob[1] || s > ob[3])) return null;
   const [fx0, fy0] = tXY(w, n, z), [fx1, fy1] = tXY(e, s, z), tpl = orthoUrl(k);
+  // ortho mingguan hanya meliput sebagian area: bagian blok yang tidak terliput diisi dari ortho utama
+  const fb = k !== 'utama' && ORTHO.utama ? orthoUrl('utama') : null;
+  const cv2 = document.createElement('canvas'); cv2.width = cv2.height = 256; const cx2 = cv2.getContext('2d', { willReadFrequently: true });
+  let own = 0;
   const cv = document.createElement('canvas'); cv.width = cv.height = 256; const cx = cv.getContext('2d', { willReadFrequently: true });
   const mk = document.createElement('canvas'); mk.width = mk.height = 256; const mx = mk.getContext('2d', { willReadFrequently: true });
   let tot = 0, cov = 0, hij = 0; const jobs = [];
   for (let x = Math.floor(fx0); x <= Math.floor(fx1); x++) for (let y = Math.floor(fy0); y <= Math.floor(fy1); y++) jobs.push([x, y]);
   for (let i = 0; i < jobs.length; i += 6) {
-    const imgs = await Promise.all(jobs.slice(i, i + 6).map(([x, y]) => loadImg(tpl.replace('{z}', z).replace('{x}', x).replace('{y}', y)).then(im => [x, y, im])));
-    for (const [x, y, im] of imgs) {
+    const u = (t, x, y) => t.replace('{z}', z).replace('{x}', x).replace('{y}', y);
+    const imgs = await Promise.all(jobs.slice(i, i + 6).map(([x, y]) => Promise.all([loadImg(u(tpl, x, y)), fb ? loadImg(u(fb, x, y)) : null]).then(([im, im2]) => [x, y, im, im2])));
+    for (const [x, y, im, im2] of imgs) {
       mx.clearRect(0, 0, 256, 256); mx.fillStyle = '#000'; mx.beginPath();
       rings(b.geom).forEach(p => p.forEach(r => r.forEach(([lo, la], j) => { const [px, py] = tXY(lo, la, z); const X = (px - x) * 256, Y = (py - y) * 256; j ? mx.lineTo(X, Y) : mx.moveTo(X, Y); })));
       mx.fill('evenodd'); const m = mx.getImageData(0, 0, 256, 256).data;
       let any = false; for (let q = 3; q < m.length; q += 4) if (m[q] > 127) { any = true; break; } if (!any) continue;
-      let d = null; if (im) { cx.clearRect(0, 0, 256, 256); cx.drawImage(im, 0, 0, 256, 256); d = cx.getImageData(0, 0, 256, 256).data; }
+      let d = null, d2 = null; if (im) { cx.clearRect(0, 0, 256, 256); cx.drawImage(im, 0, 0, 256, 256); d = cx.getImageData(0, 0, 256, 256).data; }
+      if (im2) { cx2.clearRect(0, 0, 256, 256); cx2.drawImage(im2, 0, 0, 256, 256); d2 = cx2.getImageData(0, 0, 256, 256).data; }
       for (let q = 0; q < m.length; q += 4) { if (m[q + 3] <= 127) continue; tot++;
-        if (!d || d[q + 3] < 128) continue; const R = d[q], Gc = d[q + 1], B = d[q + 2], sm = R + Gc + B; if (sm < 45) continue; cov++;
+        let src = d && d[q + 3] >= 128 ? d : null; if (src) own++; else if (d2 && d2[q + 3] >= 128) src = d2; if (!src) continue;
+        const R = src[q], Gc = src[q + 1], B = src[q + 2], sm = R + Gc + B; if (sm < 45) continue; cov++;
         if (Gc > R && (2 * Gc - R - B) / sm > EXG) hij++; }
     }
   }
-  if (!tot || !cov) return null;
-  return { pct: Math.round(hij / cov * 1000) / 10, cakupan: Math.round(cov / tot * 1000) / 1000, px: cov };
+  if (!tot || !cov || !own) return null;
+  // cakupan = bagian blok yang tercitra oleh ortho slot ini sendiri; sisanya (bila ada) dari ortho utama
+  return { pct: Math.round(hij / cov * 1000) / 10, cakupan: Math.round(own / tot * 1000) / 1000, px: cov };
 }
 
 // hitung semua blok untuk satu slot ortho; onProg(i, n, nama)
 export async function hitungHijau(k, onProg) {
   const o = ORTHO[k]; if (!o) throw new Error('Ortho belum ada.');
-  const z = Math.min(o.maxzoom || 18, 18), list = S.blok.filter(b => b.geom); let done = 0, ok = 0;
+  const z = Math.min(o.maxzoom || 18, k !== 'utama' && ORTHO.utama ? ORTHO.utama.maxzoom || 18 : 18, 18), list = S.blok.filter(b => b.geom); let done = 0, ok = 0;
   for (const b of list) {
     onProg && onProg(done, list.length, G.blokName(b));
     const r = await blokStat(b, k, o, z); done++;
