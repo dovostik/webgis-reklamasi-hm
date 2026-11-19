@@ -186,17 +186,20 @@ export function tugasList() {
 export function progresTanam(b) {
   const c1 = b && b.layer === 'bastl' ? L.periodes(b.id).filter(p => p.tipe === 'cek1') : []; if (!c1.length) return null;
   const jalan = c1.some(p => p.status === 'pelaksanaan'); // setelah vendor menyatakan selesai: jumlah tertanam = kebutuhan aktual (100%)
-  const n = G.needs(b.ha), fg = j => S.jenisMap[j]?.tipe === 'pionir' || String(S.jenisMap[j]?.kelompok || '').toLowerCase() === 'pionir';
-  let f = 0, s = 0; const add = (j, v) => { if (fg(j)) f += v; else s += v; };
-  S.kirim.filter(k => k.blok_id === b.id && k.status === 'diterima').forEach(k => add(k.jenis, Number(k.n)));
-  (S.kembali || []).filter(k => k.blok_id === b.id).forEach(k => add(k.jenis, -Number(k.n)));
-  (S.tampung_log || []).filter(l => l.blok_id === b.id).forEach(l => add(l.jenis, -Number(l.n)));
-  f = Math.max(0, f); s = Math.max(0, s);
-  if (!jalan) return { pct: 100, f, s, tf: f, ts: s, tot: f + s, target: f + s, selesai: true };
-  const target = n.pio + n.sis, done = Math.min(f, n.pio) + Math.min(s, n.sis);
-  return { pct: target ? Math.min(100, done / target * 100) : 0, f, s, tf: n.pio, ts: n.sis, tot: f + s, target };
+  const n = G.needs(b.ha), fg = j => S.jenisMap[j]?.tipe === 'pionir' || String(S.jenisMap[j]?.kelompok || '').toLowerCase() === 'pionir', today = G.today();
+  // bibit yang diterima hari ini belum dihitung tertanam (ditanam esok harinya); yang diterima sebelum hari ini dianggap sudah tertanam
+  const T = { f: 0, s: 0 }, H = { f: 0, s: 0 }, R = { f: 0, s: 0 }; const k_ = j => fg(j) ? 'f' : 's';
+  S.kirim.filter(k => k.blok_id === b.id && k.status !== 'batal').forEach(k => { const t = k_(k.jenis), v = Number(k.n);
+    if (k.status === 'diterima' && G.tglWIB(k.diterima_at) < today) T[t] += v; else if (k.status === 'diterima') H[t] += v; R[t] += v; });
+  (S.kembali || []).filter(k => k.blok_id === b.id).forEach(k => { const t = k_(k.jenis); T[t] -= Number(k.n); R[t] -= Number(k.n); });
+  (S.tampung_log || []).filter(l => l.blok_id === b.id).forEach(l => { const t = k_(l.jenis); T[t] -= Number(l.n); R[t] -= Number(l.n); });
+  const f = Math.max(0, T.f), s = Math.max(0, T.s), hari = H.f + H.s;
+  if (!jalan) { const af = Math.max(0, T.f + H.f), as = Math.max(0, T.s + H.s); return { pct: 100, f: af, s: as, tf: af, ts: as, tot: af + as, target: af + as, selesai: true }; }
+  // kebutuhan = rencana standar, atau total bibit yang diminta/dikirim bila lebih banyak
+  const tf = Math.max(n.pio, R.f), ts = Math.max(n.sis, R.s), target = tf + ts, done = Math.min(f, tf) + Math.min(s, ts);
+  return { pct: target ? Math.min(100, done / target * 100) : 0, f, s, tf, ts, tot: f + s, target, hari };
 }
-const progBar = pr => `<div class="row between small"><b>Progres penanaman</b><b>${fmt(pr.pct, 0)}%</b></div><div class="bar" style="margin:4px 0"><span style="width:${pr.pct}%;background:var(--tanam,#8E44AD)"></span></div><p class="small muted" style="margin:0">Tertanam ${fmt(pr.tot)} dari ${fmt(pr.target)} bibit · FG ${fmt(pr.f)}/${fmt(pr.tf)} · sisipan ${fmt(pr.s)}/${fmt(pr.ts)}</p>`;
+const progBar = pr => `<div class="row between small"><b>Progres penanaman</b><b>${fmt(pr.pct, 0)}%</b></div><div class="bar" style="margin:4px 0"><span style="width:${pr.pct}%;background:var(--tanam,#8E44AD)"></span></div><p class="small muted" style="margin:0">Tertanam ${fmt(pr.tot)} dari ${fmt(pr.target)} bibit · FG ${fmt(pr.f)}/${fmt(pr.tf)} · sisipan ${fmt(pr.s)}/${fmt(pr.ts)}${pr.hari ? `<br>Diterima hari ini ${fmt(pr.hari)} bibit: dihitung tertanam mulai besok.` : ''}</p>`;
 // kunci urut perawatan: tanggal rotasi terakhir (belum pernah = paling atas)
 const rotKey = b => String(b.tgl_rotasi_terakhir || '0000-00-00').slice(0, 10);
 const urutBlok = list => list.slice().sort((a, b) => { const la = a.layer === 'perawatan' ? 0 : 1, lb = b.layer === 'perawatan' ? 0 : 1;
