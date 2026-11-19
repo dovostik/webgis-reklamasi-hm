@@ -2,6 +2,7 @@
 // pemakaian bahan, stok bibit nursery, stok gudang & alat. Setiap tabel/grafik bisa diunduh sebagai PNG.
 import { S, L, $, $$ } from './core.js';
 import { dashFor, chart, pngBtn } from './dash.js';
+import { hijauLast } from './hijau.js';
 import * as G from './logic.js';
 const { fmt, esc, tgl } = G;
 const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
@@ -57,9 +58,9 @@ function pageRawat(r) {
     ${PB.length ? sec('perawatan-bulanan', '5. Realisasi perawatan bulanan', tbl([['No'], ['Bulan'], ['Rencana (Ha)', R], ['Realisasi (Ha)', R], ['%', R]],
       PB.map((x, i) => [i + 1, BULAN[x.bulan - 1], fmt(x.rencana, 2), x.realisasi == null ? '–' : fmt(x.realisasi, 2), x.realisasi == null || !Number(x.rencana) ? '' : fmt(x.realisasi / x.rencana * 100) + '%']),
       ['', 'Jumlah', fmt(rr, 2), fmt(ra, 2), rr ? fmt(ra / rr * 100) + '%' : '']), 'Bulan yang sudah dilaporkan memakai realisasi aktual laporan Compre; bulan berikutnya dari rotasi yang diselesaikan di aplikasi.') : ''}
-    ${sec('perawatan-per-blok', '6. Jadwal rotasi per blok', tbl([['No'], ['Blok'], ['Luas (Ha)', R], ['Rotasi terakhir'], ['Kegiatan berikut'], ['Jatuh tempo'], ['Status']],
-      bl.map((b, i) => { const x = L.rotasiInfo(b); return [i + 1, esc(G.blokName(b)), fmt(b.ha, 2), b.tgl_rotasi_terakhir ? tgl(b.tgl_rotasi_terakhir) : '–', x ? esc(x.kegiatan) : '–', x?.next ? tgl(x.next) : '–', esc(L.blokStatus(b).t)]; }),
-      ['', `Jumlah ${bl.length} blok`, fmt(bl.reduce((a, b) => a + Number(b.ha || 0), 0), 2), '', '', '', '']))}`;
+    ${sec('perawatan-per-blok', '6. Jadwal rotasi per blok', tbl([['No'], ['Blok'], ['Luas (Ha)', R], ['Rotasi terakhir'], ['Kegiatan berikut'], ['Jatuh tempo'], ['Status'], ['% hijau', R]],
+      bl.map((b, i) => { const x = L.rotasiInfo(b); return [i + 1, esc(G.blokName(b)), fmt(b.ha, 2), b.tgl_rotasi_terakhir ? tgl(b.tgl_rotasi_terakhir) : '–', x ? esc(x.kegiatan) : '–', x?.next ? tgl(x.next) : '–', esc(L.blokStatus(b).t), (h => h ? fmt(h.pct, 1) + '%' : '–')(hijauLast(b.id))]; }),
+      ['', `Jumlah ${bl.length} blok`, fmt(bl.reduce((a, b) => a + Number(b.ha || 0), 0), 2), '', '', '', '', '']), '% hijau = luas blok yang tampak hijau pada ortho drone terakhir.')}`;
 }
 
 function pageBahan(r, d) {
