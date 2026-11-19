@@ -194,7 +194,7 @@ export function renderSesi(id, shell) {
   const cl = $('#sClose'); if (cl) cl.addEventListener('click', async () => {
     if (tim.length) { if (isOnline()) { try { await flush(); await loadAll(); } catch (e) {} } const blm = anggota(s).filter(a => !a.selesai_at); if (blm.length) return toast(`Belum selesai: ${blm.map(a => a.nama).join(', ')}. Minta mereka menekan "Bagian saya selesai", atau tandai selesai di daftar tim.`, 5500); if (anggota(s).length && S.tag_event.filter(e => e.sesi_id === s.id).length !== evs.length) return renderSesi(id, shell); }
     const realS = L.realisasi(b); const tot = realS.pio + realS.sis; const pct = tot ? (tot - dead.size) / tot * 100 : 0;
-    if (!(await confirmSheet(`Tutup sesi dengan ${dead.size} tanaman mati? Persen hidup ${fmt(pct, 2)}%. ${pct >= G.STD.ambang ? (p.vendor === 'exdas' ? (p.tipe === 'cek1' ? 'Vendor menyulam semua tag GL, lalu GL mengajukan BA Keberhasilan Penilaian.' : 'Vendor menyulam semua tag GL, lalu ExDAS mengajukan BA Keberhasilan Penilaian Retensi.') : 'Vendor wajib menyulam semua tag GL, lalu BA menunggu persetujuan owner.') : 'Di bawah 90%: vendor menyulam tag GL, lalu GL verifikasi ulang.'}`, 'Tutup sesi'))) return;
+    if (!(await confirmSheet(`Tutup sesi dengan ${dead.size} tanaman mati? Persen hidup ${fmt(pct, 2)}%. ${pct >= G.STD.ambang ? (p.vendor === 'exdas' ? (p.tipe === 'cek1' ? 'Vendor menyulam semua tag GL, lalu GL mengajukan BA Keberhasilan Penilaian.' : 'Vendor menyulam semua tag GL, lalu ExDAS mengajukan BA Keberhasilan Penilaian Retensi.') : 'Vendor wajib menyulam semua tag GL, lalu BA menunggu persetujuan Suptend.') : 'Di bawah 90%: vendor menyulam tag GL, lalu GL verifikasi ulang.'}`, 'Tutup sesi'))) return;
     try {
       await saveTrack({ selesai_at: new Date().toISOString() });
       const sesiList = S.sesi.filter(x => x.periode_id === p.id);
@@ -205,7 +205,7 @@ export function renderSesi(id, shell) {
       await upd('periode', { id: p.id }, { status: openGl || !final ? 'sulam_gl' : p.vendor === 'exdas' ? 'ajukan_ba' : 'menunggu_persetujuan', pct: sen.pct, hasil: { final, rows: sen.rows, sesi_id: s.id, gl: { id: S.me.id, at: new Date().toISOString() } } });
       try { localStorage.removeItem(LK); } catch (e) {}
       if (trackUnsub) trackUnsub(); clearInterval(trackTimer);
-      toast(`Sesi ditutup · ${fmt(sen.pct, 2)}%. ${openGl ? openGl + ' tag GL dikirim ke vendor untuk disulam.' : p.vendor === 'exdas' ? (p.tipe === 'cek1' ? 'BA KP siap diajukan GL.' : 'BA KPR siap diajukan ExDAS.') : 'Menunggu persetujuan owner.'}`, 4000);
+      toast(`Sesi ditutup · ${fmt(sen.pct, 2)}%. ${openGl ? openGl + ' tag GL dikirim ke vendor untuk disulam.' : p.vendor === 'exdas' ? (p.tipe === 'cek1' ? 'BA KP siap diajukan GL.' : 'BA KPR siap diajukan ExDAS.') : 'Menunggu persetujuan Suptend.'}`, 4000);
       location.hash = '#blok/' + encodeURIComponent(b.id);
     } catch (e) { toast(e.message); }
   });

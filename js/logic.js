@@ -8,7 +8,7 @@ export const KONDLBL = Object.fromEntries(KONDISI);
 export const ROLE_LBL = { admin: 'Administrator', spv: 'SPV Reklamasi', admrek: 'Admin Reklamasi', suptend: 'Reclamation Suptend', owner: 'GL lapangan', nursery: 'GL Nursery', crew: 'Tenaga harian nursery', exdas: 'Vendor ExDAS', bumdes: 'Vendor BUMDES', viewer: 'Atasan (lihat saja)' };
 export const STATUS_LBL = {
   pelaksanaan: 'Pelaksanaan vendor', pp_diajukan: 'BA PP menunggu persetujuan', ajukan_ba: 'Siap diajukan BA', siap_inspeksi: 'Siap inspeksi GL', inspeksi: 'Inspeksi berjalan',
-  sulam_gl: 'Vendor menyulam tag GL', verifikasi: 'Siap verifikasi GL', menunggu_persetujuan: 'Menunggu persetujuan owner', selesai: 'Selesai'
+  sulam_gl: 'Vendor menyulam tag GL', verifikasi: 'Siap verifikasi GL', menunggu_persetujuan: 'Menunggu persetujuan Suptend', selesai: 'Selesai'
 };
 export const PP_FOTO = ['Pengajiran', 'Pupuk kandang di lubang tanam', 'Penanaman', 'Penaburan LCC'];
 export const TIPE_LBL = { cek1: 'Cek 1 penanaman', retensi: 'Retensi', rotasi: 'Rotasi perawatan' };
