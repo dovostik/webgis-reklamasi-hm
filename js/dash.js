@@ -12,20 +12,29 @@ let mode = (() => { try { return localStorage.getItem('hm-dash') || 'bulan'; } c
 // minggu ke-n dihitung dari 1 Januari (minggu 1, Senin–Minggu); akhir tahun bisa minggu 53/54
 const dow = d => (new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7;
 export const mingguKe = d => { const j = d.slice(0, 4) + '-01-01'; return Math.floor((diffD(j, d) + dow(j)) / 7) + 1; };
-function range(m) {
-  const today = day(new Date().toISOString()), [y, mo] = today.split('-').map(Number), jan1 = `${y}-01-01`, wk = mingguKe(today);
-  if (m === 'minggu') { const mon = addD(today, -dow(today)), a = mon < jan1 ? jan1 : mon;
-    return { a, b: today, lbl: 'Minggu ini', sub: `Minggu ke-${wk} · ${G.tgl(a)} – ${G.tgl(addD(mon, 6))}`, buckets: HARI.map((h, i) => ({ k: addD(mon, i), l: h })), key: d => d }; }
-  if (m === 'bulan') { const a = `${y}-${String(mo).padStart(2, '0')}-01`, w0 = mingguKe(a);
-    return { a, b: today, lbl: 'Bulan ini', sub: `${BLN[mo - 1]} ${y} · minggu ke-${w0}–${wk}`, buckets: Array.from({ length: wk - w0 + 1 }, (_, i) => ({ k: w0 + i, l: 'Mg ' + (w0 + i) })), key: mingguKe }; }
-  return { a: jan1, b: today, lbl: 'Year to date', sub: `1 Jan – ${G.tgl(today)} · s.d. minggu ke-${wk}`, buckets: BLN.slice(0, mo).map((l, i) => ({ k: i + 1, l })), key: d => Number(d.slice(5, 7)), monthly: true };
+// pilihan periode: minggu ke-n / bulan ke-n tahun berjalan (null = yang sedang berjalan)
+let selW = null, selM = null;
+const sunday = d => addD(d, 6 - dow(d));
+function range(m, sel = {}) {
+  const today = day(new Date().toISOString()), [y, mo] = today.split('-').map(Number), jan1 = `${y}-01-01`, wkNow = mingguKe(today);
+  if (m === 'minggu') { const wk = Math.min(sel.w || wkNow, wkNow), s0 = addD(jan1, (wk - 1) * 7 - dow(jan1)), mon = s0, a = mon < jan1 ? jan1 : mon, e0 = sunday(a), b = e0 > today ? today : e0;
+    return { kind: 'minggu', a, b, lbl: wk === wkNow ? 'Minggu ini' : `Minggu ke-${wk}`, sub: `Minggu ke-${wk} · ${G.tgl(a)} – ${G.tgl(e0)}`, buckets: HARI.map((h, i) => ({ k: addD(mon, i), l: h })), key: d => d }; }
+  if (m === 'bulan') { const bm = Math.min(sel.m || mo, mo), a = `${y}-${String(bm).padStart(2, '0')}-01`, end = new Date(Date.UTC(y, bm, 0)).toISOString().slice(0, 10), b = end > today ? today : end, w0 = mingguKe(a), w1 = mingguKe(b);
+    return { kind: 'bulan', a, b, lbl: bm === mo ? 'Bulan ini' : `${BLN[bm - 1]} ${y}`, sub: `${BLN[bm - 1]} ${y} · minggu ke-${w0}–${w1}`, buckets: Array.from({ length: w1 - w0 + 1 }, (_, i) => ({ k: w0 + i, l: 'Mg ' + (w0 + i) })), key: mingguKe }; }
+  return { kind: 'ytd', a: jan1, b: today, lbl: 'Year to date', sub: `1 Jan – ${G.tgl(today)} · s.d. minggu ke-${wkNow}`, buckets: BLN.slice(0, mo).map((l, i) => ({ k: i + 1, l })), key: d => Number(d.slice(5, 7)), monthly: true };
+}
+function pilihan() {
+  const today = day(new Date().toISOString()), [y, mo] = today.split('-').map(Number), jan1 = `${y}-01-01`, wkNow = mingguKe(today);
+  if (mode === 'minggu') return `<select id="dmSel" aria-label="Pilih minggu">${Array.from({ length: wkNow }, (_, i) => wkNow - i).map(w => { const s0 = addD(jan1, (w - 1) * 7 - dow(jan1)), a = s0 < jan1 ? jan1 : s0; return `<option value="${w}" ${(selW || wkNow) === w ? 'selected' : ''}>Minggu ke-${w} · ${G.tgl(a)}${w === wkNow ? ' (ini)' : ''}</option>`; }).join('')}</select>`;
+  if (mode === 'bulan') return `<select id="dmSel" aria-label="Pilih bulan">${Array.from({ length: mo }, (_, i) => mo - i).map(m => `<option value="${m}" ${(selM || mo) === m ? 'selected' : ''}>${BLN[m - 1]} ${y}${m === mo ? ' (ini)' : ''}</option>`).join('')}</select>`;
+  return '';
 }
 
 function rencanaOf(r, PB) {
   const m = Number(r.b.slice(5, 7)), rc = k => Number(PB.find(x => Number(x.bulan) === k)?.rencana || 0);
   if (r.monthly) return Array.from({ length: m }, (_, i) => rc(i + 1)).reduce((a, b) => a + b, 0);
   const dim = new Date(Date.UTC(Number(r.b.slice(0, 4)), m, 0)).getUTCDate();
-  return r.lbl === 'Bulan ini' ? rc(m) : rc(m) * (diffD(r.a, r.b) + 1) / dim;
+  return r.kind === 'bulan' ? rc(m) : rc(m) * (diffD(r.a, r.b) + 1) / dim;
 }
 function data(r, sees) {
   const inR = d => d && d >= r.a && d <= r.b, bl = id => S.blokMap[id], ok = id => sees(bl(id));
@@ -81,10 +90,11 @@ export const pngBtn = (name, lbl = 'PNG') => `<button type="button" class="pngbt
 export function dashFor(m, sees) { const r = range(m); return { r, d: data(r, sees) }; }
 export const kv = rows => `<dl class="kv">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
 export function dashHtml(sees, opts = {}) {
-  const r = range(mode), d = data(r, sees), tanam = opts.tanam !== false, rawat = opts.rawat !== false;
+  const r = range(mode, { w: selW, m: selM }), d = data(r, sees), tanam = opts.tanam !== false, rawat = opts.rawat !== false;
   const pct = d.bastlHa ? Math.min(100, d.allSetara / d.bastlHa * 100) : 0;
   return `<div class="card stack pngbox" id="dash"><div class="row between" style="align-items:flex-start"><div><h2 style="margin:0">Progres pekerjaan</h2><span class="small muted">${esc(r.sub)}</span></div><div class="row" style="gap:6px">${pngBtn('progres-' + mode)}${opts.laporan ? '<a class="pngbtn" href="#laporan">Laporan PDF</a>' : ''}</div></div>
     <div class="seg" role="tablist">${[['minggu', 'Minggu'], ['bulan', 'Bulan'], ['ytd', 'YTD']].map(([k, l]) => `<button type="button" data-dm="${k}" class="${mode === k ? 'on' : ''}" aria-pressed="${mode === k}">${l}</button>`).join('')}</div>
+    ${pilihan()}
     <div class="tiles">
       ${tanam ? `<div class="tile"><span>Penanaman</span><b>${fmt(d.haSetara, 2)} Ha</b><span>${fmt(d.bibit)} bibit tertanam</span></div>` : ''}
       ${rawat ? `<div class="tile"><span>Perawatan (rotasi)</span><b>${fmt(d.rotHa, 2)} Ha</b><span>${d.rencana ? `rencana ${fmt(d.rencana, 2)} Ha · ${fmt(d.rotHa / d.rencana * 100)}%${d.rencanaThn && mode === 'ytd' ? `<br>setahun ${fmt(d.rencanaThn, 2)} Ha · ${fmt(d.rotHa / d.rencanaThn * 100)}%` : ''}` : `${d.rotN} blok selesai`}</span></div>` : ''}
@@ -105,5 +115,6 @@ export function dashHtml(sees, opts = {}) {
     <p class="note" style="margin:0">Penanaman dihitung dari bibit diterima di lapangan dikurangi yang dikembalikan; 1 Ha setara ${fmt(d.perHa)} pohon. Material = diterima di lapangan dikurangi sisa yang kembali.${d.manual ? ' Perawatan bulan yang sudah dilaporkan memakai realisasi aktual laporan Compre.' : ''}</p></div>`;
 }
 export function bindDash(rerender) {
+  const sl = $('#dmSel'); if (sl) sl.addEventListener('change', () => { if (mode === 'minggu') selW = +sl.value; else selM = +sl.value; rerender(); });
   $$('[data-dm]').forEach(b => b.addEventListener('click', () => { mode = b.dataset.dm; try { localStorage.setItem('hm-dash', mode); } catch (e) {} rerender(); }));
 }

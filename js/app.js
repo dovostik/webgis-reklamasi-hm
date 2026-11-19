@@ -172,7 +172,7 @@ export function tugasList() {
       if (isRole('exdas') && b.layer !== 'bastl') continue; // blok yang sudah diserahkan ke BUMDES: riwayat saja
       if (!p && b.layer === 'perawatan') { const ri = L.rotasiInfo(b); if (ri && ri.dleft <= 30) out.push({ b, p: null, t: `Rotasi perawatan jatuh tempo ${tgl(ri.next)}`, k: ri.dleft < 0 ? 'bad' : 'warn' }); continue; }
       if (!p) continue;
-      if (p.status === 'pelaksanaan') { const ret = L.retensiInfo(p); out.push({ b, p, t: p.tipe === 'cek1' ? 'Penanaman berjalan' : p.tipe === 'retensi' ? (ret && ret.left > 0 ? `Retensi dimulai ${tgl(ret.until)}` : 'Retensi berjalan') : 'Perawatan berjalan', k: ret && ret.left > 0 ? 'idle' : 'pend' }); }
+      if (p.status === 'pelaksanaan') { const ret = L.retensiInfo(p); out.push({ b, p, t: p.tipe === 'cek1' ? `Penanaman berjalan · ${fmt(progresTanam(b)?.pct || 0, 0)}%` : p.tipe === 'retensi' ? (ret && ret.left > 0 ? `Retensi dimulai ${tgl(ret.until)}` : 'Retensi berjalan') : 'Perawatan berjalan', k: ret && ret.left > 0 ? 'idle' : 'pend' }); }
       if (p.status === 'ajukan_ba' && p.tipe === 'retensi' && isRole('exdas')) out.push({ b, p, t: 'Ajukan BA Keberhasilan Penilaian Retensi', k: 'warn' });
       if (p.status === 'sulam_gl') out.push({ b, p, t: `Sulam ${L.openGL(p).length} tag GL`, k: 'bad' });
     }
@@ -182,6 +182,18 @@ export function tugasList() {
   ix.forEach((i, j) => { out[i] = pr[j]; });
   return out;
 }
+// progres penanaman blok BASTL: bibit tertanam (diterima di lapangan − dikembalikan − afkir/mati di penampungan) dibanding kebutuhan FG + sisipan
+export function progresTanam(b) {
+  if (!b || b.layer !== 'bastl' || !L.periodes(b.id).some(p => p.tipe === 'cek1')) return null;
+  const n = G.needs(b.ha), fg = j => S.jenisMap[j]?.tipe === 'pionir' || String(S.jenisMap[j]?.kelompok || '').toLowerCase() === 'pionir';
+  let f = 0, s = 0; const add = (j, v) => { if (fg(j)) f += v; else s += v; };
+  S.kirim.filter(k => k.blok_id === b.id && k.status === 'diterima').forEach(k => add(k.jenis, Number(k.n)));
+  (S.kembali || []).filter(k => k.blok_id === b.id).forEach(k => add(k.jenis, -Number(k.n)));
+  (S.tampung_log || []).filter(l => l.blok_id === b.id).forEach(l => add(l.jenis, -Number(l.n)));
+  f = Math.max(0, f); s = Math.max(0, s); const target = n.pio + n.sis, done = Math.min(f, n.pio) + Math.min(s, n.sis);
+  return { pct: target ? Math.min(100, done / target * 100) : 0, f, s, tf: n.pio, ts: n.sis, tot: f + s, target };
+}
+const progBar = pr => `<div class="row between small"><b>Progres penanaman</b><b>${fmt(pr.pct, 0)}%</b></div><div class="bar" style="margin:4px 0"><span style="width:${pr.pct}%;background:var(--tanam,#8E44AD)"></span></div><p class="small muted" style="margin:0">Tertanam ${fmt(pr.tot)} dari ${fmt(pr.target)} bibit · FG ${fmt(pr.f)}/${fmt(pr.tf)} · sisipan ${fmt(pr.s)}/${fmt(pr.ts)}</p>`;
 // kunci urut perawatan: tanggal rotasi terakhir (belum pernah = paling atas)
 const rotKey = b => String(b.tgl_rotasi_terakhir || '0000-00-00').slice(0, 10);
 const urutBlok = list => list.slice().sort((a, b) => { const la = a.layer === 'perawatan' ? 0 : 1, lb = b.layer === 'perawatan' ? 0 : 1;
@@ -229,7 +241,7 @@ function renderTugas() {
       <div class="list" id="tl">${mine.map(b => blokItem(b)).join('')}</div></div></div>`);
   $('#tq').addEventListener('input', e => { const q = e.target.value.toLowerCase(); $('#tl').innerHTML = mine.filter(b => G.blokName(b).toLowerCase().includes(q) || (b.kode_bastl || '').toLowerCase().includes(q)).map(blokItem).join(''); });
 }
-const blokItem = b => { const s = L.blokStatus(b); return `<a class="item" href="#blok/${esc(b.id)}"><div class="grow"><b>${esc(G.blokName(b))}</b><span>${fmt(b.ha, 2)} Ha · ${b.layer === 'bastl' ? esc(b.kode_bastl) : esc(b.pit || '')}${b.layer === 'perawatan' ? ` · dirawat ${b.tgl_rotasi_terakhir ? tgl(b.tgl_rotasi_terakhir) : 'belum pernah'}` : ''}</span></div><span class="pill s-${s.k}">${esc(s.t)}</span></a>`; };
+const blokItem = b => { const s = L.blokStatus(b); return `<a class="item" href="#blok/${esc(b.id)}"><div class="grow"><b>${esc(G.blokName(b))}</b><span>${fmt(b.ha, 2)} Ha · ${b.layer === 'bastl' ? esc(b.kode_bastl) : esc(b.pit || '')}${b.layer === 'perawatan' ? ` · dirawat ${b.tgl_rotasi_terakhir ? tgl(b.tgl_rotasi_terakhir) : 'belum pernah'}` : ''}${(pr => pr ? ` · tertanam ${fmt(pr.pct, 0)}%` : '')(progresTanam(b))}</span></div><span class="pill s-${s.k}">${esc(s.t)}</span></a>`; };
 
 // ---------- peta ----------
 const COL = { ok: '#2F8A57', warn: '#D99A1B', bad: '#C8452F', pend: '#4F86C6', idle: '#B49A6A', done: '#9AA59D', tanam: '#8E44AD' };
@@ -285,7 +297,7 @@ function hijauAuto() {
 function showBlokSheet(id) {
   const b = S.blokMap[id]; const s = L.blokStatus(b);
   sheet(`<div class="stack"><div class="row between"><div><div class="eyebrow">${b.layer === 'bastl' ? 'BASTL 2026 · ExDAS' : b.layer === 'perawatan' ? 'Perawatan · ' + esc(b.pit || '') : 'Reklamasi berhasil'}</div><h2>${esc(G.blokName(b))}</h2></div><span class="pill s-${s.k}">${esc(s.t)}</span></div>
-    <dl class="kv"><dt>Luas</dt><dd>${fmt(b.ha, 2)} Ha</dd>${(h => h ? `<dt>% hijau</dt><dd>${fmt(h.pct, 1)}% <small class="muted">(${tgl(h.tanggal)})</small></dd>` : '')(hijauLast(b.id))}${b.kode_bastl ? `<dt>Kode BASTL</dt><dd>${esc(b.kode_bastl)}</dd>` : ''}${b.no_bastl ? `<dt>No. BASTL</dt><dd>${esc(b.no_bastl)}</dd>` : ''}${b.layer === 'berhasil' ? `<dt>Tahun reklamasi</dt><dd>${esc(b.tahun || '')}</dd>` : ''}</dl>
+    <dl class="kv"><dt>Luas</dt><dd>${fmt(b.ha, 2)} Ha</dd>${(pr => pr ? `<dt>Progres tanam</dt><dd><b>${fmt(pr.pct, 0)}%</b> <small class="muted">(${fmt(pr.tot)}/${fmt(pr.target)} bibit)</small></dd>` : '')(progresTanam(b))}${(h => h ? `<dt>% hijau</dt><dd>${fmt(h.pct, 1)}% <small class="muted">(${tgl(h.tanggal)})</small></dd>` : '')(hijauLast(b.id))}${b.kode_bastl ? `<dt>Kode BASTL</dt><dd>${esc(b.kode_bastl)}</dd>` : ''}${b.no_bastl ? `<dt>No. BASTL</dt><dd>${esc(b.no_bastl)}</dd>` : ''}${b.layer === 'berhasil' ? `<dt>Tahun reklamasi</dt><dd>${esc(b.tahun || '')}</dd>` : ''}</dl>
     <div class="grid2"><button class="btn ghost" data-close>Tutup</button>${b.layer !== 'berhasil' ? `<a class="btn" href="#blok/${esc(b.id)}">Buka blok</a>` : '<span></span>'}</div></div>`, (box, close) => { box.querySelectorAll('a').forEach(a => a.addEventListener('click', close)); });
 }
 
@@ -313,7 +325,7 @@ function renderBlok(id) {
     if (p && p.status === 'pelaksanaan') {
       if (p.tipe === 'cek1') {
         const tot = Object.values(stok).reduce((a, x) => a + x, 0);
-        act += `<div class="card stack"><h2>Penanaman ExDAS</h2><p class="small" style="margin:0">Bibit diterima di lapangan (blok ini): <b>${fmt(tot)}</b>${dk.length ? ` · ${fmt(dk.reduce((a, k) => a + k.n, 0))} dalam pengiriman` : ''}.</p><button class="btn block" id="vLapor" ${tot > 0 && !dk.length ? '' : 'disabled'}>Penanaman selesai · buat BA Penyelesaian Pekerjaan</button><p class="note" style="margin:0">Isi jumlah tertanam, unggah 4 foto (pengajiran, pupuk kandang di lubang tanam, penanaman, penaburan LCC), lalu kirim BA PP ke Suptend. Peta blok terlampir otomatis.</p>${dk.length ? '<p class="note">Terima dulu semua kiriman bibit.</p>' : tot ? '' : '<p class="note">Menunggu bibit dari nursery.</p>'}</div>`;
+        act += `<div class="card stack"><h2>Penanaman ExDAS</h2>${(pr => pr ? progBar(pr) : '')(progresTanam(b))}<p class="small" style="margin:0">Bibit diterima di lapangan (blok ini): <b>${fmt(tot)}</b>${dk.length ? ` · ${fmt(dk.reduce((a, k) => a + k.n, 0))} dalam pengiriman` : ''}.</p><button class="btn block" id="vLapor" ${tot > 0 && !dk.length ? '' : 'disabled'}>Penanaman selesai · buat BA Penyelesaian Pekerjaan</button><p class="note" style="margin:0">Isi jumlah tertanam, unggah 4 foto (pengajiran, pupuk kandang di lubang tanam, penanaman, penaburan LCC), lalu kirim BA PP ke Suptend. Peta blok terlampir otomatis.</p>${dk.length ? '<p class="note">Terima dulu semua kiriman bibit.</p>' : tot ? '' : '<p class="note">Menunggu bibit dari nursery.</p>'}</div>`;
       } else if (L.retensiInfo(p)?.left > 0) {
         const ret = L.retensiInfo(p);
         act += `<div class="card stack"><h2>Retensi ExDAS</h2><div class="alert">Retensi dimulai <b>${tgl(ret.until)}</b> (${ret.left} hari lagi), 3 bulan setelah BA Keberhasilan Penilaian. Setelah itu ExDAS merawat, memasang tag pada tanaman mati, menyulam, lalu menyatakan retensi selesai.</div></div>`;
@@ -356,7 +368,8 @@ function renderBlok(id) {
   const bag = (b.bagian || []).filter(x => x.bastl || x.split); const bagH = bag.length && (bag.length > 1 || bag[0].split) ? `<dt>Bagian petak</dt><dd>${bag.map(x => `${esc(x.bastl || '–')}${x.split ? ' · split ' + esc(x.split) : ''} (${fmt(x.ha, 2)} Ha)`).join('<br>')}</dd>` : '';
   const info = `<dl class="kv"><dt>Luas</dt><dd>${fmt(b.ha, 2)} Ha</dd>${bagH}${b.kode_bastl ? `<dt>Kode BASTL</dt><dd class="mono">${esc(b.kode_bastl)}</dd>` : ''}${b.no_bastl ? `<dt>No. BASTL</dt><dd>${esc(b.no_bastl)}</dd>` : ''}
     ${ri ? `<dt>Tanggal tanam</dt><dd>${tgl(ri.tanam.tgl)}${ri.tanam.perkiraan ? ' *' : ''}</dd><dt>Umur</dt><dd>${fmt(ri.umur / 30.4)} bulan</dd><dt>Kegiatan</dt><dd>${ri.kegiatan}</dd><dt>Rotasi terakhir</dt><dd>${ri.last ? tgl(ri.last) : 'belum diisi'}</dd><dt>Rotasi berikutnya</dt><dd>${tgl(ri.next)}</dd>` : ''}</dl>${ri?.tanam.perkiraan ? '<p class="note">* Perkiraan dari bulan tanam di shapefile.</p>' : ''}`;
-  const need = b.layer === 'bastl' ? `<div class="sec"><h3>Kebutuhan penanaman</h3><dl class="kv"><dt>Ajir & lubang</dt><dd>${fmt(n.lubang)}</dd><dt>Pupuk kandang 1 kg/pohon</dt><dd>${fmt(n.pupuk)} kg · ${fmt(n.sakKohe)} sak</dd><dt>NPK 50 g/pohon</dt><dd>${fmt(n.npk, 1)} kg</dd><dt>FG / sisipan</dt><dd>${fmt(n.pio)} / ${fmt(n.sis)}</dd><dt>LCC 20 kg/Ha</dt><dd>${fmt(n.lcc)} kg</dd><dt>Perkiraan durasi</dt><dd>${n.hariKerja} hari</dd></dl></div>` : `<div class="sec"><h3>Kebutuhan per rotasi</h3><dl class="kv"><dt>Populasi</dt><dd>${fmt(G.STD.lubang * b.ha)} pohon</dd><dt>NPK 50 g/pohon</dt><dd>${fmt(G.STD.npk * b.ha, 1)} kg</dd></dl></div>`;
+  const prT = progresTanam(b);
+  const need = b.layer === 'bastl' ? `${prT && !(L.aktif(b.id)?.status === 'pelaksanaan') ? `<div class="sec">${progBar(prT)}</div>` : ''}<div class="sec"><h3>Kebutuhan penanaman</h3><dl class="kv"><dt>Ajir & lubang</dt><dd>${fmt(n.lubang)}</dd><dt>Pupuk kandang 1 kg/pohon</dt><dd>${fmt(n.pupuk)} kg · ${fmt(n.sakKohe)} sak</dd><dt>NPK 50 g/pohon</dt><dd>${fmt(n.npk, 1)} kg</dd><dt>FG / sisipan</dt><dd>${fmt(n.pio)} / ${fmt(n.sis)}</dd><dt>LCC 20 kg/Ha</dt><dd>${fmt(n.lcc)} kg</dd><dt>Perkiraan durasi</dt><dd>${n.hariKerja} hari</dd></dl></div>` : `<div class="sec"><h3>Kebutuhan per rotasi</h3><dl class="kv"><dt>Populasi</dt><dd>${fmt(G.STD.lubang * b.ha)} pohon</dd><dt>NPK 50 g/pohon</dt><dd>${fmt(G.STD.npk * b.ha, 1)} kg</dd></dl></div>`;
   const stokHtml = Object.keys(stok).length || dk.length ? `<div class="sec"><div class="row between"><h3>Bibit di lapangan</h3>${kembaliDue(id) != null && Object.keys(stok).length ? `<span class="pill ${kembaliDue(id) < 0 ? 's-bad' : 's-warn'}">${kembaliDue(id) < 0 ? 'Lewat ' + (-kembaliDue(id)) + ' hari' : 'Kembalikan ≤ ' + kembaliDue(id) + ' hari'}</span>` : ''}</div><div class="chips">${Object.entries(stok).map(([k, v]) => `<span class="chip">${esc(S.jenisMap[k]?.nama || k)} ${fmt(v)}</span>`).join('')}${dk.map(k => `<span class="chip">dikirim: ${esc(S.jenisMap[k.jenis]?.nama)} ${fmt(k.n)}</span>`).join('')}</div>${Object.keys(stok).length && isRole('admin', 'owner', 'exdas', 'bumdes') ? '<button class="btn ghost block" id="kbBtn">Kembalikan ke nursery (sisa / afkir)</button>' : ''}</div>` : '';
   const mats = (S.kirim_mat || []).filter(k => k.blok_id === id);
   const matHtml = mats.length ? `<div class="sec"><h3>Material ke blok ini</h3><div class="chips">${mats.map(k => `<span class="chip">${esc(k.barang)} ${fmt(k.n, 1)} ${esc(S.barang.find(x => x.nama === k.barang)?.satuan || '')}${k.status === 'dikirim' ? ' · dalam pengiriman' : k.sisa_at ? (Number(k.sisa) ? ' · sisa ' + fmt(k.sisa, 1) + ' kembali' : ' · habis') : k.kembali_at ? ' · sisa ' + fmt(k.kembali, 1) + ' dikirim kembali' : ''}</span>`).join('')}</div>${mats.some(k => k.status === 'diterima' && !k.sisa_at && !k.kembali_at) && isRole('admin', 'owner', 'exdas', 'bumdes') ? '<button class="btn ghost block" id="kmBtn">Kembalikan sisa material ke gudang</button>' : ''}</div>` : '';
