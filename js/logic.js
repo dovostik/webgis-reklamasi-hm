@@ -102,8 +102,10 @@ export function makeLogic(S) {
   function lockInfo(p) {
     if (!p) return { why: 'Belum ada pekerjaan vendor di blok ini.' };
     if (!['siap_inspeksi', 'verifikasi'].includes(p.status)) return { why: 'Status: ' + STATUS_LBL[p.status] + '.' };
-    const base = [p.vendor_selesai_at, lastSulam(p.blok_id, p.created_at)].filter(Boolean).sort().pop();
-    if (base) { const until = addDays(tglWIB(base), 7); if (today() < until) return { why: `Bibit tanam/sulam terakhir ${tgl(base)} belum berumur 7 hari.`, until }; }
+    // penanaman (Cek 1): inspeksi GL 14 hari setelah BA Penyelesaian Pekerjaan disetujui
+    if (p.tipe === 'cek1') { const ok = p.pp?.approved_at || p.vendor_selesai_at; if (ok) { const until = addDays(tglWIB(ok), 14); if (today() < until) return { why: `BA Penyelesaian Pekerjaan disetujui ${tgl(ok)}; inspeksi penanaman dilakukan 2 minggu setelahnya.`, until }; } }
+    const base = [p.tipe === 'cek1' ? null : p.vendor_selesai_at, lastSulam(p.blok_id, p.created_at)].filter(Boolean).sort().pop();
+    if (base) { const until = addDays(tglWIB(base), 7); if (today() < until) return { why: `Bibit ${p.tipe === 'cek1' ? 'sulam' : 'tanam/sulam'} terakhir ${tgl(base)} belum berumur 7 hari.`, until }; }
     return null;
   }
   function retensiInfo(p) {

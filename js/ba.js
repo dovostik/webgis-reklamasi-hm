@@ -82,7 +82,7 @@ export async function approvePP(p) {
     const ids = await issue(p, b, ['PP'], base);
     await upd('periode', { id: p.id }, { status: 'siap_inspeksi', pp: { ...p.pp, approved_at: new Date().toISOString(), approved_by: S.me.id, ba_id: ids[0] } }, { offline: false });
     const paths = (p.pp?.foto || []).filter(Boolean); if (paths.length) await SB.remove('foto', paths).catch(() => {});
-    toast('BA PP terbit. GL owner bisa mengecek 7 hari lagi.'); location.hash = '#ba/' + ids[0];
+    toast('BA PP terbit. GL owner menginspeksi penanaman 2 minggu lagi.'); location.hash = '#ba/' + ids[0];
   } catch (e) { toast(e.message, 5000); }
 }
 export async function approvePeriode(p) {
