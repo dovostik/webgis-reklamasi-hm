@@ -177,8 +177,15 @@ export function tugasList() {
       if (p.status === 'sulam_gl') out.push({ b, p, t: `Sulam ${L.openGL(p).length} tag GL`, k: 'bad' });
     }
   }
+  // tugas blok perawatan: yang paling lama tidak dirawat di atas (urutan tugas lain tetap)
+  const ix = out.map((x, i) => x.b.layer === 'perawatan' ? i : -1).filter(i => i >= 0), pr = ix.map(i => out[i]).sort((a, c) => rotKey(a.b).localeCompare(rotKey(c.b)));
+  ix.forEach((i, j) => { out[i] = pr[j]; });
   return out;
 }
+// kunci urut perawatan: tanggal rotasi terakhir (belum pernah = paling atas)
+const rotKey = b => String(b.tgl_rotasi_terakhir || '0000-00-00').slice(0, 10);
+const urutBlok = list => list.slice().sort((a, b) => { const la = a.layer === 'perawatan' ? 0 : 1, lb = b.layer === 'perawatan' ? 0 : 1;
+  return la - lb || (la === 0 ? rotKey(a).localeCompare(rotKey(b)) : 0) || G.blokName(a).localeCompare(G.blokName(b), 'id', { numeric: true }); });
 
 // ---------- beranda (atasan & admin) ----------
 function renderNotif() {
@@ -214,7 +221,7 @@ function renderBeranda() {
 // ---------- tugas ----------
 function renderTugas() {
   const list = tugasList(); const r = role();
-  const mine = S.blok.filter(b => seesBlok(b) && b.layer !== 'berhasil' && (b.layer !== 'bastl' || b.nama));
+  const mine = urutBlok(S.blok.filter(b => seesBlok(b) && b.layer !== 'berhasil' && (b.layer !== 'bastl' || b.nama)));
   shell('Tugas', null, `<div class="stack">
     <div class="list">${list.length ? list.map(x => `<a class="item" href="${x.href || '#blok/' + esc(x.b.id)}"><div class="grow"><b>${esc(G.blokName(x.b))} <span class="muted small">${fmt(x.b.ha, 2)} Ha</span></b><span>${esc(x.t)}</span></div><span class="pill s-${x.k}">${x.p ? esc(G.STATUS_LBL[x.p.status]) : 'Jadwal'}</span></a>`).join('') : '<div class="card"><p class="muted" style="margin:0">Tidak ada tugas saat ini.</p></div>'}</div>
     <div class="card stack"><div class="row between"><h2>${isRole('exdas') || isRole('bumdes') ? 'Blok saya' : 'Semua blok kerja'}</h2><span class="small muted">${mine.length}</span></div>
@@ -222,7 +229,7 @@ function renderTugas() {
       <div class="list" id="tl">${mine.map(b => blokItem(b)).join('')}</div></div></div>`);
   $('#tq').addEventListener('input', e => { const q = e.target.value.toLowerCase(); $('#tl').innerHTML = mine.filter(b => G.blokName(b).toLowerCase().includes(q) || (b.kode_bastl || '').toLowerCase().includes(q)).map(blokItem).join(''); });
 }
-const blokItem = b => { const s = L.blokStatus(b); return `<a class="item" href="#blok/${esc(b.id)}"><div class="grow"><b>${esc(G.blokName(b))}</b><span>${fmt(b.ha, 2)} Ha · ${b.layer === 'bastl' ? esc(b.kode_bastl) : esc(b.pit || '')}</span></div><span class="pill s-${s.k}">${esc(s.t)}</span></a>`; };
+const blokItem = b => { const s = L.blokStatus(b); return `<a class="item" href="#blok/${esc(b.id)}"><div class="grow"><b>${esc(G.blokName(b))}</b><span>${fmt(b.ha, 2)} Ha · ${b.layer === 'bastl' ? esc(b.kode_bastl) : esc(b.pit || '')}${b.layer === 'perawatan' ? ` · dirawat ${b.tgl_rotasi_terakhir ? tgl(b.tgl_rotasi_terakhir) : 'belum pernah'}` : ''}</span></div><span class="pill s-${s.k}">${esc(s.t)}</span></a>`; };
 
 // ---------- peta ----------
 const COL = { ok: '#2F8A57', warn: '#D99A1B', bad: '#C8452F', pend: '#4F86C6', idle: '#B49A6A', done: '#9AA59D', tanam: '#8E44AD' };

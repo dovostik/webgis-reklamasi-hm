@@ -53,7 +53,7 @@ function pageTanam(r) {
 function pageRawat(r) {
   const yr = r.b.slice(0, 4), PB = (S.perawatan_bulanan || []).filter(x => String(x.tahun) === yr).sort((a, b) => a.bulan - b.bulan);
   const rr = PB.reduce((a, x) => a + Number(x.rencana || 0), 0), ra = PB.reduce((a, x) => a + Number(x.realisasi || 0), 0);
-  const bl = S.blok.filter(b => b.layer === 'perawatan').sort((a, b) => G.blokName(a).localeCompare(G.blokName(b), 'id', { numeric: true }));
+  const bl = S.blok.filter(b => b.layer === 'perawatan').sort((a, b) => String(a.tgl_rotasi_terakhir || '0000').slice(0, 10).localeCompare(String(b.tgl_rotasi_terakhir || '0000').slice(0, 10)) || G.blokName(a).localeCompare(G.blokName(b), 'id', { numeric: true })); // terlama dirawat di atas
   return `<h4>Progres Perawatan (BUMDES)</h4><p class="nomor">Tahun ${yr}</p>
     ${PB.length ? sec('perawatan-bulanan', '5. Realisasi perawatan bulanan', tbl([['No'], ['Bulan'], ['Rencana (Ha)', R], ['Realisasi (Ha)', R], ['%', R]],
       PB.map((x, i) => [i + 1, BULAN[x.bulan - 1], fmt(x.rencana, 2), x.realisasi == null ? '–' : fmt(x.realisasi, 2), x.realisasi == null || !Number(x.rencana) ? '' : fmt(x.realisasi / x.rencana * 100) + '%']),
