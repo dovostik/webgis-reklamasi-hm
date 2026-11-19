@@ -40,7 +40,8 @@ function data(r, sees) {
   const inR = d => d && d >= r.a && d <= r.b, bl = id => S.blokMap[id], ok = id => sees(bl(id));
   const ev = []; // {d, tipe, v}
   // penanaman: bibit diterima di lapangan dikurangi yang dikembalikan
-  S.kirim.filter(k => k.status === 'diterima' && ok(k.blok_id)).forEach(k => ev.push({ d: day(k.diterima_at), t: 'bibit', v: Number(k.n), blok: k.blok_id }));
+  // bibit diterima dihitung tertanam esok harinya (sama dengan progres per blok)
+  S.kirim.filter(k => k.status === 'diterima' && ok(k.blok_id)).forEach(k => ev.push({ d: addD(day(k.diterima_at), 1), t: 'bibit', v: Number(k.n), blok: k.blok_id }));
   (S.kembali || []).filter(k => ok(k.blok_id)).forEach(k => ev.push({ d: day(k.dikirim_at), t: 'bibit', v: -Number(k.n), blok: k.blok_id }));
   // selesai penanaman & rotasi
   // realisasi perawatan bulanan (aktual dari laporan Compre) menggantikan catatan aplikasi untuk bulan yang sudah diisi
@@ -61,7 +62,7 @@ function data(r, sees) {
   const rotDur = E.filter(e => e.t === 'rotHa' && e.p?.mulai_at).map(e => diffD(day(e.p.mulai_at), e.d));
   const series = r.buckets.map(b => { const f = t => E.filter(e => e.t === t && r.key(e.d) === b.k).reduce((a, e) => a + e.v, 0); return { l: b.l, a: Math.max(0, f('bibit')) / perHa, b: f('rotHa'), r: r.monthly ? Number(PB.find(x => Number(x.bulan) === b.k)?.rencana || 0) : 0 }; });
   const bs = S.blok.filter(b => b.layer === 'bastl' && sees(b)), bastlHa = bs.reduce((a, b) => a + Number(b.ha), 0);
-  const allBibit = ev.filter(e => e.t === 'bibit').reduce((a, e) => a + e.v, 0);
+  const allBibit = ev.filter(e => e.t === 'bibit' && e.d <= day(new Date().toISOString())).reduce((a, e) => a + e.v, 0);
   return { bibit, haSetara: bibit / perHa, hariTanam, tanamHa: sum('tanamHa'), rotHa: sum('rotHa'), rotN: E.filter(e => e.t === 'rotHa' && !e.man).length, manual: E.some(e => e.man), bulanN: Math.max(1, Number(r.b.slice(5, 7)) - (r.monthly ? 0 : Number(r.a.slice(5, 7)) - 1)), rencana: rencanaOf(r, PB), rencanaThn: PB.reduce((a, x) => a + Number(x.rencana || 0), 0), retHa: sum('retHa'),
     kohe: sum('m_kohe'), npk: sum('m_npk'), lcc: sum('m_lcc'), sesiN: ses.length, sesiHa: ses.reduce((a, e) => a + e.v, 0), jam, mati: sum('mati'), sulam: sum('sulam'),
     rotDur: rotDur.length ? rotDur.reduce((a, b) => a + b, 0) / rotDur.length : null, series, bastlHa, allSetara: allBibit / perHa,

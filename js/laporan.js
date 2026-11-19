@@ -38,8 +38,9 @@ function pageTanam(r) {
   const rows = S.blok.filter(b => b.layer === 'bastl').sort((a, b) => G.blokName(a).localeCompare(G.blokName(b), 'id', { numeric: true })).map(b => {
     const ps = L.periodes(b.id).filter(p => p.tipe === 'cek1'), p = ps[ps.length - 1];
     const kir = S.kirim.filter(k => k.blok_id === b.id && k.status === 'diterima'), kem = (S.kembali || []).filter(k => k.blok_id === b.id);
-    const net = kir.reduce((a, k) => a + Number(k.n), 0) - kem.reduce((a, k) => a + Number(k.n), 0);
-    const netR = kir.filter(k => inR(day(k.diterima_at))).reduce((a, k) => a + Number(k.n), 0) - kem.filter(k => inR(day(k.dikirim_at))).reduce((a, k) => a + Number(k.n), 0);
+    const net = kir.filter(k => G.addDays(day(k.diterima_at), 1) <= G.today()).reduce((a, k) => a + Number(k.n), 0) - kem.reduce((a, k) => a + Number(k.n), 0);
+    const tanamD = k => G.addDays(day(k.diterima_at), 1), tdy = G.today(); // tertanam esok hari setelah diterima
+    const netR = kir.filter(k => inR(tanamD(k)) && tanamD(k) <= tdy).reduce((a, k) => a + Number(k.n), 0) - kem.filter(k => inR(day(k.dikirim_at))).reduce((a, k) => a + Number(k.n), 0);
     const setara = Math.max(0, net) / G.STD.lubang, pc = Number(b.ha) ? Math.min(100, setara / Number(b.ha) * 100) : 0;
     return { b, p, net, netR, setara, pc };
   });
