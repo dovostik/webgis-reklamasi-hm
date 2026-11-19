@@ -1,0 +1,16 @@
+{
+  "name": "DTM Kontur 3D",
+  "short_name": "DTM 3D",
+  "description": "DTM, kontur, dan orthofoto 3D dari file Surpac STR dan koordinat survei, bisa dipakai offline.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#eef0ec",
+  "theme_color": "#5a2bc2",
+  "lang": "id",
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}

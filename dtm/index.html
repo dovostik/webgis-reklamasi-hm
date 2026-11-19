@@ -1,0 +1,1311 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#5a2bc2">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>DTM Kontur 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Tata letak: meja ukur. Panel instrumen di kiri, panggung 3D mengisi sisa layar, skala elevasi menempel di tepi panggung. */
+:root{
+  --bg:#eef0ec; --panel:#f8f9f6; --stage:#dfe3dd; --line:#cfd4cb; --fg:#20241f; --muted:#5e665b;
+  --accent:#5a2bc2; --accent-fg:#ffffff; --hud:rgba(248,249,246,.9); --warn-bg:#fbeed2; --warn-fg:#6b4700; --err-bg:#f9dfdc; --err-fg:#8a1f17;
+  --f-display:"Archivo Narrow","Arial Narrow",Arial,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#15171c; --panel:#1b1e24; --stage:#101217; --line:#31353e; --fg:#e7e8ea; --muted:#9ea3ad;
+  --accent:#a98ef6; --accent-fg:#17122a; --hud:rgba(27,30,36,.9); --warn-bg:#3b2f13; --warn-fg:#f2d48f; --err-bg:#43201d; --err-fg:#f6b9b2; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#15171c; --panel:#1b1e24; --stage:#101217; --line:#31353e; --fg:#e7e8ea; --muted:#9ea3ad;
+  --accent:#a98ef6; --accent-fg:#17122a; --hud:rgba(27,30,36,.9); --warn-bg:#3b2f13; --warn-fg:#f2d48f; --err-bg:#43201d; --err-fg:#f6b9b2; color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;line-height:1.45;overflow:hidden}
+*{box-sizing:border-box}
+#app{height:100%;display:grid;grid-template-columns:336px minmax(0,1fr)}
+#panel{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;display:flex;flex-direction:column;min-height:0}
+#panel>header{padding:16px 16px 12px}
+h1{font-family:var(--f-display);font-size:26px;line-height:1.1;margin:0;letter-spacing:.01em;font-weight:700}
+#panel>header p{margin:4px 0 0;color:var(--muted);font-size:13px}
+section{padding:14px 16px;border-top:1px solid var(--line);display:grid;gap:10px;min-width:0}
+h2{font-family:var(--f-display);font-size:13px;letter-spacing:.09em;text-transform:uppercase;margin:0;color:var(--muted);font-weight:700}
+.files{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.file{display:grid;gap:2px;padding:10px;border:1px solid var(--line);border-radius:6px;cursor:pointer;background:var(--bg);min-width:0}
+.file:hover{border-color:var(--accent)}
+.file:focus-within{outline:2px solid var(--accent);outline-offset:1px}
+.file b{font-weight:600}
+.file small{color:var(--muted);font-size:11.5px;line-height:1.3}
+.file input{position:absolute;opacity:0;width:1px;height:1px}
+#srcName,#orthoName{overflow-wrap:anywhere}
+.names{font-size:12.5px;color:var(--muted);display:grid;gap:2px}
+.names span{color:var(--fg)}
+#status{font-size:12.5px;padding:8px 10px;border-radius:6px;background:var(--bg);overflow-wrap:anywhere}
+#status.warn{background:var(--warn-bg);color:var(--warn-fg)}
+#status.err{background:var(--err-bg);color:var(--err-fg)}
+#fitOrtho{justify-self:start}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 8px}
+.stats div{min-width:0}
+.stats dt{font-size:11.5px;color:var(--muted)}
+.stats dd{margin:0;font-family:var(--f-mono);font-size:13.5px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+dl{margin:0}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;align-items:center}
+.row label,.row .lab{font-size:13px}
+.row output,.mono{font-family:var(--f-mono);font-size:12.5px;font-variant-numeric:tabular-nums}
+.row input[type=range]{grid-column:1/-1;width:100%;accent-color:var(--accent);margin:0}
+.check{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
+.check input{accent-color:var(--accent);margin:0;width:16px;height:16px}
+.checks{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+select,input[type=number]{font:inherit;font-size:13px;padding:5px 7px;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--fg);min-width:0;width:100%}
+input[type=number]{font-family:var(--f-mono)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.field{display:grid;gap:3px;font-size:12px;color:var(--muted);min-width:0}
+.seg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{border:0;border-right:1px solid var(--line);background:transparent;color:var(--fg);font:inherit;font-size:12.5px;padding:7px 2px;cursor:pointer}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed=true]{background:var(--accent);color:var(--accent-fg);font-weight:600}
+.seg button:disabled{color:var(--muted);opacity:.55;cursor:not-allowed}
+.btn{font:inherit;font-size:12.5px;padding:6px 10px;border:1px solid var(--line);border-radius:5px;background:var(--panel);color:var(--fg);cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.preview{overflow-x:auto;border:1px solid var(--line);border-radius:5px}
+.preview table{border-collapse:collapse;font-family:var(--f-mono);font-size:11.5px;white-space:nowrap}
+.preview td,.preview th{padding:3px 7px;text-align:right;border-bottom:1px solid var(--line)}
+.preview th{color:var(--muted);font-weight:500}
+.preview tr:last-child td{border-bottom:0}
+.hint{font-size:12px;color:var(--muted);margin:0}
+.pend{display:grid;gap:8px;padding:10px;border:1px solid var(--accent);border-radius:6px;min-width:0}
+.pend b{overflow-wrap:anywhere}
+.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:600}
+#hist{list-style:none;margin:0;padding:0;display:grid;gap:0}
+#hist li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;padding:7px 0;border-top:1px solid var(--line);font-size:12.5px;align-items:center}
+#hist li:first-child{border-top:0}
+#hist .nm{overflow-wrap:anywhere;font-weight:500}
+#hist .dt{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+#hist .inf{color:var(--muted);font-size:12px}
+#hist .del{justify-self:end}
+#hist .del{font:inherit;font-size:12px;border:0;background:none;color:var(--muted);cursor:pointer;text-decoration:underline;padding:2px}
+#hist .del.sure{color:var(--err-fg);font-weight:600}
+#stage{position:relative;background:var(--stage);min-width:0;min-height:0;overflow:hidden}
+#gl{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#gl:active{cursor:grabbing}
+.hud{position:absolute;background:var(--hud);border:1px solid var(--line);border-radius:6px}
+#chip{top:12px;left:12px;padding:4px 9px;font-size:12px;font-weight:600;color:var(--accent)}
+#compass{top:12px;right:12px;width:46px;height:46px;border-radius:50%;display:grid;place-items:center}
+#compass svg{width:38px;height:38px;display:block}
+#legend{right:12px;top:70px;bottom:62px;width:74px;padding:8px 6px;display:flex;flex-direction:column;gap:6px;max-height:430px}
+#legend b{font-size:10.5px;color:var(--muted);font-weight:600;text-align:center;line-height:1.15}
+#scale{position:relative;flex:1;min-height:0}
+#ramp{position:absolute;left:0;top:0;width:14px;height:100%;border-radius:2px}
+.tick{position:absolute;left:18px;right:0;font-family:var(--f-mono);font-size:10.5px;transform:translateY(-50%);font-variant-numeric:tabular-nums;white-space:nowrap}
+#readout{left:12px;bottom:12px;padding:6px 10px;font-family:var(--f-mono);font-size:12px;font-variant-numeric:tabular-nums;display:flex;flex-wrap:wrap;gap:2px 12px;max-width:calc(100% - 200px)}
+#readout i{font-style:normal;color:var(--muted)}
+#views{right:12px;bottom:12px;display:flex;overflow:hidden}
+#views button{border:0;border-right:1px solid var(--line);background:transparent;color:var(--fg);font:inherit;font-size:12.5px;padding:7px 10px;cursor:pointer}
+#views button:last-child{border-right:0}
+#drop{position:absolute;inset:10px;border:2px dashed var(--accent);border-radius:8px;display:grid;place-items:center;background:var(--hud);font-family:var(--f-display);font-size:22px;color:var(--accent);pointer-events:none}
+#busy{position:absolute;left:50%;top:14px;transform:translateX(-50%);padding:6px 12px;font-size:13px;font-weight:500;max-width:70%}
+@media (max-width:760px){
+  #app{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(300px,52%) minmax(0,1fr)}
+  #stage{grid-row:1}
+  #panel{grid-row:2;border-right:0;border-top:1px solid var(--line)}
+  #panel>header{padding-bottom:8px}
+  #legend{top:66px;bottom:54px;width:58px;max-height:250px}
+  #legend b{font-size:9.5px}
+  .tick{font-size:9.5px}
+  #readout{font-size:11px;max-width:calc(100% - 124px);padding:5px 8px}
+  #views{left:auto}
+}
+</style>
+</head>
+<body>
+
+
+<div id="app">
+  <aside id="panel" aria-label="Pengaturan">
+    <header>
+      <h1>DTM Kontur 3D</h1>
+      <p>Koordinat menjadi permukaan, kontur, dan orthofoto.</p>
+      <p id="net" class="hint"></p>
+      <button class="btn primary" id="install" type="button" hidden style="margin-top:8px">Pasang di layar utama</button>
+    </header>
+
+    <section aria-labelledby="h-data">
+      <h2 id="h-data">Data</h2>
+      <div class="files">
+        <label class="file"><b>File koordinat</b><small>Surpac STR, CSV, TXT, XYZ, Excel, LAS, DXF</small>
+          <input id="fileCoord" type="file" accept=".str,.csv,.txt,.xyz,.pts,.tsv,.dat,.xlsx,.xls,.las,.dxf"></label>
+        <label class="file"><b>Orthofoto</b><small>GeoTIFF, atau JPG/PNG + world file</small>
+          <input id="fileOrtho" type="file" multiple accept=".tif,.tiff,.jpg,.jpeg,.png,.webp,.tfw,.jgw,.pgw,.wld,.jpw"></label>
+      </div>
+      <div class="names">
+        <div>Koordinat: <span id="srcName">-</span></div>
+        <div>Orthofoto: <span id="orthoName">-</span></div>
+      </div>
+      <div id="status" role="status" aria-live="polite">Menyiapkan...</div>
+      <button class="btn" id="fitOrtho" type="button" hidden>Paskan orthofoto ke batas DTM</button>
+      <div class="pend" id="pend" hidden>
+        <b id="pendName"></b>
+        <div class="grid2">
+          <label class="field">Tanggal survei<input id="pDate" type="date"></label>
+          <label class="field">Cara pakai<select id="pKind"><option value="update">Update area</option><option value="replace">Ganti semua</option></select></label>
+        </div>
+        <label class="field" id="pGapF">Jarak antartitik terjauh dalam satu area (m)<input id="pGap" type="number" min="2" step="1" value="30"></label>
+        <p class="hint" id="pHint"></p>
+        <div id="mapBox" hidden style="display:grid;gap:8px">
+          <div class="grid3">
+            <label class="field">Kolom X / Timur<select id="colX"></select></label>
+            <label class="field">Kolom Y / Utara<select id="colY"></select></label>
+            <label class="field">Kolom Z / Elevasi<select id="colZ"></select></label>
+          </div>
+          <div class="preview" id="preview" tabindex="0" aria-label="Pratinjau baris pertama"></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn primary" id="pApply" type="button">Terapkan</button>
+          <button class="btn" id="pCancel" type="button">Batal</button>
+        </div>
+      </div>
+      <div class="grid2">
+        <label class="field">Satuan koordinat<select id="crs">
+          <option value="auto">Otomatis</option><option value="m">Meter (UTM/lokal)</option><option value="deg">Derajat (lon, lat)</option></select></label>
+        <label class="field">Zona UTM<select id="zone"></select></label>
+      </div>
+    </section>
+
+    <section aria-labelledby="h-hist" id="histSec" hidden>
+      <h2 id="h-hist">Riwayat survei</h2>
+      <label class="field">Tampilkan kondisi sampai<select id="until"></select></label>
+      <ul id="hist"></ul>
+    </section>
+
+    <section aria-labelledby="h-stat">
+      <h2 id="h-stat">Ringkasan</h2>
+      <dl class="stats">
+        <div><dt>Titik</dt><dd id="sN">-</dd></div>
+        <div><dt>Segitiga</dt><dd id="sT">-</dd></div>
+        <div><dt>Beda tinggi</dt><dd id="sD">-</dd></div>
+        <div><dt>Z terendah</dt><dd id="sMin">-</dd></div>
+        <div><dt>Z tertinggi</dt><dd id="sMax">-</dd></div>
+        <div><dt>Luas datar</dt><dd id="sA">-</dd></div>
+      </dl>
+    </section>
+
+    <section aria-labelledby="h-surf">
+      <h2 id="h-surf">Permukaan</h2>
+      <div class="seg" role="group" aria-label="Isi permukaan">
+        <button type="button" data-mode="0" aria-pressed="true">Gradasi</button>
+        <button type="button" data-mode="1" aria-pressed="false">Orthofoto</button>
+        <button type="button" data-mode="2" aria-pressed="false">Campuran</button>
+        <button type="button" data-mode="3" aria-pressed="false">Polos</button>
+      </div>
+      <div class="row" id="mixRow" hidden><label for="mix">Gradasi di atas orthofoto</label><output id="mixO">45%</output>
+        <input id="mix" type="range" min="5" max="95" value="45"></div>
+      <div class="row"><label for="ex">Pembesaran vertikal</label><output id="exO">1.5×</output>
+        <input id="ex" type="range" min="1" max="6" step="0.1" value="1.5"></div>
+      <div class="row"><label for="hill">Bayangan relief</label><output id="hillO">60%</output>
+        <input id="hill" type="range" min="0" max="100" value="60"></div>
+      <label class="check"><input id="step" type="checkbox"> Warna per interval kontur</label>
+      <div class="grid2">
+        <label class="field">Warna ungu mulai (Z)<input id="cMin" type="number" step="any"></label>
+        <label class="field">Warna merah sampai (Z)<input id="cMax" type="number" step="any"></label>
+      </div>
+      <button class="btn" id="cAuto" type="button" style="justify-self:start">Pakai Z terendah dan tertinggi</button>
+    </section>
+
+    <section aria-labelledby="h-kon">
+      <h2 id="h-kon">Kontur</h2>
+      <div class="checks">
+        <label class="check"><input id="cOn" type="checkbox" checked> Tampilkan kontur</label>
+        <label class="check"><input id="lOn" type="checkbox" checked> Label elevasi</label>
+      </div>
+      <div class="grid2">
+        <label class="field">Interval (m)<input id="iv" type="number" min="0.01" step="any"></label>
+        <label class="field">Garis indeks tiap<select id="idx"><option value="4">4 kontur</option><option value="5" selected>5 kontur</option><option value="10">10 kontur</option></select></label>
+      </div>
+    </section>
+
+    <section aria-labelledby="h-tin">
+      <h2 id="h-tin">Jaring TIN</h2>
+      <div class="row"><label for="edge">Sisi segitiga maksimum</label><output id="edgeO">-</output>
+        <input id="edge" type="range" min="0" max="100" value="100"></div>
+      <p class="hint">Turunkan bila ada segitiga panjang menutupi area di luar batas ukur.</p>
+      <div class="checks">
+        <label class="check"><input id="wire" type="checkbox"> Garis segitiga</label>
+        <label class="check"><input id="pts" type="checkbox"> Titik ukur</label>
+        <label class="check"><input id="strs" type="checkbox"> Garis string</label>
+      </div>
+    </section>
+    <section aria-labelledby="h-sample" id="sampleSec">
+      <h2 id="h-sample">Contoh</h2>
+      <button class="btn" id="loadSample" type="button" style="justify-self:start">Muat data contoh</button>
+    </section>
+  </aside>
+
+  <main id="stage" aria-label="Tampilan 3D">
+    <canvas id="gl"></canvas>
+    <div class="hud" id="chip" hidden>Data contoh sintetis</div>
+    <div class="hud" id="compass" aria-hidden="true"><svg viewBox="-20 -20 40 40"><g id="needle"><path d="M0-16 5 2H-5Z" fill="#c92f27"/><path d="M0 16 5 2H-5Z" fill="currentColor" opacity=".45"/><text y="-5.5" x="0" text-anchor="middle" font-size="7" font-weight="700" fill="#fff" font-family="sans-serif">U</text></g></svg></div>
+    <div class="hud" id="legend"><b>Elevasi (m)</b><div id="scale"><canvas id="ramp" width="14" height="256"></canvas></div><b>Ungu = terdalam</b></div>
+    <div class="hud" id="readout" aria-live="off"></div>
+    <div class="hud" id="views" role="group" aria-label="Sudut pandang">
+      <button type="button" id="v3d">3D</button><button type="button" id="vTop">Atas</button>
+    </div>
+    <div class="hud" id="busy" hidden></div>
+    <div id="drop" hidden>Lepas file di sini</div>
+  </main>
+</div>
+
+<script src="lib/delaunator.min.js"></script>
+<script src="store.js"></script>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const fmt=(v,d=2)=>v.toLocaleString('id-ID',{minimumFractionDigits:d,maximumFractionDigits:d});
+const fint=v=>Math.round(v).toLocaleString('id-ID');
+const nextFrame=()=>new Promise(r=>requestAnimationFrame(()=>setTimeout(r,0)));
+const MAX_POINTS=1500000,EDGE_FACTOR=12;
+const RAMP=[[0,'#2e0a6e'],[.14,'#6b2bd1'],[.3,'#2f6fe0'],[.45,'#14b8b0'],[.6,'#4fc24a'],[.75,'#f3dc3c'],[.88,'#f08a24'],[1,'#c92f27']];
+
+const S={dtm:null,source:null,orthoSrc:null,orthoPending:null,sample:false,
+  mode:0,mix:.45,ex:1.5,hill:.6,step:false,cMin:0,cMax:1,cOn:true,lOn:true,interval:5,idxEvery:5,
+  wire:false,pts:false,strs:false,utmZone:50,utmSouth:true,
+  metas:[],local:[],cache:new Map(),pending:null,until:'latest',seq:0,db:null,assets:null,orthoAff:null,orthoAsset:null,built:false};
+
+function setStatus(msg,kind=''){const e=$('status');e.textContent=msg;e.className=kind}
+function setBusy(msg){const e=$('busy');e.hidden=!msg;if(msg)e.textContent=msg}
+
+/* ---------- UTM WGS84 (deret Krüger) ---------- */
+const UTM=(()=>{
+  const a=6378137,f=1/298.257223563,k0=.9996,n=f/(2-f),n2=n*n,n3=n2*n;
+  const A=a/(1+n)*(1+n2/4+n2*n2/64);
+  const al=[n/2-2*n2/3+5*n3/16,13*n2/48-3*n3/5,61*n3/240];
+  const be=[n/2-2*n2/3+37*n3/96,n2/48+n3/15,17*n3/480];
+  const de=[2*n-2*n2/3-2*n3,7*n2/3-8*n3/5,56*n3/15];
+  const e2=2*Math.sqrt(n)/(1+n);
+  const cm=z=>(z*6-183)*Math.PI/180;
+  return{
+    forward(lon,lat,zone,south){
+      const p=lat*Math.PI/180,l=lon*Math.PI/180-cm(zone),s=Math.sin(p);
+      const t=Math.sinh(Math.atanh(s)-e2*Math.atanh(e2*s));
+      const xi=Math.atan2(t,Math.cos(l)),eta=Math.atanh(Math.sin(l)/Math.sqrt(1+t*t));
+      let X=xi,E=eta;
+      for(let j=1;j<=3;j++){X+=al[j-1]*Math.sin(2*j*xi)*Math.cosh(2*j*eta);E+=al[j-1]*Math.cos(2*j*xi)*Math.sinh(2*j*eta)}
+      return[500000+k0*A*E,(south?1e7:0)+k0*A*X];
+    },
+    inverse(e,nn,zone,south){
+      const xi=(nn-(south?1e7:0))/(k0*A),eta=(e-500000)/(k0*A);
+      let X=xi,E=eta;
+      for(let j=1;j<=3;j++){X-=be[j-1]*Math.sin(2*j*xi)*Math.cosh(2*j*eta);E-=be[j-1]*Math.cos(2*j*xi)*Math.sinh(2*j*eta)}
+      const chi=Math.asin(Math.sin(X)/Math.cosh(E));
+      let p=chi;for(let j=1;j<=3;j++)p+=de[j-1]*Math.sin(2*j*chi);
+      return[(cm(zone)+Math.atan2(Math.sinh(E),Math.cos(X)))*180/Math.PI,p*180/Math.PI];
+    }
+  };
+})();
+
+/* ---------- Pembacaan tabel teks ---------- */
+const reX=/^(x|e|east|easting|timur|longitude|long|lon|lng|bujur)$/, reY=/^(y|n|north|northing|utara|latitude|lat|lintang)$/,
+      reZ=/^(z|h|rl|elev|elevasi|elevation|alt|altitude|tinggi|ketinggian|height)$/;
+const normName=s=>s.toLowerCase().replace(/\(.*?\)/g,'').replace(/[^a-z]/g,'');
+function cellNum(s,dec){s=s.trim();if(s==='')return NaN;if(dec)s=s.replace(',','.');const v=Number(s);return Number.isFinite(v)?v:NaN}
+function splitter(d){return d===' '?(l=>l.trim().split(/\s+/)):(l=>l.split(d))}
+function firstLines(text,max){const out=[];let i=0;while(i<text.length&&out.length<max){let j=text.indexOf('\n',i);if(j<0)j=text.length;const l=text.slice(i,j).replace(/\r$/,'').replace(/^﻿/,'');if(l.trim()&&!/^\s*(#|\/\/)/.test(l))out.push({l,next:j+1});i=j+1}return out}
+
+function analyzeText(text){
+  const lines=firstLines(text,200);
+  if(!lines.length)throw new Error('File kosong.');
+  let best=null;
+  for(const d of ['\t',';',',',' ']){
+    const dec=d!==',',sp=splitter(d);
+    const rows=lines.map(o=>sp(o.l.replace(/"/g,'')).map(c=>c.trim()));
+    const good=rows.filter(r=>r.filter(c=>Number.isFinite(cellNum(c,dec))).length>=3).length;
+    if(good&&(!best||good>best.good))best={d,dec,rows,good};
+  }
+  if(!best)throw new Error('Tidak ditemukan baris dengan minimal 3 kolom angka. Pastikan file berisi kolom X, Y, Z.');
+  const {rows,d,dec}=best;
+  const start=rows.findIndex(r=>r.filter(c=>Number.isFinite(cellNum(c,dec))).length>=3);
+  const data=rows.slice(start);
+  const counts={};data.forEach(r=>counts[r.length]=(counts[r.length]||0)+1);
+  const ncol=+Object.entries(counts).sort((a,b)=>b[1]-a[1])[0][0];
+  const hdr=start>0&&rows[start-1].length===ncol?rows[start-1]:null;
+  const cols=[];
+  for(let c=0;c<ncol;c++){
+    const vals=data.map(r=>cellNum(r[c]??'',dec));
+    const ok=vals.filter(Number.isFinite);
+    cols.push({name:hdr&&hdr[c]?hdr[c]:'Kolom '+(c+1),numeric:ok.length>=vals.length*.8,vals:ok,
+      max:ok.length?Math.max(...ok.map(Math.abs)):0,intSeq:ok.length>2&&ok.every((v,i)=>i===0||v-ok[i-1]===1)});
+  }
+  return{delim:d,dec,startOffset:lines[start].next-lines[start].l.length-1,sample:data.slice(0,4),cols,map:guessColumns(cols,!!hdr)};
+}
+
+function guessColumns(cols){
+  const m={x:-1,y:-1,z:-1};
+  cols.forEach((c,i)=>{if(!c.numeric)return;const n=normName(c.name);
+    if(m.x<0&&reX.test(n))m.x=i;else if(m.y<0&&reY.test(n))m.y=i;else if(m.z<0&&reZ.test(n))m.z=i});
+  if(m.x>=0&&m.y>=0&&m.z>=0)return m;
+  let num=cols.map((c,i)=>c.numeric?i:-1).filter(i=>i>=0&&i!==m.x&&i!==m.y&&i!==m.z);
+  if(num.length>(m.x<0)+(m.y<0)+(m.z<0)&&cols[num[0]].intSeq)num=num.slice(1);
+  if(m.x<0)m.x=num.shift()??-1; if(m.y<0)m.y=num.shift()??-1; if(m.z<0)m.z=num.shift()??-1;
+  if(m.x<0||m.y<0||m.z<0)throw new Error('Kolom X, Y, Z belum lengkap.');
+  /* Format surveyor Utara, Timur: northing UTM selatan jauh lebih besar dari easting */
+  const cx=cols[m.x],cy=cols[m.y];
+  if(!reX.test(normName(cx.name))&&cx.max>=1e6&&cy.max<1e6){const t=m.x;m.x=m.y;m.y=t}
+  return m;
+}
+
+function extractText(text,a,map){
+  const sp=splitter(a.delim),dec=a.dec;
+  let cap=1<<20,x=new Float64Array(cap),y=new Float64Array(cap),z=new Float64Array(cap),n=0,bad=0,nodata=0;
+  let i=a.startOffset;const L=text.length;
+  while(i<L){
+    let j=text.indexOf('\n',i);if(j<0)j=L;
+    const l=text.slice(i,j);i=j+1;
+    if(!l.trim()||/^\s*(#|\/\/)/.test(l))continue;
+    const c=sp(l.indexOf('"')>=0?l.replace(/"/g,''):l);
+    const X=cellNum(c[map.x]??'',dec),Y=cellNum(c[map.y]??'',dec),Z=cellNum(c[map.z]??'',dec);
+    if(!(X===X&&Y===Y&&Z===Z)){bad++;continue}
+    if(Z<=-9990&&(Z===-9999||Z===-32768||Z===-99999)||Math.abs(Z)>1e6){nodata++;continue}
+    if(n===cap){cap*=2;const g=a=>{const b=new Float64Array(cap);b.set(a);return b};x=g(x);y=g(y);z=g(z)}
+    x[n]=X;y[n]=Y;z[n]=Z;n++;
+  }
+  return{x:x.subarray(0,n),y:y.subarray(0,n),z:z.subarray(0,n),n,bad,nodata};
+}
+
+/* ---------- LAS tanpa kompresi ---------- */
+function parseLAS(buf){
+  const v=new DataView(buf);
+  if(String.fromCharCode(v.getUint8(0),v.getUint8(1),v.getUint8(2),v.getUint8(3))!=='LASF')throw new Error('Header LAS tidak valid.');
+  const ver=v.getUint8(25),off=v.getUint32(96,true),fmtRaw=v.getUint8(104);
+  if(fmtRaw&0xC0)throw new Error('File ini LAZ terkompresi. Ekspor ulang sebagai LAS tanpa kompresi.');
+  const f=fmtRaw&63,len=v.getUint16(105,true);
+  let cnt=v.getUint32(107,true);
+  if(ver>=4&&cnt===0)cnt=Number(v.getBigUint64(247,true));
+  const sx=v.getFloat64(131,true),sy=v.getFloat64(139,true),sz=v.getFloat64(147,true),ox=v.getFloat64(155,true),oy=v.getFloat64(163,true),oz=v.getFloat64(171,true);
+  cnt=Math.min(cnt,Math.floor((buf.byteLength-off)/len));
+  const co=f>=6?16:15,mask=f>=6?255:31;
+  let ground=0;for(let i=0;i<cnt;i++)if((v.getUint8(off+i*len+co)&mask)===2)ground++;
+  const useG=ground>=3,tot=useG?ground:cnt,stride=Math.max(1,Math.ceil(tot/MAX_POINTS)),m=Math.ceil(tot/stride);
+  const x=new Float64Array(m),y=new Float64Array(m),z=new Float64Array(m);let n=0,seen=0;
+  for(let i=0;i<cnt&&n<m;i++){
+    const p=off+i*len;
+    if(useG&&(v.getUint8(p+co)&mask)!==2)continue;
+    if(seen++%stride)continue;
+    x[n]=v.getInt32(p,true)*sx+ox;y[n]=v.getInt32(p+4,true)*sy+oy;z[n]=v.getInt32(p+8,true)*sz+oz;n++;
+  }
+  return{x:x.subarray(0,n),y:y.subarray(0,n),z:z.subarray(0,n),n,bad:0,nodata:0,
+    note:useG?`LAS: ${fint(ground)} titik kelas tanah dipakai dari ${fint(cnt)} titik.`:'LAS tanpa klasifikasi tanah: semua titik dipakai, jadi vegetasi dan bangunan ikut terhitung.'};
+}
+
+/* ---------- Surpac STR: id, Y, X, Z, deskripsi. Baris id 0 memisahkan segmen ---------- */
+function parseSTR(text,name){
+  let cap=1<<16,x=new Float64Array(cap),y=new Float64Array(cap),z=new Float64Array(cap),sid=new Int32Array(cap),n=0,seg=[],prev=-1,prevS=0;
+  let i=text.indexOf('\n')+1,bad=0;const L=text.length;
+  if(!i)throw new Error('File STR kosong.');
+  while(i<L){
+    let j=text.indexOf('\n',i);if(j<0)j=L;
+    const l=text.slice(i,j);i=j+1;
+    const c=l.split(',');
+    if(c.length<4){if(l.trim())bad++;continue}
+    const id=parseInt(c[0],10);
+    if(id===0){prev=-1;if(c.length>4&&c[4].trim()==='END')break;continue}
+    const Y=+c[1],X=+c[2],Z=+c[3];
+    if(!(id>0&&X===X&&Y===Y&&Z===Z)){bad++;continue}
+    if(n===cap){cap*=2;const g=(a,T)=>{const b=new T(cap);b.set(a);return b};x=g(x,Float64Array);y=g(y,Float64Array);z=g(z,Float64Array);sid=g(sid,Int32Array)}
+    x[n]=X;y[n]=Y;z[n]=Z;sid[n]=id;
+    if(prev>=0&&prevS===id)seg.push(prev,n);
+    prev=n;prevS=id;n++;
+  }
+  if(n<3)throw new Error('File STR tidak berisi titik yang terbaca. Pastikan formatnya id, Y, X, Z.');
+  return{x:x.subarray(0,n),y:y.subarray(0,n),z:z.subarray(0,n),sid:sid.subarray(0,n),seg:Int32Array.from(seg),n,bad,nodata:0};
+}
+function serializeSTR(p,name){
+  const out=[name.replace(/[,\r\n]/g,' ')+',,0,0','0,0,0,0,0,0,0'],sid=p.sid,next=new Set();
+  if(p.seg)for(let i=0;i<p.seg.length;i+=2)next.add(p.seg[i]);
+  for(let i=0;i<p.n;i++){
+    out.push(`${sid?sid[i]:1},${p.y[i].toFixed(3)},${p.x[i].toFixed(3)},${p.z[i].toFixed(3)}`);
+    if(!next.has(i))out.push('0,0,0,0,');
+  }
+  out.push('0,0,0,0,END');return out.join('\n')+'\n';
+}
+function dateFromName(n){
+  let m=n.match(/(?:^|\D)(20\d{2})(\d{2})(\d{2})(?:\D|$)/);if(m&&+m[2]<=12&&+m[3]<=31&&+m[2]>0&&+m[3]>0)return`${m[1]}-${m[2]}-${m[3]}`;
+  m=n.match(/(?:^|\D)(\d{2})(\d{2})(\d{2})(?:\D|$)/);if(m&&+m[2]<=12&&+m[3]<=31&&+m[2]>0&&+m[3]>0)return`20${m[1]}-${m[2]}-${m[3]}`;
+  const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+/* ---------- Penggabungan survei: titik lama di dalam area update diganti ---------- */
+function footprint(p,gap){
+  const [x0,x1]=range(p.x),[y0,y1]=range(p.y),rad=Math.max(3,gap*.15),pad=rad+1;
+  const ox=x0-pad,oy=y0-pad,W0=x1-x0+2*pad,H0=y1-y0+2*pad,cell=Math.max(.5,Math.sqrt(W0*H0/16e6)),w=Math.ceil(W0/cell)+1,h=Math.ceil(H0/cell)+1;
+  const m=new Uint8Array(w*h),co=new Float64Array(p.n*2);
+  for(let i=0;i<p.n;i++){co[i*2]=p.x[i]-ox;co[i*2+1]=p.y[i]-oy}
+  const g2=gap*gap,tri=p.n>=3?new Delaunator(co).triangles:[];
+  for(let t=0;t<tri.length;t+=3){
+    const ax=co[tri[t]*2],ay=co[tri[t]*2+1],bx=co[tri[t+1]*2],by=co[tri[t+1]*2+1],cx=co[tri[t+2]*2],cy=co[tri[t+2]*2+1];
+    if((ax-bx)**2+(ay-by)**2>g2||(bx-cx)**2+(by-cy)**2>g2||(cx-ax)**2+(cy-ay)**2>g2)continue;
+    const d=(bx-ax)*(cy-ay)-(cx-ax)*(by-ay);if(!d)continue;
+    const c0=Math.max(0,Math.floor(Math.min(ax,bx,cx)/cell)),c1=Math.min(w-1,Math.ceil(Math.max(ax,bx,cx)/cell));
+    const r0=Math.max(0,Math.floor(Math.min(ay,by,cy)/cell)),r1=Math.min(h-1,Math.ceil(Math.max(ay,by,cy)/cell));
+    for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++){
+      const px=(c+.5)*cell,py=(r+.5)*cell,l1=((bx-px)*(cy-py)-(cx-px)*(by-py))/d,l2=((cx-px)*(ay-py)-(ax-px)*(cy-py))/d;
+      if(l1>=-.02&&l2>=-.02&&l1+l2<=1.02)m[r*w+c]=1;
+    }
+  }
+  const rc=Math.ceil(rad/cell);
+  for(let i=0;i<p.n;i++){
+    const c=Math.floor(co[i*2]/cell),r=Math.floor(co[i*2+1]/cell);
+    for(let a=Math.max(0,r-rc);a<=Math.min(h-1,r+rc);a++)for(let b=Math.max(0,c-rc);b<=Math.min(w-1,c+rc);b++)if((a-r)**2+(b-c)**2<=rc*rc)m[a*w+b]=1;
+  }
+  let cnt=0;for(let i=0;i<m.length;i++)cnt+=m[i];
+  return{area:cnt*cell*cell,has:(x,y)=>{const c=Math.floor((x-ox)/cell),r=Math.floor((y-oy)/cell);return c>=0&&r>=0&&c<w&&r<h&&m[r*w+c]===1}};
+}
+function composeSurveys(list){
+  let A=null;const info={};
+  for(const s of list){
+    const p=S.cache.get(s.id);if(!p)continue;
+    if(s.kind==='update'&&A){
+      const fp=footprint(p,s.gap||30),keep=new Int32Array(A.n).fill(-1);let m=0;
+      for(let i=0;i<A.n;i++)if(!fp.has(A.x[i],A.y[i]))keep[i]=m++;
+      info[s.id]={removed:A.n-m,area:fp.area};
+      const nn=m+p.n,x=new Float64Array(nn),y=new Float64Array(nn),z=new Float64Array(nn),sid=new Int32Array(nn);
+      for(let i=0;i<A.n;i++){const k=keep[i];if(k>=0){x[k]=A.x[i];y[k]=A.y[i];z[k]=A.z[i];sid[k]=A.sid[i]}}
+      x.set(p.x,m);y.set(p.y,m);z.set(p.z,m);if(p.sid)sid.set(p.sid,m);else sid.fill(1,m);
+      const seg=[];
+      for(let i=0;i<A.seg.length;i+=2){const a=keep[A.seg[i]],b=keep[A.seg[i+1]];if(a>=0&&b>=0)seg.push(a,b)}
+      if(p.seg)for(let i=0;i<p.seg.length;i++)seg.push(p.seg[i]+m);
+      A={x,y,z,sid,seg:Int32Array.from(seg),n:nn};
+    }else{
+      A={x:p.x,y:p.y,z:p.z,sid:p.sid||new Int32Array(p.n).fill(1),seg:p.seg||new Int32Array(0),n:p.n};
+      info[s.id]={base:true};
+    }
+  }
+  return{A,info};
+}
+/* Sisipkan titik di sepanjang string agar garis crest dan toe menjadi sisi TIN */
+function densify(A,step=4){
+  let extra=0;const{x,y,z,seg,n}=A;
+  for(let i=0;i<seg.length;i+=2){const a=seg[i],b=seg[i+1],l=Math.hypot(x[a]-x[b],y[a]-y[b]);if(l>step)extra+=Math.ceil(l/step)-1}
+  const X=new Float64Array(n+extra),Y=new Float64Array(n+extra),Z=new Float64Array(n+extra);X.set(x);Y.set(y);Z.set(z);
+  let m=n;
+  for(let i=0;i<seg.length;i+=2){
+    const a=seg[i],b=seg[i+1],l=Math.hypot(x[a]-x[b],y[a]-y[b]);if(l<=step)continue;
+    const k=Math.ceil(l/step);
+    for(let t=1;t<k;t++){const f=t/k;X[m]=x[a]+(x[b]-x[a])*f;Y[m]=y[a]+(y[b]-y[a])*f;Z[m]=z[a]+(z[b]-z[a])*f;m++}
+  }
+  return{x:X,y:Y,z:Z,n:m,rawN:n,seg};
+}
+
+/* ---------- DXF teks ---------- */
+function parseDXF(text){
+  const L=text.split(/\r?\n/),xs=[],ys=[],zs=[];
+  let i=0,inEnt=false,type=null,g={},lw=[],elev=0;
+  const push=(x,y,z)=>{if(x===x&&y===y&&z===z){xs.push(x);ys.push(y);zs.push(z)}};
+  const flush=()=>{
+    if(!type)return;
+    const n=k=>g[k]!==undefined?g[k]:NaN;
+    if(type==='POINT'||type==='VERTEX'||type==='INSERT')push(n(10),n(20),g[30]??0);
+    else if(type==='LINE'){push(n(10),n(20),g[30]??0);push(n(11),n(21),g[31]??0)}
+    else if(type==='3DFACE')for(const k of[0,1,2,3])push(n(10+k),n(20+k),g[30+k]??0);
+    else if(type==='LWPOLYLINE')for(const p of lw)push(p[0],p[1],elev);
+    g={};lw=[];elev=0;
+  };
+  while(i+1<L.length){
+    const c=parseInt(L[i],10),val=L[i+1].trim();i+=2;
+    if(c===0){
+      flush();type=null;
+      if(val==='SECTION'){const n=L[i+1]?.trim();inEnt=n==='ENTITIES'||n==='BLOCKS'&&false;continue}
+      if(val==='ENDSEC'){inEnt=false;continue}
+      if(inEnt)type=val;
+    }else if(type){
+      const v=parseFloat(val);
+      if(type==='LWPOLYLINE'){if(c===38)elev=v;else if(c===10)lw.push([v,NaN]);else if(c===20&&lw.length)lw[lw.length-1][1]=v}
+      else g[c]=v;
+    }
+  }
+  flush();
+  if(xs.length<3)throw new Error('DXF tidak berisi titik 3D yang bisa dibaca (POINT, LINE, 3DFACE, POLYLINE).');
+  if(zs.every(v=>v===zs[0]))throw new Error('Semua elevasi di DXF ini sama. Periksa apakah gambar sudah 3D.');
+  return{x:Float64Array.from(xs),y:Float64Array.from(ys),z:Float64Array.from(zs),n:xs.length,bad:0,nodata:0};
+}
+
+/* ---------- Satuan koordinat ---------- */
+function range(a){let lo=Infinity,hi=-Infinity;for(let i=0;i<a.length;i++){const v=a[i];if(v<lo)lo=v;if(v>hi)hi=v}return[lo,hi]}
+function normalizeCRS(p,mode){
+  let [x0,x1]=range(p.x),[y0,y1]=range(p.y),deg=false,x=p.x,y=p.y;
+  if(mode==='deg')deg=true;
+  else if(mode==='auto')deg=Math.max(Math.abs(x0),Math.abs(x1))<=180&&Math.max(Math.abs(y0),Math.abs(y1))<=180&&x1-x0<5&&y1-y0<5&&(Math.max(Math.abs(x0),Math.abs(x1))<=90||Math.max(Math.abs(y0),Math.abs(y1))<=90)&&(x1-x0>0)&&(x1-x0<1||y1-y0<1||x0%1!==0);
+  if(!deg)return{...p,deg:false};
+  if(Math.max(Math.abs(y0),Math.abs(y1))>90){const t=x;x=y;y=t;[x0,x1,y0,y1]=[y0,y1,x0,x1]}
+  const lon=(x0+x1)/2,lat=(y0+y1)/2;
+  S.utmZone=Math.max(1,Math.min(60,Math.floor((lon+180)/6)+1));S.utmSouth=lat<0;syncZone();
+  const ex=new Float64Array(p.n),ny=new Float64Array(p.n);
+  for(let i=0;i<p.n;i++){const r=UTM.forward(x[i],y[i],S.utmZone,S.utmSouth);ex[i]=r[0];ny[i]=r[1]}
+  return{...p,x:ex,y:ny,deg:true};
+}
+function syncZone(){$('zone').value=S.utmZone+(S.utmSouth?'S':'N')}
+
+function thin(p){
+  if(p.n<=MAX_POINTS)return p;
+  const s=Math.ceil(p.n/MAX_POINTS),m=Math.floor(p.n/s),x=new Float64Array(m),y=new Float64Array(m),z=new Float64Array(m);
+  for(let i=0;i<m;i++){x[i]=p.x[i*s];y[i]=p.y[i*s];z[i]=p.z[i*s]}
+  return{...p,x,y,z,n:m,thinned:p.n,sid:null,seg:null};
+}
+
+/* ---------- WebGL ---------- */
+const canvas=$('gl');
+const gl=canvas.getContext('webgl2',{antialias:true,alpha:true,premultipliedAlpha:true});
+const VS_T=`#version 300 es
+layout(location=0) in vec3 aP;layout(location=1) in vec3 aN;layout(location=2) in vec2 aT;
+uniform mat4 uVP;uniform float uEx,uZ0;out vec3 vN;out vec3 vP;out vec2 vT;
+void main(){vN=aN;vP=aP;vT=aT;gl_Position=uVP*vec4(aP.xy,(aP.z-uZ0)*uEx,1.);}`;
+const FS_T=`#version 300 es
+precision highp float;
+in vec3 vN;in vec3 vP;in vec2 vT;out vec4 o;
+uniform sampler2D uRamp,uOrtho;uniform int uMode;uniform bool uStep,uHas,uCOn;
+uniform float uMin,uMax,uIv,uIdx,uMix,uHill,uEx,uPx;uniform vec3 uLine;
+void main(){
+  float z=vP.z,I=uIv,span=max(uMax-uMin,1e-6);
+  float zc=uStep?(floor(z/I)+.5)*I:z;
+  vec3 g=texture(uRamp,vec2(clamp((zc-uMin)/span,0.,1.),.5)).rgb;
+  vec3 base=vec3(.74,.73,.70);
+  vec4 ph=vec4(base,0.);
+  if(uHas&&vT.x>=0.&&vT.x<=1.&&vT.y>=0.&&vT.y<=1.){vec4 t=texture(uOrtho,vT);ph=vec4(mix(base,t.rgb,t.a),t.a);}
+  vec3 c;float pf=0.;
+  if(uMode==0)c=g;
+  else if(uMode==1){c=ph.rgb;pf=ph.a;}
+  else if(uMode==2){c=mix(ph.rgb,g,uMix);pf=ph.a*(1.-uMix);}
+  else c=base;
+  vec3 n=normalize(vec3(vN.xy*uEx,max(vN.z,1e-4)));
+  float l=max(dot(n,normalize(vec3(-.5,.5,.71))),0.);
+  float shade=mix(1.,.42+.85*l,uHill*(1.-.75*pf));
+  c*=shade;
+  if(uCOn){
+    float f=z/I,w=fwidth(f);
+    if(w>1e-5){
+      float d=abs(fract(f-.5)-.5)/w;
+      float fi=f/uIdx,wi=fwidth(fi),di=abs(fract(fi-.5)-.5)/max(wi,1e-6);
+      float a=(1.-smoothstep(.55*uPx,1.05*uPx,d))*.55*(1.-smoothstep(.22,.5,w));
+      float b=(1.-smoothstep(.8*uPx,1.3*uPx,di))*.9*(1.-smoothstep(.22,.5,wi));
+      c=mix(c,uLine,max(a,b));
+    }
+  }
+  o=vec4(c,1.);
+}`;
+const FS_P=`#version 300 es
+precision highp float;in vec3 vP;in vec3 vN;in vec2 vT;out vec4 o;void main(){o=vec4(vP,1.);}`;
+const VS_L=`#version 300 es
+layout(location=0) in vec3 aP;uniform mat4 uVP;uniform float uEx,uZ0,uSize;
+void main(){gl_Position=uVP*vec4(aP.xy,(aP.z-uZ0)*uEx,1.);gl_PointSize=uSize;}`;
+const FS_L=`#version 300 es
+precision mediump float;uniform vec4 uC;uniform bool uRound;out vec4 o;
+void main(){if(uRound&&length(gl_PointCoord-.5)>.5)discard;o=vec4(uC.rgb*uC.a,uC.a);}`;
+const VS_S=`#version 300 es
+layout(location=0) in vec2 aQ;uniform mat4 uVP;uniform vec3 uPos;uniform vec2 uHalf;uniform vec4 uRect;out vec2 vU;
+void main(){vec4 c=uVP*vec4(uPos,1.);c.xy+=aQ*uHalf*c.w;c.z-=.0008*c.w;gl_Position=c;vU=uRect.xy+(aQ*vec2(.5,-.5)+.5)*uRect.zw;}`;
+const FS_S=`#version 300 es
+precision mediump float;uniform sampler2D uA;in vec2 vU;out vec4 o;void main(){o=texture(uA,vU);}`;
+
+function prog(v,f){
+  const mk=(t,s)=>{const h=gl.createShader(t);gl.shaderSource(h,s);gl.compileShader(h);if(!gl.getShaderParameter(h,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(h));return h};
+  const p=gl.createProgram();gl.attachShader(p,mk(gl.VERTEX_SHADER,v));gl.attachShader(p,mk(gl.FRAGMENT_SHADER,f));gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));
+  const u={},n=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS);
+  for(let i=0;i<n;i++){const a=gl.getActiveUniform(p,i);u[a.name]=gl.getUniformLocation(p,a.name)}
+  return{p,u};
+}
+let G=null;
+function initGL(){
+  G={terrain:prog(VS_T,FS_T),pick:prog(VS_T,FS_P),line:prog(VS_L,FS_L),sprite:prog(VS_S,FS_S),
+     vao:gl.createVertexArray(),vbo:{pos:gl.createBuffer(),nor:gl.createBuffer(),uv:gl.createBuffer()},ibo:gl.createBuffer(),wbo:gl.createBuffer(),sbo:gl.createBuffer(),scount:0,
+     ramp:gl.createTexture(),ortho:gl.createTexture(),atlas:gl.createTexture(),qvao:gl.createVertexArray(),count:0,wcount:0,
+     maxTex:Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE),matchMedia('(pointer:coarse)').matches?4096:8192),
+     aniso:gl.getExtension('EXT_texture_filter_anisotropic'),floatRT:!!gl.getExtension('EXT_color_buffer_float')};
+  /* tekstur gradasi */
+  const c=document.createElement('canvas');c.width=256;c.height=1;const x=c.getContext('2d'),gr=x.createLinearGradient(0,0,256,0);
+  RAMP.forEach(([t,v])=>gr.addColorStop(t,v));x.fillStyle=gr;x.fillRect(0,0,256,1);
+  gl.bindTexture(gl.TEXTURE_2D,G.ramp);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  /* quad label */
+  gl.bindVertexArray(G.qvao);const q=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,q);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+  gl.bindVertexArray(G.vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER,G.vbo.pos);gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,G.vbo.nor);gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,G.vbo.uv);gl.enableVertexAttribArray(2);gl.vertexAttribPointer(2,2,gl.FLOAT,false,0,0);
+  gl.bindVertexArray(null);
+  if(G.floatRT){
+    G.fbo=gl.createFramebuffer();G.ftx=gl.createTexture();G.frb=gl.createRenderbuffer();
+    gl.bindTexture(gl.TEXTURE_2D,G.ftx);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,1,1,0,gl.RGBA,gl.FLOAT,null);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+    gl.bindRenderbuffer(gl.RENDERBUFFER,G.frb);gl.renderbufferStorage(gl.RENDERBUFFER,gl.DEPTH_COMPONENT24,1,1);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,G.fbo);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,G.ftx,0);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.RENDERBUFFER,G.frb);gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  }
+  gl.enable(gl.DEPTH_TEST);gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL,gl.NONE);
+}
+
+/* ---------- Matriks & kamera ---------- */
+function mul(a,b){const o=new Float32Array(16);for(let c=0;c<4;c++)for(let r=0;r<4;r++)o[c*4+r]=a[r]*b[c*4]+a[4+r]*b[c*4+1]+a[8+r]*b[c*4+2]+a[12+r]*b[c*4+3];return o}
+function perspective(fov,asp,n,f){const t=1/Math.tan(fov/2);return new Float32Array([t/asp,0,0,0,0,t,0,0,0,0,(f+n)/(n-f),-1,0,0,2*f*n/(n-f),0])}
+function lookAt(e,c,u){
+  let z=[e[0]-c[0],e[1]-c[1],e[2]-c[2]],l=Math.hypot(...z);z=z.map(v=>v/l);
+  let x=[u[1]*z[2]-u[2]*z[1],u[2]*z[0]-u[0]*z[2],u[0]*z[1]-u[1]*z[0]];l=Math.hypot(...x);x=x.map(v=>v/l);
+  const y=[z[1]*x[2]-z[2]*x[1],z[2]*x[0]-z[0]*x[2],z[0]*x[1]-z[1]*x[0]];
+  return new Float32Array([x[0],y[0],z[0],0,x[1],y[1],z[1],0,x[2],y[2],z[2],0,-(x[0]*e[0]+x[1]*e[1]+x[2]*e[2]),-(y[0]*e[0]+y[1]*e[1]+y[2]*e[2]),-(z[0]*e[0]+z[1]*e[1]+z[2]*e[2]),1]);
+}
+const Cam={az:-.55,pol:1.0,dist:1000,t:[0,0,0],fov:38*Math.PI/180,vp:null};
+function camMatrix(){
+  const w=canvas.width,h=canvas.height,sp=Math.sin(Cam.pol),cp=Math.cos(Cam.pol),d=Cam.dist;
+  const e=[Cam.t[0]+d*sp*Math.sin(Cam.az),Cam.t[1]-d*sp*Math.cos(Cam.az),Cam.t[2]+d*cp];
+  const diag=S.dtm?S.dtm.diag:1000;
+  Cam.vp=mul(perspective(Cam.fov,w/Math.max(h,1),Math.max(d/400,diag/5000),d+diag*6),lookAt(e,Cam.t,[0,0,1]));
+  return Cam.vp;
+}
+function frame(view){
+  if(!S.dtm)return;
+  const d=S.dtm;Cam.t=[0,0,0];
+  const asp=canvas.clientWidth/Math.max(canvas.clientHeight,1);
+  const rot=view!=='top'&&d.h>d.w*1.3,fw=rot?d.h:d.w,fh=rot?d.w:d.h;
+  const fit=Math.max(fw/Math.max(asp,.6),fh)/(2*Math.tan(Cam.fov/2));
+  if(view==='top'){Cam.az=0;Cam.pol=.0015;Cam.dist=fit*1.1}
+  else{Cam.az=rot?-1.4:-.55;Cam.pol=rot?.85:1.0;Cam.dist=fit*(rot?1.12:1.35)}
+  invalidate();
+}
+
+/* ---------- Render ---------- */
+let queued=false;
+function invalidate(){if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;render()})}
+function resize(){
+  const r=canvas.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2),w=Math.round(r.width*dpr),h=Math.round(r.height*dpr);
+  if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h}
+}
+function setTerrainUniforms(P,vp){
+  const d=S.dtm;gl.useProgram(P.p);gl.uniformMatrix4fv(P.u.uVP,false,vp);gl.uniform1f(P.u.uEx,S.ex);gl.uniform1f(P.u.uZ0,d.zMid);
+}
+function render(){
+  if(!G)return;resize();
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);
+  gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  $('needle').setAttribute('transform',`rotate(${Cam.az*180/Math.PI})`);
+  if(!S.dtm||!G.count)return;
+  const vp=camMatrix(),T=G.terrain,dpr=canvas.width/Math.max(canvas.clientWidth,1);
+  setTerrainUniforms(T,vp);
+  gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,G.ramp);gl.uniform1i(T.u.uRamp,0);
+  gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,G.ortho);gl.uniform1i(T.u.uOrtho,1);
+  gl.uniform1i(T.u.uMode,S.mode);gl.uniform1i(T.u.uStep,S.step?1:0);gl.uniform1i(T.u.uHas,S.orthoReady?1:0);gl.uniform1i(T.u.uCOn,S.cOn?1:0);
+  gl.uniform1f(T.u.uMin,S.cMin);gl.uniform1f(T.u.uMax,S.cMax);gl.uniform1f(T.u.uIv,S.interval);gl.uniform1f(T.u.uIdx,S.idxEvery);
+  gl.uniform1f(T.u.uMix,S.mix);gl.uniform1f(T.u.uHill,S.hill);gl.uniform1f(T.u.uPx,dpr);
+  const lc=S.mode===1||S.mode===2?[1,1,1]:[.07,.05,.12];gl.uniform3fv(T.u.uLine,lc);
+  gl.bindVertexArray(G.vao);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,G.ibo);
+  gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(1,1);gl.disable(gl.BLEND);
+  gl.drawElements(gl.TRIANGLES,G.count,gl.UNSIGNED_INT,0);
+  gl.disable(gl.POLYGON_OFFSET_FILL);
+  gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
+  const L=G.line;
+  if(S.wire||S.pts||S.strs){gl.useProgram(L.p);gl.uniformMatrix4fv(L.u.uVP,false,vp);gl.uniform1f(L.u.uEx,S.ex);gl.uniform1f(L.u.uZ0,S.dtm.zMid);}
+  if(S.wire&&G.wcount){
+    gl.uniform4f(L.u.uC,1,1,1,.32);gl.uniform1i(L.u.uRound,0);gl.uniform1f(L.u.uSize,1);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,G.wbo);gl.depthMask(false);gl.drawElements(gl.LINES,G.wcount,gl.UNSIGNED_INT,0);gl.depthMask(true);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,G.ibo);
+  }
+  if(S.strs&&G.scount){
+    const onDark=S.mode===1||S.mode===2,v=onDark?1:.05;gl.uniform4f(L.u.uC,v,onDark?.9:.03,onDark?.25:.1,.95);gl.uniform1i(L.u.uRound,0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,G.sbo);gl.drawElements(gl.LINES,G.scount,gl.UNSIGNED_INT,0);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,G.ibo);
+  }
+  if(S.pts){
+    gl.uniform4f(L.u.uC,1,1,1,.92);gl.uniform1i(L.u.uRound,1);gl.uniform1f(L.u.uSize,Math.max(2.5,2.5*dpr));
+    gl.drawArrays(gl.POINTS,0,S.dtm.rawN);
+  }
+  gl.bindVertexArray(null);
+  if(S.cOn&&S.lOn&&S.labels&&S.labels.length){
+    const P=G.sprite,hh=(innerWidth<=760?12:16)/canvas.clientHeight,hw=hh*(canvas.clientHeight/canvas.clientWidth)*(192/56);
+    gl.useProgram(P.p);gl.uniformMatrix4fv(P.u.uVP,false,vp);gl.uniform2f(P.u.uHalf,hw,hh);
+    gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,G.atlas);gl.uniform1i(P.u.uA,0);
+    gl.bindVertexArray(G.qvao);gl.depthMask(false);
+    const lift=S.dtm.diag*.0015;
+    for(const l of S.labels){gl.uniform3f(P.u.uPos,l.x,l.y,(l.z-S.dtm.zMid)*S.ex+lift);gl.uniform4fv(P.u.uRect,l.rect);gl.drawArrays(gl.TRIANGLE_STRIP,0,4)}
+    gl.depthMask(true);gl.bindVertexArray(null);
+  }
+  gl.disable(gl.BLEND);
+}
+/* Baca koordinat di bawah kursor: satu piksel dirender ke target float */
+function pickAt(cx,cy){
+  if(!G||!G.floatRT||!S.dtm||!G.count)return null;
+  const r=canvas.getBoundingClientRect(),W=r.width,H=r.height,nx=(cx-r.left)/W*2-1,ny=1-(cy-r.top)/H*2;
+  const vp=Cam.vp||camMatrix(),sx=W,sy=H;
+  const m=new Float32Array([sx,0,0,0,0,sy,0,0,0,0,1,0,-nx*sx,-ny*sy,0,1]);
+  const v=mul(m,vp),P=G.pick;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,G.fbo);gl.viewport(0,0,1,1);
+  gl.clearBufferfv(gl.COLOR,0,new Float32Array([0,0,0,0]));gl.clear(gl.DEPTH_BUFFER_BIT);
+  gl.disable(gl.BLEND);
+  setTerrainUniforms(P,v);
+  gl.bindVertexArray(G.vao);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,G.ibo);gl.drawElements(gl.TRIANGLES,G.count,gl.UNSIGNED_INT,0);gl.bindVertexArray(null);
+  const o=new Float32Array(4);gl.readPixels(0,0,1,1,gl.RGBA,gl.FLOAT,o);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  return o[3]>.5?{x:o[0],y:o[1],z:o[2]}:null;
+}
+function showPick(p){
+  const e=$('readout');
+  if(!p){e.innerHTML='<i>'+(innerWidth<=760?'Ketuk permukaan untuk koordinat':'Arahkan kursor ke permukaan untuk membaca koordinat')+'</i>';return}
+  const d=S.dtm;
+  e.innerHTML=`<span><i>X</i> ${fmt(p.x+d.cx)}</span><span><i>Y</i> ${fmt(p.y+d.cy)}</span><span><i>Z</i> ${fmt(p.z)} m</span>`;
+}
+
+/* ---------- Interaksi ---------- */
+const ptr=new Map();let lastPinch=0,pickQ=null;
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);ptr.set(e.pointerId,{x:e.clientX,y:e.clientY,b:e.button,shift:e.shiftKey});lastPinch=0;schedulePick(e.clientX,e.clientY)});
+function pan(dx,dy){const k=2*Cam.dist*Math.tan(Cam.fov/2)/canvas.clientHeight,c=Math.cos(Cam.az),s=Math.sin(Cam.az);
+  Cam.t[0]+=(-dx*c-dy*s)*k;Cam.t[1]+=(-dx*s+dy*c)*k}
+canvas.addEventListener('pointermove',e=>{
+  const p=ptr.get(e.pointerId);
+  if(!p){schedulePick(e.clientX,e.clientY);return}
+  const dx=e.clientX-p.x,dy=e.clientY-p.y;p.x=e.clientX;p.y=e.clientY;
+  if(ptr.size===2){
+    const [a,b]=[...ptr.values()],dist=Math.hypot(a.x-b.x,a.y-b.y);
+    if(lastPinch)Cam.dist=Math.max(1,Cam.dist*lastPinch/Math.max(dist,1));lastPinch=dist;
+    pan(dx/2,dy/2);
+  }else if(p.b===2||p.b===1||p.shift)pan(dx,dy);
+  else{Cam.az-=dx*.006;Cam.pol=Math.max(.0015,Math.min(1.5,Cam.pol-dy*.005))}
+  invalidate();
+});
+const endP=e=>{ptr.delete(e.pointerId);lastPinch=0};
+canvas.addEventListener('pointerup',endP);canvas.addEventListener('pointercancel',endP);
+canvas.addEventListener('pointerleave',()=>{if(!ptr.size)showPick(null)});
+canvas.addEventListener('wheel',e=>{e.preventDefault();Cam.dist=Math.max(1,Math.min((S.dtm?S.dtm.diag:1e4)*6,Cam.dist*Math.exp(e.deltaY*.0012)));invalidate()},{passive:false});
+canvas.addEventListener('dblclick',e=>{const p=pickAt(e.clientX,e.clientY);invalidate();if(p){Cam.t=[p.x,p.y,(p.z-S.dtm.zMid)*S.ex];invalidate()}});
+function schedulePick(x,y){if(pickQ){pickQ=[x,y];return}pickQ=[x,y];setTimeout(()=>{const q=pickQ;pickQ=null;showPick(pickAt(q[0],q[1]));},70)}
+$('v3d').onclick=()=>frame('3d');$('vTop').onclick=()=>frame('top');
+
+/* ---------- Pembangunan DTM ---------- */
+function niceInterval(r){const t=r/20,p=10**Math.floor(Math.log10(t)),m=t/p;return(m<1.5?1:m<3.5?2:m<7.5?5:10)*p}
+async function buildDTM(p,opts={}){
+  if(p.n<3)throw new Error('Butuh minimal 3 titik untuk membentuk permukaan.');
+  setBusy(`Membentuk TIN dari ${fint(p.n)} titik...`);await nextFrame();
+  const [x0,x1]=range(p.x),[y0,y1]=range(p.y),[z0,z1]=range(p.z),cx=(x0+x1)/2,cy=(y0+y1)/2,n=p.n;
+  if(x1-x0<=0||y1-y0<=0)throw new Error('Semua titik segaris, jadi permukaan tidak bisa dibentuk. Periksa pilihan kolom X dan Y.');
+  const co=new Float64Array(n*2),pos=new Float32Array(n*3);
+  for(let i=0;i<n;i++){const a=p.x[i]-cx,b=p.y[i]-cy;co[i*2]=a;co[i*2+1]=b;pos[i*3]=a;pos[i*3+1]=b;pos[i*3+2]=p.z[i]}
+  const tri=new Delaunator(co).triangles;
+  if(tri.length<3)throw new Error('Titik tidak membentuk segitiga. Periksa pilihan kolom.');
+  /* panjang sisi untuk filter */
+  const stride=Math.max(1,Math.floor(tri.length/3/50000)),smp=[];let maxE=0;
+  const elen=(a,b)=>Math.hypot(pos[a*3]-pos[b*3],pos[a*3+1]-pos[b*3+1]);
+  for(let i=0;i<tri.length;i+=3){const a=tri[i],b=tri[i+1],c=tri[i+2],m=Math.max(elen(a,b),elen(b,c),elen(c,a));if(m>maxE)maxE=m;if((i/3)%stride===0)smp.push(m)}
+  smp.sort((a,b)=>a-b);const med=smp[smp.length>>1]||1;
+  const keep=opts.keep&&S.dtm&&S.built,oldEdge=keep?S.dtm.edgeLimit:null;
+  S.dtm={n,rawN:p.rawN||n,pos,tri,cx,cy,x0,x1,y0,y1,zMin:z0,zMax:z1,zMid:(z0+z1)/2,w:x1-x0,h:y1-y0,diag:Math.hypot(x1-x0,y1-y0),med,maxE,edgeLimit:Infinity,uv:new Float32Array(n*2).fill(-1)};
+  gl.bindBuffer(gl.ARRAY_BUFFER,G.vbo.pos);gl.bufferData(gl.ARRAY_BUFFER,pos,gl.STATIC_DRAW);
+  applyOrthoUV();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,G.sbo);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint32Array(p.seg||[]),gl.STATIC_DRAW);G.scount=p.seg?p.seg.length:0;
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,G.ibo);
+  /* batas warna, interval */
+  S.cMin=z0;S.cMax=z1;$('cMin').value=+z0.toFixed(2);$('cMax').value=+z1.toFixed(2);
+  if(!keep){S.interval=niceInterval(Math.max(z1-z0,1e-3));$('iv').value=+S.interval.toPrecision(3)}
+  const sl=edgeToSlider(keep&&oldEdge!==Infinity?oldEdge:keep?Infinity:med*EDGE_FACTOR);$('edge').value=sl;
+  setEdge(sl,true);
+  if(!keep)frame('3d');else invalidate();
+  drawLegend();S.built=true;
+  setBusy('');
+  return S.dtm;
+}
+const edgeToSlider=e=>{const d=S.dtm,lo=d.med*1.5;if(e>=d.maxE)return 100;return Math.round(Math.log(e/lo)/Math.log(d.maxE/lo)*99)};
+const sliderToEdge=v=>{const d=S.dtm,lo=d.med*1.5;return +v>=100?Infinity:lo*(d.maxE/lo)**(+v/99)};
+function setEdge(v,first){
+  const d=S.dtm;if(!d)return;
+  const lim=sliderToEdge(v);d.edgeLimit=lim;$('edgeO').textContent=lim===Infinity?'tanpa batas':fmt(lim,1)+' m';
+  const {tri,pos,n}=d,idx=new Uint32Array(tri.length);let m=0,area=0;
+  const L2=lim===Infinity?Infinity:lim*lim;
+  for(let i=0;i<tri.length;i+=3){
+    const a=tri[i]*3,b=tri[i+1]*3,c=tri[i+2]*3;
+    const ax=pos[a],ay=pos[a+1],bx=pos[b],by=pos[b+1],cx=pos[c],cy=pos[c+1];
+    if(L2!==Infinity){const e1=(ax-bx)**2+(ay-by)**2,e2=(bx-cx)**2+(by-cy)**2,e3=(cx-ax)**2+(cy-ay)**2;if(e1>L2||e2>L2||e3>L2)continue}
+    idx[m++]=tri[i];idx[m++]=tri[i+1];idx[m++]=tri[i+2];
+    area+=Math.abs((bx-ax)*(cy-ay)-(cx-ax)*(by-ay))/2;
+  }
+  d.idx=idx.subarray(0,m);G.count=m;d.area=area;
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,G.ibo);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,d.idx,gl.DYNAMIC_DRAW);
+  /* normal vertex */
+  const nor=new Float32Array(n*3);
+  for(let i=0;i<m;i+=3){
+    const a=d.idx[i]*3,b=d.idx[i+1]*3,c=d.idx[i+2]*3;
+    const ux=pos[b]-pos[a],uy=pos[b+1]-pos[a+1],uz=pos[b+2]-pos[a+2],vx=pos[c]-pos[a],vy=pos[c+1]-pos[a+1],vz=pos[c+2]-pos[a+2];
+    let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;if(nz<0){nx=-nx;ny=-ny;nz=-nz}
+    for(const q of[a,b,c]){nor[q]+=nx;nor[q+1]+=ny;nor[q+2]+=nz}
+  }
+  for(let i=0;i<n*3;i+=3){const l=Math.hypot(nor[i],nor[i+1],nor[i+2])||1;nor[i]/=l;nor[i+1]/=l;nor[i+2]/=l;if(!(nor[i+2]>0)){nor[i]=0;nor[i+1]=0;nor[i+2]=1}}
+  gl.bindBuffer(gl.ARRAY_BUFFER,G.vbo.nor);gl.bufferData(gl.ARRAY_BUFFER,nor,gl.DYNAMIC_DRAW);
+  if(S.wire)buildWire();
+  writeStats();buildLabels();invalidate();
+}
+function buildWire(){
+  const d=S.dtm,m=d.idx.length,w=new Uint32Array(m*2);
+  for(let i=0;i<m;i+=3){const a=d.idx[i],b=d.idx[i+1],c=d.idx[i+2],k=i*2;w[k]=a;w[k+1]=b;w[k+2]=b;w[k+3]=c;w[k+4]=c;w[k+5]=a}
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,G.wbo);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,w,gl.STATIC_DRAW);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,G.ibo);G.wcount=w.length;
+}
+function writeStats(){
+  const d=S.dtm;
+  $('sN').textContent=fint(d.rawN);$('sT').textContent=fint(d.idx.length/3);$('sD').textContent=fmt(d.zMax-d.zMin,1)+' m';
+  $('sMin').textContent=fmt(d.zMin,2);$('sMax').textContent=fmt(d.zMax,2);$('sA').textContent=fmt(d.area/1e4,2)+' ha';
+}
+/* Label elevasi pada garis indeks, disebar per sel grid */
+function buildLabels(){
+  const d=S.dtm;if(!d||!d.idx)return;S.labels=[];
+  const Ix=S.interval*S.idxEvery,{pos,idx}=d,cell=d.diag/(innerWidth<=760?7:13),seen=new Set(),lv=new Map(),list=[];
+  const dec=S.interval<.1?2:S.interval<1?1:0;
+  const skip=Math.max(1,Math.floor(idx.length/3/400000));
+  for(let i=0;i<idx.length&&list.length<170;i+=3*skip){
+    const a=idx[i]*3,b=idx[i+1]*3,c=idx[i+2]*3,za=pos[a+2],zb=pos[b+2],zc=pos[c+2];
+    const lo=Math.min(za,zb,zc),hi=Math.max(za,zb,zc);
+    for(let k=Math.ceil(lo/Ix);k*Ix<=hi&&k*Ix>lo;k++){
+      const L=k*Ix,pts=[];
+      for(const [p,q,zp,zq] of[[a,b,za,zb],[b,c,zb,zc],[c,a,zc,za]]){if((zp<L)!==(zq<L)){const t=(L-zp)/(zq-zp);pts.push([pos[p]+t*(pos[q]-pos[p]),pos[p+1]+t*(pos[q+1]-pos[p+1])])}}
+      if(pts.length<2)continue;
+      const x=(pts[0][0]+pts[1][0])/2,y=(pts[0][1]+pts[1][1])/2,key=Math.round(x/cell)+':'+Math.round(y/cell);
+      if(seen.has(key))continue;seen.add(key);
+      if(!lv.has(k)){if(lv.size>=96)continue;lv.set(k,lv.size)}
+      list.push({x,y,z:L,k});
+    }
+  }
+  const cols=8,rows=12,cw=192,ch=56,c=document.createElement('canvas');c.width=cols*cw;c.height=rows*ch;
+  const g=c.getContext('2d');g.font='600 38px "IBM Plex Mono",ui-monospace,monospace';g.textAlign='center';g.textBaseline='middle';g.lineJoin='round';
+  for(const [k,s] of lv){
+    const tx=(k*Ix).toFixed(dec),X=(s%cols)*cw+cw/2,Y=Math.floor(s/cols)*ch+ch/2;
+    g.lineWidth=9;g.strokeStyle='rgba(15,10,30,.9)';g.strokeText(tx,X,Y);g.fillStyle='#fff';g.fillText(tx,X,Y);
+  }
+  gl.bindTexture(gl.TEXTURE_2D,G.atlas);gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,true);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);
+  gl.generateMipmap(gl.TEXTURE_2D);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  S.labels=list.map(l=>{const s=lv.get(l.k);return{x:l.x,y:l.y,z:l.z,rect:[(s%cols)/cols,Math.floor(s/cols)/rows,1/cols,1/rows]}});
+}
+function drawLegend(){
+  const c=$('ramp'),x=c.getContext('2d'),H=c.height,span=Math.max(S.cMax-S.cMin,1e-6);
+  const stops=t=>{for(let i=1;i<RAMP.length;i++)if(t<=RAMP[i][0]){const[a,ca]=RAMP[i-1],[b,cb]=RAMP[i],f=(t-a)/(b-a),h=s=>[1,3,5].map(k=>parseInt(s.substr(k,2),16)),A=h(ca),B=h(cb);return`rgb(${A.map((v,j)=>Math.round(v+(B[j]-v)*f))})`}return RAMP[RAMP.length-1][1]};
+  for(let py=0;py<H;py++){
+    let z=S.cMax-span*py/(H-1);
+    if(S.step)z=(Math.floor(z/S.interval)+.5)*S.interval;
+    x.fillStyle=stops(Math.max(0,Math.min(1,(z-S.cMin)/span)));x.fillRect(0,py,14,1);
+  }
+  const sc=$('scale');sc.querySelectorAll('.tick').forEach(e=>e.remove());
+  const raw=span/6,p=10**Math.floor(Math.log10(raw)),m=raw/p,st=(m<1.5?1:m<3.5?2:m<7.5?5:10)*p;
+  const dec=st<1?(st<.1?2:1):0;
+  for(let v=Math.ceil(S.cMin/st)*st;v<=S.cMax+1e-9;v+=st){
+    const f=(S.cMax-v)/span;if(f<.06||f>.94)continue;
+    const e=document.createElement('div');e.className='tick';e.style.top=(f*100)+'%';e.textContent=v.toFixed(dec);sc.appendChild(e);
+  }
+  for(const [v,f] of[[S.cMax,0],[S.cMin,1]]){const e=document.createElement('div');e.className='tick';e.style.top=f?'calc(100% - 7px)':'7px';e.style.fontWeight='500';e.textContent=v.toFixed(dec);sc.appendChild(e)}
+}
+
+/* ---------- Orthofoto ---------- */
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+function dtmToSrc(src,x,y){
+  if(src.geographic)return UTM.inverse(x,y,S.utmZone,S.utmSouth);
+  return[x,y];
+}
+function orthoWindow(src,stretch){
+  const d=S.dtm,pad=d.diag*.01;let xf=src.toPixel;
+  if(stretch){xf=(x,y)=>[(x-d.x0)/d.w*src.W,(d.y1-y)/d.h*src.H]}
+  const map=(x,y)=>{if(stretch)return xf(x,y);const q=dtmToSrc(src,x,y);return xf(q[0],q[1])};
+  const corners=[[d.x0-pad,d.y0-pad],[d.x1+pad,d.y0-pad],[d.x1+pad,d.y1+pad],[d.x0-pad,d.y1+pad]].map(q=>map(q[0],q[1]));
+  const cs=corners.map(c=>c[0]),rs=corners.map(c=>c[1]);
+  const c0=clamp(Math.floor(Math.min(...cs)),0,src.W),c1=clamp(Math.ceil(Math.max(...cs)),0,src.W),r0=clamp(Math.floor(Math.min(...rs)),0,src.H),r1=clamp(Math.ceil(Math.max(...rs)),0,src.H);
+  return{map,c0,c1,r0,r1,overlap:c1-c0>1&&r1-r0>1};
+}
+async function attachOrtho(src,stretch=false){
+  const d=S.dtm;
+  const W=orthoWindow(src,stretch||src.noGeo);
+  if(!W.overlap){
+    S.orthoPending=src;$('fitOrtho').hidden=false;
+    setStatus('Orthofoto tidak bertampalan dengan DTM. Periksa zona UTM, atau pakai tombol di bawah bila yakin area keduanya sama.','warn');
+    return false;
+  }
+  S.orthoPending=null;$('fitOrtho').hidden=true;
+  setBusy('Memuat orthofoto...');await nextFrame();
+  const ww=W.c1-W.c0,wh=W.r1-W.r0,k=Math.min(1,G.maxTex/Math.max(ww,wh)),oW=Math.max(1,Math.round(ww*k)),oH=Math.max(1,Math.round(wh*k));
+  const cv=await src.read(W.c0,W.r0,W.c1,W.r1,oW,oH);
+  setOrthoTexture(cv);
+  /* Pemetaan XY ke tekstur disimpan sebagai afin, jadi tetap berlaku saat DTM berubah */
+  const P=[[d.x0,d.y0],[d.x1,d.y0],[d.x0,d.y1]].map(q=>{const m=W.map(q[0],q[1]);return[(m[0]-W.c0)/ww,(m[1]-W.r0)/wh]});
+  const ax=(P[1][0]-P[0][0])/d.w,ay=(P[2][0]-P[0][0])/d.h,bx=(P[1][1]-P[0][1])/d.w,by=(P[2][1]-P[0][1])/d.h;
+  S.orthoAff=[ax,ay,P[0][0]-ax*d.x0-ay*d.y0,bx,by,P[0][1]-bx*d.x0-by*d.y0];
+  applyOrthoUV();
+  S.orthoSrc=src;S.orthoName=src.name;S.orthoCanvas=cv;$('orthoName').textContent=src.name;
+  setBusy('');updateModeButtons();invalidate();
+  return true;
+}
+function setOrthoTexture(cv){
+  gl.bindTexture(gl.TEXTURE_2D,G.ortho);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,cv);gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  if(G.aniso)gl.texParameterf(gl.TEXTURE_2D,G.aniso.TEXTURE_MAX_ANISOTROPY_EXT,Math.min(8,gl.getParameter(G.aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+}
+function applyOrthoUV(){
+  const d=S.dtm;if(!d)return;
+  const {pos,n,cx,cy,uv}=d,a=S.orthoAff;
+  if(a)for(let i=0;i<n;i++){const X=pos[i*3]+cx,Y=pos[i*3+1]+cy;uv[i*2]=a[0]*X+a[1]*Y+a[2];uv[i*2+1]=a[3]*X+a[4]*Y+a[5]}
+  S.orthoReady=!!a;
+  gl.bindBuffer(gl.ARRAY_BUFFER,G.vbo.uv);gl.bufferData(gl.ARRAY_BUFFER,uv,gl.DYNAMIC_DRAW);
+}
+function clearSampleOrtho(){
+  if(S.orthoSrc&&S.orthoSrc.isSample){S.orthoSrc=null;S.orthoAff=null;S.orthoReady=false;$('orthoName').textContent='-';if(S.mode===1||S.mode===2)S.mode=0}
+}
+async function saveOrtho(){
+  if(!S.db||!S.assets||!S.orthoCanvas)return false;
+  const toB=(t,q)=>new Promise(r=>S.orthoCanvas.toBlob(r,t,q));
+  let b=await toB('image/webp',.85);
+  if(!b||b.size>19e6||b.type!=='image/webp')b=await toB('image/jpeg',.82);
+  if(b.size>19e6)b=await toB('image/jpeg',.6);
+  const up=await S.assets.upload(b,{type:b.type}),old=S.orthoAsset;
+  S.orthoAsset=up.id;
+  await S.db.doc('ortho/current').set({assetId:up.id,aff:S.orthoAff,name:S.orthoName});
+  if(old)try{await S.assets.delete(old)}catch(_){}
+  return true;
+}
+async function loadStoredOrtho(o){
+  if(!o||!o.assetId||o.assetId===S.orthoAsset)return;
+  try{
+    const r=await fetch('/_blob/'+o.assetId);if(!r.ok)throw new Error('HTTP '+r.status);
+    const bmp=await createImageBitmap(await r.blob());
+    setOrthoTexture(bmp);bmp.close();
+    S.orthoAsset=o.assetId;S.orthoAff=o.aff;S.orthoName=o.name;S.orthoSrc=null;$('orthoName').textContent=o.name;
+    applyOrthoUV();updateModeButtons();invalidate();
+  }catch(e){console.error(e);setStatus('Orthofoto tersimpan gagal dimuat. Muat ulang halaman untuk mencoba lagi.','warn')}
+}
+function updateModeButtons(){
+  document.querySelectorAll('.seg button').forEach(b=>{const m=+b.dataset.mode;b.disabled=!S.orthoReady&&(m===1||m===2);b.setAttribute('aria-pressed',m===S.mode)});
+  $('mixRow').hidden=S.mode!==2;
+}
+function setMode(m){S.mode=m;updateModeButtons();invalidate()}
+
+function canvasSrc(name,cv,toPixel,extra){
+  return{name,W:cv.width,H:cv.height,toPixel,...extra,read:async(c0,r0,c1,r1,oW,oH)=>{const o=document.createElement('canvas');o.width=oW;o.height=oH;const g=o.getContext('2d');g.imageSmoothingQuality='high';g.drawImage(cv,c0,r0,c1-c0,r1-r0,0,0,oW,oH);return o}};
+}
+function parseWorld(text){
+  const v=text.trim().split(/\s+/).map(Number);
+  if(v.length<6||v.some(x=>!Number.isFinite(x)))throw new Error('World file harus berisi 6 angka.');
+  const[A,D,B,E,C,F]=v,det=A*E-B*D;
+  return{res:Math.hypot(A,D),C,F,toPixel:(x,y)=>[(E*(x-C)-B*(y-F))/det+.5,(-D*(x-C)+A*(y-F))/det+.5]};
+}
+function isGeoRes(x,y,res){return Math.abs(x)<=180&&Math.abs(y)<=90&&Math.abs(res)<.01}
+function loadScript(u){return new Promise((ok,no)=>{const s=document.createElement('script');s.src=u;s.onload=ok;s.onerror=()=>no(new Error('Pustaka gagal dimuat: '+u));document.head.appendChild(s)})}
+
+async function openGeoTIFF(file,world){
+  if(!window.GeoTIFF)await loadScript('https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js');
+  const tiff=await GeoTIFF.fromBlob(file),main=await tiff.getImage(0),W=main.getWidth(),H=main.getHeight();
+  let toPixel=null,geographic=false,noGeo=false;
+  if(world){toPixel=world.toPixel;geographic=isGeoRes(world.C,world.F,world.res)}
+  else try{
+    const[ox,oy]=main.getOrigin(),[rx,ry]=main.getResolution();
+    toPixel=(x,y)=>[(x-ox)/rx,(y-oy)/ry];
+    const gk=main.getGeoKeys()||{};
+    geographic=gk.GTModelTypeGeoKey===2||isGeoRes(ox,oy,rx);
+  }catch(_){noGeo=true;toPixel=(x,y)=>[x,y]}
+  const count=await tiff.getImageCount(),imgs=[],spp=main.getSamplesPerPixel();
+  for(let i=0;i<count;i++){const m=await tiff.getImage(i);if(m.getSamplesPerPixel()===spp)imgs.push(m)}
+  imgs.sort((a,b)=>a.getWidth()-b.getWidth());
+  return{name:file.name,W,H,toPixel,geographic,noGeo,read:async(c0,r0,c1,r1,oW,oH)=>{
+    const need=W*oW/(c1-c0),img=imgs.find(m=>m.getWidth()>=need)||imgs[imgs.length-1],k=img.getWidth()/W,kh=img.getHeight()/H;
+    const win=[Math.floor(c0*k),Math.floor(r0*kh),Math.ceil(c1*k),Math.ceil(r1*kh)];
+    const px=await img.readRGB({window:win,width:oW,height:oH,interleave:true,enableAlpha:true});
+    const b=Math.round(px.length/(oW*oH));
+    let mx=255;if(px.BYTES_PER_ELEMENT>1){mx=0;for(let i=0;i<px.length;i+=Math.max(1,b*17))if(px[i]>mx)mx=px[i];mx=mx||255}
+    const cv=document.createElement('canvas');cv.width=oW;cv.height=oH;const g=cv.getContext('2d'),id=g.createImageData(oW,oH),o=id.data;
+    for(let i=0,j=0;i<oW*oH;i++,j+=b){const s=255/mx;o[i*4]=px[j]*s;o[i*4+1]=px[j+1]*s;o[i*4+2]=px[j+2]*s;o[i*4+3]=b>=4?px[j+3]*s:255}
+    g.putImageData(id,0,0);return cv;
+  }};
+}
+async function openImage(file,world){
+  const bmp=await createImageBitmap(file);
+  const cv=document.createElement('canvas');cv.width=bmp.width;cv.height=bmp.height;cv.getContext('2d').drawImage(bmp,0,0);bmp.close();
+  if(world)return canvasSrc(file.name,cv,world.toPixel,{geographic:isGeoRes(world.C,world.F,world.res)});
+  return canvasSrc(file.name,cv,(x,y)=>[x,y],{noGeo:true});
+}
+
+/* ---------- Router file ---------- */
+const ext=f=>(f.name.split('.').pop()||'').toLowerCase();
+const ORTHO=new Set(['tif','tiff','jpg','jpeg','png','webp']),WORLD=new Set(['tfw','jgw','pgw','wld','jpw','tifw','jpgw','pngw']);
+async function handleFiles(list){
+  const files=[...list];if(!files.length)return;
+  const orthoF=files.find(f=>ORTHO.has(ext(f))),worldF=files.find(f=>WORLD.has(ext(f))),coord=files.find(f=>!ORTHO.has(ext(f))&&!WORLD.has(ext(f)));
+  try{
+    if(coord)await openCoord(coord);
+    if(orthoF)await openOrtho(orthoF,worldF);
+    else if(worldF&&!coord)setStatus('World file perlu dipilih bersama gambarnya.','warn');
+  }catch(e){setBusy('');setStatus(e.message||String(e),'err');console.error(e)}
+}
+async function openOrtho(file,worldF){
+  setBusy('Membaca orthofoto...');await nextFrame();
+  const world=worldF?parseWorld(await worldF.text()):null,e=ext(file);
+  let src;
+  if(e==='tif'||e==='tiff')src=await openGeoTIFF(file,world);else src=await openImage(file,world);
+  const ok=await attachOrtho(src);
+  if(!ok){setBusy('');return}
+  setMode(1);
+  const kept=await saveOrtho().catch(e=>{console.error(e);return false});
+  setStatus(src.noGeo?'Orthofoto tanpa georeferensi diregangkan ke batas DTM. Sertakan world file (.jgw/.tfw) agar posisinya tepat.':`Orthofoto terpasang: ${fint(src.W)} × ${fint(src.H)} piksel${kept?', tersimpan':''}.`,src.noGeo?'warn':'');
+}
+async function openCoord(file){
+  const e=ext(file);
+  if(e==='laz')throw new Error('File LAZ belum didukung. Ekspor ulang sebagai LAS, atau XYZ/CSV.');
+  setBusy('Membaca '+file.name+'...');await nextFrame();
+  let src;
+  if(e==='str')src={kind:'pts',name:file.name,pts:parseSTR(await file.text(),file.name)};
+  else if(e==='las')src={kind:'pts',name:file.name,pts:parseLAS(await file.arrayBuffer())};
+  else if(e==='dxf')src={kind:'pts',name:file.name,pts:parseDXF(await file.text())};
+  else if(e==='xlsx'||e==='xls'){
+    if(!window.XLSX)await loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+    const wb=XLSX.read(await file.arrayBuffer(),{type:'array',dense:true});
+    let bestS=null,bestN=-1;
+    for(const n of wb.SheetNames){const ws=wb.Sheets[n],r=ws['!ref']?XLSX.utils.decode_range(ws['!ref']):null,c=r?r.e.r:0;if(c>bestN){bestN=c;bestS=ws}}
+    const text=XLSX.utils.sheet_to_csv(bestS,{FS:'\t',rawNumbers:true});
+    src={kind:'text',name:file.name,text,a:analyzeText(text)};
+  }else{
+    const text=await file.text();src={kind:'text',name:file.name,text,a:analyzeText(text)};
+  }
+  setBusy('');S.pending=src;showPending(src);
+}
+function showMapping(src){
+  const box=$('mapBox');
+  box.hidden=src.kind!=='text';if(box.hidden)return;
+  const a=src.a;
+  for(const [id,k] of[['colX','x'],['colY','y'],['colZ','z']]){
+    const s=$(id);s.innerHTML='';
+    a.cols.forEach((c,i)=>{if(c.numeric){const o=document.createElement('option');o.value=i;o.textContent=c.name;s.appendChild(o)}});
+    s.value=a.map[k];
+  }
+  const esc=t=>String(t).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
+  $('preview').innerHTML='<table><tr>'+a.cols.map(c=>`<th>${esc(c.name)}</th>`).join('')+'</tr>'+a.sample.map(r=>'<tr>'+a.cols.map((_,i)=>`<td>${esc(r[i]??'')}</td>`).join('')+'</tr>').join('')+'</table>';
+}
+function showPending(src){
+  const n=src.kind==='text'?extractText(src.text,src.a,src.a.map).n:src.pts.n,has=surveyList().length>0;
+  $('pend').hidden=false;$('pendName').textContent=src.name+' · '+fint(n)+' titik';
+  $('pDate').value=dateFromName(src.name);$('pKind').value=has?'update':'replace';
+  $('pApply').textContent=S.db&&S.assets?'Terapkan dan simpan':'Terapkan di browser ini saja';
+  syncKind();showMapping(src);
+  setStatus('File terbaca. Periksa tanggal dan cara pakai, lalu terapkan.');
+}
+function syncKind(){
+  const up=$('pKind').value==='update';$('pGapF').hidden=!up;
+  $('pHint').textContent=up?'Titik lama di dalam area file ini diganti. Di luar area, data lama tetap dipakai.':'Semua data sebelum tanggal ini diabaikan dan file ini menjadi data dasar.';
+}
+function surveyList(){
+  return[...S.metas,...S.local].sort((a,b)=>(a.date<b.date?-1:a.date>b.date?1:(a.created||0)-(b.created||0)));
+}
+async function applyPending(){
+  const src=S.pending;if(!src)return;
+  const btn=$('pApply');btn.disabled=true;
+  try{
+    const raw=src.kind==='text'?extractText(src.text,src.a,src.a.map):src.pts;
+    if(!raw.n)throw new Error('Tidak ada baris yang terbaca dengan kolom ini.');
+    const p=thin(normalizeCRS(raw,$('crs').value));
+    const notes=[];
+    if(raw.note)notes.push(raw.note);if(p.deg)notes.push(`Derajat diubah ke UTM zona ${S.utmZone}${S.utmSouth?'S':'N'}.`);
+    if(raw.bad)notes.push(`${fint(raw.bad)} baris dilewati karena bukan angka.`);if(raw.nodata)notes.push(`${fint(raw.nodata)} titik nilai kosong dibuang.`);
+    if(p.thinned)notes.push(`File berisi ${fint(p.thinned)} titik, dijarangkan merata agar peramban tetap lancar.`);
+    const id='s'+Date.now().toString(36),meta={name:src.name,date:$('pDate').value||dateFromName(''),kind:$('pKind').value,gap:Math.max(2,+$('pGap').value||30),points:p.n,created:Date.now()};
+    S.cache.set(id,p);S.applyNote=notes.join(' ');
+    if(S.db&&S.assets){
+      setBusy('Menyimpan survei...');await nextFrame();
+      const text=serializeSTR(p,src.name);
+      if(text.length>19.5e6)throw new Error('File terlalu besar untuk disimpan (batas 20 MB per survei). Kurangi kerapatan titik lalu coba lagi.');
+      const up=await S.assets.upload(new Blob([text]),{type:'text/plain'});
+      meta.assetId=up.id;
+      await S.db.doc('surveys/'+id).set(meta);
+      if(!S.metas.some(m=>m.id===id))S.metas.push({id,...meta});
+    }else S.local.push({id,...meta,local:true});
+    S.pending=null;$('pend').hidden=true;
+    await refresh();
+  }catch(e){setBusy('');setStatus(e.message||'Survei gagal disimpan: '+(e.code||e),'err');console.error(e)}
+  btn.disabled=false;
+}
+async function refresh(){
+  const seq=++S.seq,list=surveyList();
+  $('sampleSec').hidden=list.length>0;$('histSec').hidden=!list.length;
+  if(!list.length){S.metas=[];if(!S.sample)await loadSample();return}
+  const wasSample=S.sample;
+  try{
+    for(const s of list)if(!S.cache.has(s.id)&&s.assetId){
+      setBusy('Memuat '+s.name+'...');
+      const r=await fetch('/_blob/'+s.assetId);if(!r.ok)throw new Error(`Data survei ${s.name} gagal dimuat (HTTP ${r.status}).`);
+      S.cache.set(s.id,parseSTR(await r.text(),s.name));
+      if(seq!==S.seq)return;
+    }
+    if(S.until!=='latest'&&!list.some(s=>s.id===S.until))S.until='latest';
+    const end=S.until==='latest'?list.length:list.findIndex(s=>s.id===S.until)+1,active=list.slice(0,end);
+    setBusy('Menggabungkan survei...');await nextFrame();if(seq!==S.seq)return;
+    const {A,info}=composeSurveys(active);
+    if(!A)throw new Error('Tidak ada data survei yang bisa dipakai.');
+    clearSampleOrtho();S.sample=false;
+    const p=A.n>MAX_POINTS?{...thin(A),rawN:0}:densify(A);if(!p.rawN)p.rawN=p.n;
+    await buildDTM(p,{keep:!wasSample});
+    if(seq!==S.seq)return;
+    const last=active[active.length-1];
+    $('srcName').textContent=last.name;$('chip').textContent='Kondisi per '+last.date;$('chip').hidden=false;
+    renderHist(list,info);updateModeButtons();
+    setStatus([`${active.length} survei digabung, ${fint(S.dtm.idx.length/3)} segitiga.`,S.applyNote].filter(Boolean).join(' '));S.applyNote='';
+  }catch(e){setBusy('');setStatus(e.message||String(e),'err');console.error(e)}
+}
+function renderHist(list,info){
+  const u=$('until'),can=!!(S.db&&S.assets);u.innerHTML='';
+  const add=(v,t)=>{const o=document.createElement('option');o.value=v;o.textContent=t;u.appendChild(o)};
+  add('latest','Terbaru');list.forEach(s=>add(s.id,s.date+' · '+s.name));u.value=S.until;
+  const h=$('hist');h.innerHTML='';
+  [...list].reverse().forEach(s=>{
+    const li=document.createElement('li'),nm=document.createElement('span'),dt=document.createElement('span'),inf=document.createElement('span');
+    nm.className='nm';nm.textContent=s.name;dt.className='dt';dt.textContent=s.date;inf.className='inf';
+    const i=info[s.id];
+    inf.textContent=!i?'Tidak dipakai pada tanggal terpilih.':i.base?`Data dasar, ${fint(s.points)} titik.`:`Update: ${fint(i.removed)} titik lama diganti ${fint(s.points)} titik baru, area ${fmt(i.area/1e4,2)} ha.`;
+    li.append(nm,dt,inf);
+    if(can||s.local){
+      const b=document.createElement('button');b.type='button';b.className='del';b.textContent='Hapus';
+      b.onclick=()=>{if(!b.classList.contains('sure')){b.classList.add('sure');b.textContent='Yakin hapus?';setTimeout(()=>{b.classList.remove('sure');b.textContent='Hapus'},4000);return}deleteSurvey(s)};
+      li.appendChild(b);
+    }
+    h.appendChild(li);
+  });
+}
+async function deleteSurvey(s){
+  try{
+    if(s.local)S.local=S.local.filter(x=>x.id!==s.id);
+    else{await S.db.doc('surveys/'+s.id).delete();S.metas=S.metas.filter(x=>x.id!==s.id);if(s.assetId)await S.assets.delete(s.assetId)}
+    S.cache.delete(s.id);await refresh();
+  }catch(e){setStatus('Survei gagal dihapus: '+(e.message||e.code),'err')}
+}
+
+/* ---------- Data contoh sintetis ---------- */
+function rng(s){return()=>{s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function sampleH(u,v){
+  let z=118+14*Math.sin(u/210+.6)*Math.cos(v/170)+7*Math.sin((u+v)/95)+3*Math.sin(u/37-v/53);
+  z-=9*Math.exp(-(((v+.35*u+330+60*Math.sin(u/160))/46)**2));
+  const r=Math.hypot((u+180)/330,(v-40)/230);
+  if(r<1){const dep=92*Math.pow(1-r,.8),b=Math.floor(dep/9)*9+(dep%9)*.14;z=Math.min(z,112-b)}
+  const r2=Math.hypot((u-420)/210,(v+180)/150);
+  if(r2<1){const h=46*(1-r2),t=Math.floor(h/6)*6+(h%6)*.2;z=Math.max(z,112+t)}
+  return z;
+}
+function noise(x,y){
+  const f=(i,j)=>{const s=Math.sin(i*127.1+j*311.7)*43758.5453;return s-Math.floor(s)},xi=Math.floor(x),yi=Math.floor(y),u=x-xi,v=y-yi,a=u*u*(3-2*u),b=v*v*(3-2*v);
+  return(f(xi,yi)*(1-a)+f(xi+1,yi)*a)*(1-b)+(f(xi,yi+1)*(1-a)+f(xi+1,yi+1)*a)*b;
+}
+function sampleOrtho(cu,cv0,W0,H0){
+  const W=1200,H=900,c=document.createElement('canvas');c.width=W;c.height=H;const g=c.getContext('2d'),id=g.createImageData(W,H),o=id.data;
+  const road=[[-880,150,-520,80],[-520,80,-300,-170],[-300,-170,60,-230],[60,-230,300,-120],[300,-120,620,-60]];
+  const segD=(x,y,[a,b,e,f])=>{const dx=e-a,dy=f-b,t=clamp(((x-a)*dx+(y-b)*dy)/(dx*dx+dy*dy),0,1);return Math.hypot(x-a-t*dx,y-b-t*dy)};
+  for(let j=0,k=0;j<H;j++)for(let i=0;i<W;i++,k+=4){
+    const u=(i/W-.5)*W0,v=(.5-j/H)*H0,z=sampleH(u,v),n=noise(u/14,v/14),n2=noise(u/55,v/55);
+    let r=30+45*n*n2*1.5,gg=70+70*n,b=32+22*n;
+    const rp=Math.hypot((u+180)/330,(v-40)/230),rm=Math.hypot((u-420)/210,(v+180)/150);
+    if(rp<1){const t=(z%9)/9;r=120+50*t+22*n;gg=98+36*t+18*n;b=78+26*t+12*n}
+    if(rp<.16){r=52;gg=118;b=120}
+    if(rm<1){const st=Math.abs(Math.sin(u/9))>.45;r=st?96:136+18*n;gg=st?138+30*n:112;b=st?64:78}
+    let dr=1e9;for(const s of road)dr=Math.min(dr,segD(u,v,s));
+    if(dr<7){r=186;gg=160;b=118}
+    const creek=Math.abs(v+.35*u+330+60*Math.sin(u/160));if(creek<6&&rp>=1){r=70;gg=110;b=104}
+    o[k]=r;o[k+1]=gg;o[k+2]=b;o[k+3]=255;
+  }
+  g.putImageData(id,0,0);return c;
+}
+async function loadSample(){
+  const R=rng(20261103),N=42000,E0=500000,N0=9900000,x=new Float64Array(N),y=new Float64Array(N),z=new Float64Array(N);
+  let n=0;
+  while(n<N){
+    const u=(R()-.5)*1760,v=(R()-.5)*1320,th=Math.atan2(v/660,u/880);
+    const rim=.88+.07*Math.sin(3*th+1)+.05*Math.sin(5*th);
+    if(Math.hypot(u/880,v/660)>rim)continue;
+    x[n]=E0+u;y[n]=N0+v;z[n]=sampleH(u,v)+(R()-.5)*.12;n++;
+  }
+  S.sample=true;S.built=false;
+  $('srcName').textContent='Data contoh sintetis';$('chip').textContent='Data contoh sintetis';$('chip').hidden=false;S.mode=0;
+  S.utmZone=50;S.utmSouth=true;syncZone();
+  await buildDTM({x,y,z,n:N});
+  const d=S.dtm,cv=sampleOrtho(0,0,1760,1320);
+  const src=canvasSrc('Orthofoto contoh sintetis',cv,(a,b)=>[(a-E0+880)/1760*1200,(N0+660-b)/1320*900],{isSample:true});
+  await attachOrtho(src);
+  updateModeButtons();
+  setStatus('Contoh sintetis, bukan data lapangan: tambang terbuka dengan timbunan. Unggah file Anda untuk menggantinya.');
+  return d;
+}
+
+/* ---------- Kontrol ---------- */
+function bindControls(){
+  const zs=$('zone');for(let z=46;z<=54;z++)for(const h of['N','S']){const o=document.createElement('option');o.value=z+h;o.textContent=z+h;zs.appendChild(o)}
+  syncZone();
+  $('fileCoord').onchange=e=>{handleFiles(e.target.files);e.target.value=''};
+  $('fileOrtho').onchange=e=>{handleFiles(e.target.files);e.target.value=''};
+  $('loadSample').onclick=()=>loadSample();
+  $('fitOrtho').onclick=async()=>{const s=S.orthoPending;if(!s)return;try{if(await attachOrtho(s,true)){setMode(1);saveOrtho().catch(console.error);setStatus('Orthofoto diregangkan ke batas DTM, posisinya perkiraan saja.','warn')}}catch(e){setBusy('');setStatus(e.message,'err')}};
+  document.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>setMode(+b.dataset.mode));
+  const live=(id,fn)=>$(id).addEventListener('input',fn);
+  live('mix',e=>{S.mix=e.target.value/100;$('mixO').textContent=e.target.value+'%';invalidate()});
+  live('ex',e=>{S.ex=+e.target.value;$('exO').textContent=S.ex.toFixed(1)+'×';invalidate()});
+  live('hill',e=>{S.hill=e.target.value/100;$('hillO').textContent=e.target.value+'%';invalidate()});
+  live('step',e=>{S.step=e.target.checked;drawLegend();invalidate()});
+  live('cOn',e=>{S.cOn=e.target.checked;invalidate()});
+  live('lOn',e=>{S.lOn=e.target.checked;invalidate()});
+  live('wire',e=>{S.wire=e.target.checked;if(S.wire&&S.dtm)buildWire();invalidate()});
+  live('pts',e=>{S.pts=e.target.checked;invalidate()});
+  const lim=()=>{const a=+$('cMin').value,b=+$('cMax').value;if(Number.isFinite(a)&&Number.isFinite(b)&&b>a){S.cMin=a;S.cMax=b;drawLegend();invalidate()}};
+  live('cMin',lim);live('cMax',lim);
+  $('cAuto').onclick=()=>{if(!S.dtm)return;S.cMin=S.dtm.zMin;S.cMax=S.dtm.zMax;$('cMin').value=+S.cMin.toFixed(2);$('cMax').value=+S.cMax.toFixed(2);drawLegend();invalidate()};
+  live('iv',e=>{const v=+e.target.value,d=S.dtm;if(v>0&&d&&(d.zMax-d.zMin)/v<2000){S.interval=v;buildLabels();if(S.step)drawLegend();invalidate()}});
+  live('idx',e=>{S.idxEvery=+e.target.value;buildLabels();invalidate()});
+  $('edge').addEventListener('input',e=>{$('edgeO').textContent=sliderToEdge(e.target.value)===Infinity?'tanpa batas':fmt(sliderToEdge(e.target.value),1)+' m'});
+  $('edge').addEventListener('change',e=>setEdge(e.target.value));
+  for(const id of['colX','colY','colZ'])$(id).onchange=()=>{const a=S.pending?.a;if(a)a.map={x:+$('colX').value,y:+$('colY').value,z:+$('colZ').value}};
+  $('pApply').onclick=applyPending;$('pKind').onchange=syncKind;
+  $('pCancel').onclick=()=>{S.pending=null;$('pend').hidden=true;setStatus('Dibatalkan. Data tidak berubah.')};
+  $('until').onchange=e=>{S.until=e.target.value;refresh()};
+  live('strs',e=>{S.strs=e.target.checked;invalidate()});
+  $('zone').onchange=async e=>{const v=e.target.value;S.utmZone=parseInt(v);S.utmSouth=v.endsWith('S');
+    if(S.orthoSrc&&S.orthoSrc.geographic)await attachOrtho(S.orthoSrc)};
+  /* tarik dan lepas */
+  let dn=0;
+  addEventListener('dragenter',e=>{e.preventDefault();dn++;$('drop').hidden=false});
+  addEventListener('dragover',e=>e.preventDefault());
+  addEventListener('dragleave',()=>{if(--dn<=0){dn=0;$('drop').hidden=true}});
+  addEventListener('drop',e=>{e.preventDefault();dn=0;$('drop').hidden=true;handleFiles(e.dataTransfer.files)});
+  new ResizeObserver(invalidate).observe($('stage'));
+}
+
+async function start(){
+  bindControls();showPick(null);
+  if(!gl){setStatus('Peramban ini tidak mendukung WebGL2, jadi tampilan 3D tidak bisa berjalan.','err');return}
+  try{initGL()}catch(e){setStatus('WebGL gagal disiapkan: '+e.message,'err');console.error(e);return}
+  if(typeof Delaunator==='undefined'){setStatus('Pustaka triangulasi gagal dimuat. Periksa koneksi internet lalu muat ulang halaman.','err');return}
+  if(window.claude&&claude.use){
+    setBusy('Memuat data survei...');
+    try{[S.db,S.assets]=await Promise.all([claude.use('db'),claude.use('assets')])}catch(e){console.error(e)}
+  }
+  if(S.db){
+    let got=false;
+    const t=setTimeout(()=>{if(!got&&!S.dtm){setBusy('');loadSample();setStatus('Data survei belum terjawab, jadi contoh sintetis ditampilkan. Muat ulang halaman untuk mencoba lagi.','warn')}},10000);
+    S.db.collection('surveys').orderBy('date').onSnapshot(snap=>{
+      got=true;clearTimeout(t);setBusy('');
+      S.metas=snap.docs.map(d=>({id:d.id,...d.data()}));refresh();
+    },e=>{console.error(e);clearTimeout(t);setBusy('');setStatus('Data survei gagal dibaca: '+(e.message||e.code),'err');if(!S.dtm)loadSample()});
+    S.db.doc('ortho/current').onSnapshot(d=>{if(d.exists)loadStoredOrtho(d.data())},e=>console.error(e));
+  }else{setBusy('');await loadSample()}
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{buildLabels();invalidate()});
+}
+start();
+/* PWA: pasang ke layar utama dan kerja offline */
+let deferredInstall=null;
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstall=e;$('install').hidden=false});
+$('install').onclick=async()=>{if(!deferredInstall)return;deferredInstall.prompt();await deferredInstall.userChoice.catch(()=>{});deferredInstall=null;$('install').hidden=true};
+addEventListener('appinstalled',()=>{$('install').hidden=true});
+function netState(){$('net').textContent=navigator.onLine?'Online. Data tersimpan di perangkat ini.':'Offline. Semua data dan tampilan tetap bisa dipakai.'}
+addEventListener('online',netState);addEventListener('offline',netState);netState();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(e=>console.error('SW',e));
+</script>
+
+</body>
+</html>

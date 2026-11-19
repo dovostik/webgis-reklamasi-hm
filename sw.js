@@ -5,7 +5,7 @@ const CORE = ['./', 'index.html', 'config.js', 'manifest.webmanifest', 'css/app.
   'lib/leaflet/leaflet.js', 'lib/leaflet/leaflet.css', 'lib/jsQR.js', 'lib/html2canvas.min.js', 'lib/qrcode.min.js',
   'img/logo.svg', 'img/mark.svg', 'img/icon-192.png', 'img/icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => c.addAll(CORE)).then(() => self.skipWaiting())); });
-self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V && k !== 'hm-tiles').map(k => caches.delete(k)))).then(() => self.clients.claim())); });
+self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V && k !== 'hm-tiles' && !k.startsWith('dtm-')).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {
   const u = new URL(e.request.url);
   if (e.request.method !== 'GET') return;
