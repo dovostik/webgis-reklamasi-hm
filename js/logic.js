@@ -5,8 +5,16 @@ export function labelPt(geom) {
   if (!geom) return null; const polys = geom.type === 'Polygon' ? [geom.coordinates] : geom.type === 'MultiPolygon' ? geom.coordinates : [];
   let best = null, bestA = -1;
   polys.forEach(pg => { const r = pg[0]; let A = 0, cx = 0, cy = 0; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const f = r[j][0] * r[i][1] - r[i][0] * r[j][1]; A += f; cx += (r[j][0] + r[i][0]) * f; cy += (r[j][1] + r[i][1]) * f; }
-    if (Math.abs(A) > bestA && A) { bestA = Math.abs(A); best = [cy / (3 * A), cx / (3 * A)]; } });
-  return best;
+    if (Math.abs(A) > bestA && A) { bestA = Math.abs(A); best = [cy / (3 * A), cx / (3 * A), r]; } });
+  if (!best) return null; const [la, lo, r] = best;
+  // centroid bisa jatuh di luar poligon cekung: ambil tengah segmen dalam terlebar pada garis lintang sekitar centroid
+  const inside = (x, y) => { let c = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const [xi, yi] = r[i], [xj, yj] = r[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
+  if (inside(lo, la)) return [la, lo];
+  const ys = r.map(p => p[1]), y0 = Math.min(...ys), y1 = Math.max(...ys); let bw = -1, bp = [la, lo];
+  for (let t = 0; t <= 20; t++) { const y = la + (t % 2 ? 1 : -1) * Math.ceil(t / 2) * (y1 - y0) / 24; if (y <= y0 || y >= y1) continue;
+    const xs = []; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const [xi, yi] = r[i], [xj, yj] = r[j]; if ((yi > y) !== (yj > y)) xs.push((xj - xi) * (y - yi) / (yj - yi) + xi); }
+    xs.sort((a, b) => a - b); for (let i = 0; i + 1 < xs.length; i += 2) if (xs[i + 1] - xs[i] > bw) { bw = xs[i + 1] - xs[i]; bp = [y, (xs[i] + xs[i + 1]) / 2]; } }
+  return bp;
 }
 export const JALUR = j => j === 'pioneer' ? 'FG' : j === 'sisipan' ? 'Sisipan' : (j || '');
 export const STD = { lubang: 881, koheKg: 1, npkG: 50, pupuk: 881, npk: 44.05, pio: 625, sis: 256, lcc: 20, kohe: 25, sekam: 25, ambang: 90 };

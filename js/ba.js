@@ -4,6 +4,7 @@ import { S, L, ins, upd, $, $$, toast, confirmSheet, uid, nm, pickFile, fileUrl,
 import * as G from './logic.js';
 import { isRole, seesBlok, seesBA, delegDari, delegKe } from './app.js';
 import { bodySO } from './opname.js';
+import { SAT_URL, ORTHO, orthoUrl, SLOTS } from './offline.js';
 const { esc, fmt, tgl, jam } = G;
 
 const JUDUL = { PP: 'BERITA ACARA PENYELESAIAN PEKERJAAN', KP: 'BERITA ACARA KEBERHASILAN PENILAIAN', KPR: 'BERITA ACARA KEBERHASILAN PENILAIAN RETENSI', SO: 'BERITA ACARA STOCK OPNAME' };
@@ -173,12 +174,24 @@ function mapSVG(d, tags, tracks) {
   const mPer = 111320 * k; const bar = [10, 20, 50, 100, 200, 500].find(q => q * s / mPer > 60) || 500;
   const col = { mati: '#E0473B', disulam: '#4F86C6', closed: '#2F8A57', foto: '#7B3FA0' };
   const inView = p => { const [x, y] = P(p).map(Number); return x > -60 && x < W + 60 && y > -60 && y < H + 60; };
-  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;border:1px solid #999;background:#fafaf7" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="cpm"><rect width="${W}" height="${H}"/></clipPath></defs><g clip-path="url(#cpm)">
-    ${rings.map(r => `<polygon points="${r.map(p => P(p).join(',')).join(' ')}" fill="#E8F0DC" stroke="#111" stroke-width="1.5"/>`).join('')}
+  // citra latar: Esri + ortho drone gabungan (utama lalu mingguan di atasnya), ubin ditempatkan per sudut
+  const lonA = ((0 - pad) / s + x0) / k, lonB = ((W - pad) / s + x0) / k, latA = y1 + pad / s, latB = y1 - (H - pad) / s;
+  const zWant = Math.max(12, Math.min(20, Math.round(Math.log2(360 * k * s / 384))));
+  const t2lon = (x, n) => x / n * 360 - 180, t2lat = (y, n) => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI;
+  const tiles = (tpl, z, bnd) => { if (!tpl) return ''; const n = 2 ** z, tx = lon => Math.floor((lon + 180) / 360 * n), ty = lat => Math.floor((1 - Math.asinh(Math.tan(lat * Math.PI / 180)) / Math.PI) / 2 * n); let out = '';
+    for (let x = tx(lonA); x <= tx(lonB); x++) for (let y = ty(latA); y <= ty(latB); y++) { const w = t2lon(x, n), e = t2lon(x + 1, n), nn = t2lat(y, n), so = t2lat(y + 1, n);
+      if (bnd && (e < bnd[0] || w > bnd[2] || nn < bnd[1] || so > bnd[3])) continue; const [ax, ay] = P([w, nn]).map(Number), [bx, by] = P([e, so]).map(Number);
+      out += `<image href="${tpl.replace('{z}', z).replace('{x}', x).replace('{y}', y)}" x="${ax.toFixed(1)}" y="${ay.toFixed(1)}" width="${(bx - ax + .6).toFixed(1)}" height="${(by - ay + .6).toFixed(1)}" preserveAspectRatio="none"/>`; }
+    return out; };
+  const citra = tiles(SAT_URL, Math.min(zWant, 19)) + SLOTS.map(([kk]) => { const o = ORTHO[kk]; return o ? tiles(orthoUrl(kk), Math.max(o.minzoom || 0, Math.min(zWant, o.maxzoom || 20)), o.bounds) : ''; }).join('');
+  const lp = G.labelPt(g); const lbl = lp ? (() => { const [lx, ly] = P([lp[1], lp[0]]); return `<g font-family="Arial" text-anchor="middle" paint-order="stroke" stroke="#000" stroke-width="3" stroke-linejoin="round" fill="#fff"><text x="${lx}" y="${ly}" font-size="17" font-weight="700">${esc(d.blok.nama || '')}</text><text x="${lx}" y="${Number(ly) + 17}" font-size="12.5" font-weight="600">${fmt(d.blok.ha, 2)} Ha</text></g>`; })() : '';
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;border:1px solid #999;background:#dfe5df" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="cpm"><rect width="${W}" height="${H}"/></clipPath></defs><g clip-path="url(#cpm)">${citra}
+    ${rings.map(r => `<polygon points="${r.map(p => P(p).join(',')).join(' ')}" fill="#FFE14D" fill-opacity=".12" stroke="#FFE14D" stroke-width="2.2"/>`).join('')}
     ${tracks.map(t => { const q = t.pts.filter(inView); return q.length ? `<polyline points="${q.map(p => P(p).join(',')).join(' ')}" fill="none" stroke="${t.c}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" stroke-opacity=".9"/>${q.map(p => { const [x, y] = P(p); return `<circle cx="${x}" cy="${y}" r="2" fill="${t.c}"/>`; }).join('')}` : ''; }).join('')}
-    ${tags.filter(t => t.lon).map(t => { const [x, y] = P([t.lon, t.lat]); return `<circle cx="${x}" cy="${y}" r="4.5" fill="${col[t.status] || '#E0473B'}" stroke="#fff" stroke-width="1.2"/>`; }).join('')}</g>
-    <g transform="translate(${W - pad - 10},${pad + 6})"><path d="M0 18 L6 0 L12 18 L6 13 Z" fill="#111"/><text x="6" y="30" font-size="11" text-anchor="middle" font-family="Arial">U</text></g>
-    <g transform="translate(${pad},${H - pad})"><rect width="${(bar * s / mPer).toFixed(1)}" height="5" fill="#111"/><text y="-4" font-size="10" font-family="Arial">${bar} m</text></g></svg>`;
+    ${tags.filter(t => t.lon).map(t => { const [x, y] = P([t.lon, t.lat]); return `<circle cx="${x}" cy="${y}" r="4.5" fill="${col[t.status] || '#E0473B'}" stroke="#fff" stroke-width="1.2"/>`; }).join('')}${lbl}</g>
+    <g transform="translate(${W - pad - 16},${pad})"><rect x="-6" y="-4" width="24" height="40" rx="3" fill="#fff" fill-opacity=".85"/><path d="M0 18 L6 0 L12 18 L6 13 Z" fill="#111"/><text x="6" y="30" font-size="11" text-anchor="middle" font-family="Arial">U</text></g>
+    <g transform="translate(${pad},${H - pad})"><rect x="-5" y="-17" width="${(bar * s / mPer + 10).toFixed(1)}" height="26" rx="3" fill="#fff" fill-opacity=".85"/><rect width="${(bar * s / mPer).toFixed(1)}" height="5" fill="#111"/><text y="-4" font-size="10" font-family="Arial">${bar} m</text></g>
+    <text x="${W - 6}" y="${H - 6}" text-anchor="end" font-size="9" font-family="Arial" fill="#fff" stroke="#000" stroke-width="2.4" paint-order="stroke">Citra: ${SLOTS.filter(([kk]) => ORTHO[kk]).map(([kk, l]) => `${l.toLowerCase()} ${ORTHO[kk].tanggal || ''}`).join(', ')}${Object.keys(ORTHO).length ? ', ' : ''}Esri World Imagery</text></svg>`;
 }
 const fotoGrid = list => `<div class="fotos">${list.map(f => `<figure>${f.src ? `<img src="${f.src}" alt="${esc(f.label || 'Foto')}">` : f.path ? `<img data-foto="${esc(f.path)}" alt="${esc(f.label || 'Foto')}">` : '<div class="small">foto tidak tersedia</div>'}<figcaption>${esc(f.label || '')}${f.at ? ' · ' + tgl(f.at) + ' ' + jam(f.at) : ''}${f.lat ? ` · ${(+f.lat).toFixed(6)}, ${(+f.lon).toFixed(6)}` : ''}</figcaption></figure>`).join('')}</div>`;
 function lampiranPP(a) {
