@@ -210,3 +210,4 @@ header.top .bell{position:relative;display:flex;color:var(--ink);padding:4px}hea
 .doc.lap tr.tt td{font-weight:700;background:#f2f2f2}.doc.lap .lnote{font-size:10px;color:#444;margin:4px 0 0}.doc.lap .lchart{max-width:620px;margin:0 auto}
 .doc.lap .pngbtn{color:#1D6B47;background:#fff;border-color:#ccc}
 @media print{.doc.lap{font-size:10.5px}.doc.lap .lsec{margin:6px 0 10px}}
+.blk-lbl{width:0;height:0}.blk-lbl span{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;text-align:center;color:#fff;font:700 13px/1.15 system-ui,sans-serif;text-shadow:0 0 3px #000,0 0 2px #000,0 0 1px #000;pointer-events:none}.blk-lbl small{font-weight:600;font-size:11px}.blk-lbl.sm span{font-size:11px}

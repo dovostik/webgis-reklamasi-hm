@@ -240,6 +240,9 @@ function renderPeta() {
     lay.bindTooltip(esc(G.blokName(b)), { permanent: false, direction: 'center', className: 'lbl-blok' });
     const g = groups[b.layer] = groups[b.layer] || window.L.featureGroup(); lay.addTo(g);
   });
+  // label nama blok permanen saat diperbesar
+  const lblG = window.L.layerGroup(); vis.forEach(b => { const lp = G.labelPt(b.geom); if (lp) window.L.marker(lp, { interactive: false, keyboard: false, icon: window.L.divIcon({ className: 'blk-lbl sm', html: `<span>${esc(b.nama || G.blokName(b))}</span>`, iconSize: [0, 0] }) }).addTo(lblG); });
+  const lblZ = () => { if (map.getZoom() >= 16) { if (!map.hasLayer(lblG)) lblG.addTo(map); } else if (map.hasLayer(lblG)) map.removeLayer(lblG); }; map.on('zoomend', lblZ); setTimeout(lblZ, 0);
   const names = { berhasil: 'Reklamasi berhasil', perawatan: 'Perawatan BUMDES', bastl: 'BASTL 2026' };
   const ov = {}; Object.entries(groups).forEach(([k, g]) => { g.addTo(map); ov[names[k]] = g; });
   const tg = window.L.layerGroup();
@@ -297,9 +300,6 @@ function renderBlok(id) {
           ${ov.length ? '<p class="note">Terkunci: masih ada tag vendor yang belum disulam.</p>' : ret && ret.left > 0 ? `<p class="note">Retensi berakhir ${tgl(ret.until)} (${ret.left} hari lagi).</p>` : ''}</div>`;
       }
     }
-    if (p && p.status === 'pp_diajukan') {
-      act += `<div class="card stack"><h2>BA Penyelesaian Pekerjaan diajukan</h2><p class="small" style="margin:0">Dikirim ${tgl(p.pp?.diajukan_at)} ${jam(p.pp?.diajukan_at)}. Menunggu persetujuan Suptend. Setelah disetujui, GL owner mengecek 7 hari kemudian.</p>${ppFotos(p)}${isRole('suptend') ? '<button class="btn block" id="aPP">Setujui BA Penyelesaian Pekerjaan</button>' : ''}</div>`;
-    }
     if (p && p.status === 'ajukan_ba' && p.tipe === 'retensi') {
       act += `<div class="card stack"><h2>Ajukan BA Keberhasilan Penilaian Retensi</h2><p class="small" style="margin:0">Hasil inspeksi retensi ${fmt(p.pct, 2)}% (≥ 90%) dan semua tag GL sudah disulam.</p><button class="btn block" id="vAjukan" ${isRole('exdas') || isRole('admin') ? '' : 'disabled'}>Ajukan BA KPR ke Suptend</button></div>`;
     }
@@ -317,8 +317,11 @@ function renderBlok(id) {
     if (p.status === 'ajukan_ba' && p.tipe === 'cek1') act += `<div class="card stack"><h2>Ajukan BA Keberhasilan Penilaian</h2><p class="small" style="margin:0">Hasil Cek 1 ${fmt(p.pct, 2)}% (≥ 90%) dan semua tag GL sudah disulam ExDAS. Lampiran: 4 foto inspeksi, peta jejak GPS, dan titik tag.</p><button class="btn block" id="gAjukan">Ajukan BA KP ke Suptend</button></div>`;
     if (p.status === 'inspeksi') { const s = S.sesi.find(x => x.periode_id === p.id && !x.selesai_at); act += `<div class="card stack"><h2>Sesi berjalan</h2><p class="small" style="margin:0">Oleh ${esc(nm(s?.oleh))} sejak ${tgl(s?.mulai_at)} ${jam(s?.mulai_at)}.</p><a class="btn block" href="#sesi/${s?.id}">Lanjutkan sesi</a></div>`; }
   }
+  if (p && p.status === 'pp_diajukan') {
+    act += `<div class="card stack"><h2>BA Penyelesaian Pekerjaan diajukan</h2><p class="small" style="margin:0">Dikirim ${tgl(p.pp?.diajukan_at)} ${jam(p.pp?.diajukan_at)}. Menunggu persetujuan Suptend. Setelah disetujui, GL owner mengecek 7 hari kemudian.</p>${ppFotos(p)}${isRole('suptend') ? '<button class="btn block" id="aPP">Setujui BA Penyelesaian Pekerjaan</button>' : ''}</div>`;
+  }
   if (isRole('suptend') && p && p.status === 'menunggu_persetujuan') {
-    act += `<div class="card stack"><h2>Persetujuan owner</h2><p class="small" style="margin:0">Hasil ${fmt(p.pct, 2)}% (≥ 90%). Semua tag GL sudah disulam vendor.${p.hasil?.diajukan ? ` Diajukan ${esc(nm(p.hasil.diajukan.id))} ${tgl(p.hasil.diajukan.at)}.` : ''}</p><button class="btn block" id="aOk">Setujui dan terbitkan BA (tanda tangan elektronik)</button></div>`;
+    act += `<div class="card stack"><h2>Persetujuan Suptend</h2><p class="small" style="margin:0">Hasil ${fmt(p.pct, 2)}% (≥ 90%). Semua tag GL sudah disulam vendor.${p.hasil?.diajukan ? ` Diajukan ${esc(nm(p.hasil.diajukan.id))} ${tgl(p.hasil.diajukan.at)}.` : ''}</p><button class="btn block" id="aOk">Setujui dan terbitkan BA (tanda tangan elektronik)</button></div>`;
   }
   // --- admin input data lama perawatan ---
   if ((isRole('admin') || isRole('spv')) && b.layer === 'perawatan') {
@@ -341,6 +344,7 @@ function renderBlok(id) {
   // peta blok
   const map = newMap($('#bmap')); const gj = window.L.geoJSON(b.geom, { style: { color: '#fff', weight: 2, fillColor: COL[st.k] || '#888', fillOpacity: .25 } }).addTo(map);
   map.fitBounds(gj.getBounds(), { padding: [12, 12] });
+  { const lp = G.labelPt(b.geom); if (lp) window.L.marker(lp, { interactive: false, keyboard: false, icon: window.L.divIcon({ className: 'blk-lbl', html: `<span>${esc(G.blokName(b))}<br><small>${fmt(b.ha, 2)} Ha</small></span>`, iconSize: [0, 0] }) }).addTo(map); }
   tags.filter(t => t.lat).forEach(t => window.L.circleMarker([t.lat, t.lon], { radius: 6, color: '#fff', weight: 1.5, fillColor: tagColor(t), fillOpacity: 1 }).on('click', () => tagSheet(t.id)).addTo(map));
   locateControl(map);
   $$('[data-tag]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); tagSheet(a.dataset.tag); }));

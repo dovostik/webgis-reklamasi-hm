@@ -1,5 +1,13 @@
 // Aturan bisnis reklamasi & nursery (dipakai semua layar).
 // standar per pohon: pupuk kandang 1 kg, NPK 50 g; LCC 20 kg per Ha
+// titik label blok: centroid (luas) cincin luar poligon terbesar, [lat, lon]
+export function labelPt(geom) {
+  if (!geom) return null; const polys = geom.type === 'Polygon' ? [geom.coordinates] : geom.type === 'MultiPolygon' ? geom.coordinates : [];
+  let best = null, bestA = -1;
+  polys.forEach(pg => { const r = pg[0]; let A = 0, cx = 0, cy = 0; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const f = r[j][0] * r[i][1] - r[i][0] * r[j][1]; A += f; cx += (r[j][0] + r[i][0]) * f; cy += (r[j][1] + r[i][1]) * f; }
+    if (Math.abs(A) > bestA && A) { bestA = Math.abs(A); best = [cy / (3 * A), cx / (3 * A)]; } });
+  return best;
+}
 export const JALUR = j => j === 'pioneer' ? 'FG' : j === 'sisipan' ? 'Sisipan' : (j || '');
 export const STD = { lubang: 881, koheKg: 1, npkG: 50, pupuk: 881, npk: 44.05, pio: 625, sis: 256, lcc: 20, kohe: 25, sekam: 25, ambang: 90 };
 export const CAP_DEFAULT = 1300;
