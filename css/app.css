@@ -211,3 +211,21 @@ header.top .bell{position:relative;display:flex;color:var(--ink);padding:4px}hea
 .doc.lap .pngbtn{color:#1D6B47;background:#fff;border-color:#ccc}
 @media print{.doc.lap{font-size:10.5px}.doc.lap .lsec{margin:6px 0 10px}}
 .blk-lbl{width:0;height:0}.blk-lbl span{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;text-align:center;color:#fff;font:700 13px/1.15 system-ui,sans-serif;text-shadow:0 0 3px #000,0 0 2px #000,0 0 1px #000;pointer-events:none}.blk-lbl small{font-weight:600;font-size:11px}.blk-lbl.sm span{font-size:11px}
+/* cetak BA ringkas: BA 1 lembar + lampiran 1 lembar (A4) */
+@page{size:A4;margin:0}
+@media print{
+  .doc:not(.lap){padding:11mm 13mm!important;font-size:11.5px;line-height:1.32;min-height:0}
+  .doc:not(.lap) .kop{margin-bottom:6px;padding-bottom:5px}
+  .doc:not(.lap) h4{font-size:13.5px}.doc:not(.lap) .nomor{margin-bottom:7px}
+  .doc:not(.lap) p{margin:5px 0}
+  .doc:not(.lap) table.g th,.doc:not(.lap) table.g td{padding:1.5px 6px;font-size:10.5px}
+  .doc:not(.lap) table.id td{font-size:11.5px;padding:0 12px 0 0}
+  .doc:not(.lap) .ttd{grid-template-columns:repeat(auto-fit,minmax(0,1fr))!important;gap:8px 10px;margin-top:10px;font-size:10.5px;line-height:1.25}
+  .doc:not(.lap) .ttd .sigqr img,.doc:not(.lap) .ttd .sigqr canvas{width:62px!important;height:62px!important}
+  .doc:not(.lap) .ttd span{margin-top:28px}.doc:not(.lap) .ttd span.es{margin-top:3px}
+  .doc:not(.lap) p.sidik{margin-top:8px;padding-top:4px;font-size:8.5px}
+  .doc:not(.lap) svg{max-height:88mm;width:auto;max-width:100%;display:block;margin:0 auto}
+  .doc:not(.lap) .fotos{gap:5px}.doc:not(.lap) .fotos img{aspect-ratio:16/9}.doc:not(.lap) .fotos figure{font-size:8.5px;line-height:1.25}
+  .doc:not(.lap) #baqr img,.doc:not(.lap) #baqr canvas{width:64px!important;height:64px!important}
+  .doc:not(.lap)+.doc{break-before:page}
+}
