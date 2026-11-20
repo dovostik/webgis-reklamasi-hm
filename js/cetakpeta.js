@@ -69,7 +69,7 @@ function blokRawat(r) {
 let st = null;
 function defaults() {
   const t = G.tglWIB(new Date().toISOString()), [y, m] = t.split('-').map(Number);
-  return { preset: 'mg-tanam', y, w: mingguKe(t), m, sel: [], judul: '', ortho: true, kertas: 'A4', label: true };
+  return { preset: 'mg-tanam', y, w: mingguKe(t), m, sel: [], judul: '', lay: { mingguan: true, utama: true, online: true }, skala: null, kertas: 'A4', label: true };
 }
 function compute() {
   const p = st.preset, wk = p.startsWith('mg'), r = p === 'bebas' ? null : wk ? rWeek(st.y, st.w) : rMonth(st.y, st.m);
@@ -94,7 +94,12 @@ export function renderCetakPeta(shell) {
         <details><summary class="small">Pilih blok (<span id="cpN">0</span> dipilih)</summary><div class="stack" style="gap:2px;max-height:240px;overflow:auto;margin-top:6px">${grp.map(([k, l]) => `<b class="small" style="margin-top:6px">${l}</b>${S.blok.filter(b => b.layer === k).sort((a, b) => G.blokName(a).localeCompare(G.blokName(b), 'id', { numeric: true })).map(b => `<label class="cpck"><span>${esc(G.blokName(b))} <span class="muted">${fmt(b.ha, 2)} Ha</span></span><input type="checkbox" data-sb="${esc(b.id)}" ${st.sel.includes(b.id) ? 'checked' : ''}></label>`).join('')}`).join('')}</div></details></div>
       <label class="f" for="cpJ">Judul <small>kosongkan untuk judul otomatis</small><textarea id="cpJ" rows="3" placeholder="judul otomatis">${esc(st.judul)}</textarea></label>
       <div class="grid2"><label class="f" for="cpK">Kertas<select id="cpK"><option ${st.kertas === 'A4' ? 'selected' : ''}>A4</option><option ${st.kertas === 'A3' ? 'selected' : ''}>A3</option></select></label>
-        <div class="stack" style="gap:4px;justify-content:flex-end"><label class="cpck"><span>Ortho drone</span><input type="checkbox" id="cpO" ${st.ortho ? 'checked' : ''}></label><label class="cpck"><span>Label semua blok</span><input type="checkbox" id="cpL" ${st.label ? 'checked' : ''}></label></div></div>
+        <label class="f" for="cpS">Skala 1 : <small>kosong = otomatis</small><input id="cpS" type="number" min="200" step="100" inputmode="numeric" list="cpSL" placeholder="otomatis" value="${st.skala || ''}"><datalist id="cpSL">${[1000, 2000, 2500, 5000, 7500, 10000, 15000, 20000, 25000, 50000].map(v => `<option value="${v}">`).join('')}</datalist></label></div>
+      <div class="stack" style="gap:0"><b class="small">Latar peta</b>
+        <label class="cpck"><span>Drone mingguan${ORTHO.mingguan ? ` <small class="muted">${esc(ORTHO.mingguan.tanggal || '')}</small>` : ' <small class="muted">(belum ada)</small>'}</span><input type="checkbox" data-ly="mingguan" ${st.lay.mingguan ? 'checked' : ''}></label>
+        <label class="cpck"><span>Drone utama${ORTHO.utama ? ` <small class="muted">${esc(ORTHO.utama.tanggal || '')}</small>` : ' <small class="muted">(belum ada)</small>'}</span><input type="checkbox" data-ly="utama" ${st.lay.utama ? 'checked' : ''}></label>
+        <label class="cpck"><span>Citra online <small class="muted">Esri World Imagery</small></span><input type="checkbox" data-ly="online" ${st.lay.online ? 'checked' : ''}></label>
+        <label class="cpck"><span>Label semua blok</span><input type="checkbox" id="cpL" ${st.label ? 'checked' : ''}></label></div>
       <button class="btn" id="cpGo">Cetak / simpan PDF</button><p class="note" style="margin:0">Di dialog cetak pilih <b>Simpan sebagai PDF</b>, orientasi <b>lanskap</b>, skala 100%. Geser dan zoom peta pratinjau di bawah untuk mengatur area.</p></div>
     <div class="plwrap" id="plw"></div></div>`);
   const per = () => { const box = $('#cpPer'), p = st.preset; $('#cpSel').hidden = p !== 'bebas';
@@ -105,7 +110,8 @@ export function renderCetakPeta(shell) {
   $('#cpP').addEventListener('change', e => { st.preset = e.target.value; per(); draw(true); });
   $('#cpJ').addEventListener('input', e => { st.judul = e.target.value.trim(); drawPanel(); });
   $('#cpK').addEventListener('change', e => { st.kertas = e.target.value; draw(false); });
-  $('#cpO').addEventListener('change', e => { st.ortho = e.target.checked; draw(false); });
+  $$('[data-ly]').forEach(c => c.addEventListener('change', () => { st.lay[c.dataset.ly] = c.checked; draw(false); }));
+  const sk = $('#cpS'); sk.addEventListener('change', () => { const v = Math.round(Number(sk.value)); st.skala = v >= 200 ? v : null; if (!st.skala) sk.value = ''; applyScale(); });
   $('#cpL').addEventListener('change', e => { st.label = e.target.checked; draw(false); });
   const selN = () => { $('#cpN').textContent = st.sel.length; };
   $$('[data-sb]').forEach(c => c.addEventListener('change', () => { st.sel = $$('[data-sb]').filter(x => x.checked).map(x => x.dataset.sb); selN(); draw(true); }));
@@ -127,18 +133,26 @@ function draw(refit) {
   const pl = $('#pl'); const fit = () => { const k = w.clientWidth / pl.offsetWidth; pl.style.transform = `scale(${Math.min(1, k)})`; w.style.height = pl.offsetHeight * Math.min(1, k) + 'px'; };
   fit(); window.removeEventListener('resize', draw._f || (() => {})); draw._f = fit; window.addEventListener('resize', fit);
   const { rows } = compute(); const col = {}; rows.forEach((x, i) => { col[x.b.id] = PAL[i % PAL.length]; });
-  map = window.L.map('plm', { zoomControl: true, attributionControl: false, zoomSnap: 0.1, zoomDelta: 0.5, preferCanvas: false });
+  map = window.L.map('plm', { zoomControl: true, attributionControl: false, zoomSnap: 0, zoomDelta: 0.5, preferCanvas: false });
   tilesBusy = 0; const track = lay => { lay.on('loading', () => { tilesBusy++; }); lay.on('load', () => { tilesBusy = Math.max(0, tilesBusy - 1); }); return lay; };
-  track(window.L.tileLayer(SAT_URL, { maxNativeZoom: 18, maxZoom: 22, crossOrigin: true })).addTo(map);
-  if (st.ortho) SLOTS.forEach(([k], i) => { const o = ORTHO[k]; if (!o) return; const [ww, so, e, n] = o.bounds; track(window.L.tileLayer(orthoUrl(k), { maxNativeZoom: o.maxzoom, minNativeZoom: o.minzoom, maxZoom: 22, bounds: [[so, ww], [n, e]], zIndex: 10 + i })).addTo(map); });
+  if (st.lay.online) track(window.L.tileLayer(SAT_URL, { maxNativeZoom: 18, maxZoom: 22, crossOrigin: true })).addTo(map);
+  SLOTS.forEach(([k], i) => { const o = ORTHO[k]; if (!o || !st.lay[k]) return; const [ww, so, e, n] = o.bounds; track(window.L.tileLayer(orthoUrl(k), { maxNativeZoom: o.maxzoom, minNativeZoom: o.minzoom, maxZoom: 22, bounds: [[so, ww], [n, e]], zIndex: 10 + i })).addTo(map); });
   const all = window.L.featureGroup().addTo(map), selG = window.L.featureGroup().addTo(map);
   S.blok.forEach(b => { if (!b.geom) return; const on = col[b.id];
     const g = window.L.geoJSON(b.geom, { style: { color: on ? '#222' : '#fff', weight: on ? 1.1 : 0.8, fillColor: on || '#fff', fillOpacity: on ? 0.62 : 0, opacity: on ? 1 : 0.85 } }).addTo(on ? selG : all);
     if (on || (st.label && b.nama)) g.bindTooltip(`${esc(b.nama || G.blokName(b))}<br>${fmt(b.ha, 2)} Ha`, { permanent: true, direction: 'center', className: 'pl-lbl' + (on ? ' on' : '') }); });
   const target = rows.length ? selG : all;
   if (view) map.setView(view.c, view.z, { animate: false }); else if (target.getLayers().length) map.fitBounds(target.getBounds(), { padding: [18, 18], animate: false }); else map.setView([-0.99, 115.06], 15);
-  map.on('moveend zoomend', () => { grid(); drawPanel(); });
+  if (st.skala && !view) applyScale(true);
+  map.on('moveend zoomend', () => { if (st.skala && Math.abs(scaleRaw() - st.skala) / st.skala > 0.01) { st.skala = null; const i = $('#cpS'); if (i) i.value = ''; } grid(); drawPanel(); });
   grid(); drawPanel();
+}
+// skala manual: atur zoom agar 1 mm di kertas = skala/1000 m di lapangan (cetak 100%)
+const scaleRaw = () => { const c = map.getSize(), y = c.y / 2; return map.containerPointToLatLng([c.x / 2 - 50, y]).distanceTo(map.containerPointToLatLng([c.x / 2 + 50, y])) / 100 / 0.000264583; };
+function applyScale(silent) {
+  if (!map) return; if (!st.skala) { if (!silent) draw(true); return; }
+  const c = map.getCenter(), z = Math.log2(156543.03392 * Math.cos(c.lat * Math.PI / 180) / (st.skala * 0.000264583));
+  map.setView(c, z, { animate: false });
 }
 function nice(x) { const p = Math.pow(10, Math.floor(Math.log10(x))), m = x / p; return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p; }
 function grid() {
@@ -154,7 +168,7 @@ function grid() {
 }
 function scaleInfo() {
   const el = $('#plm'); const c = map.getSize(), y = c.y / 2, d = map.containerPointToLatLng([c.x / 2 - 50, y]).distanceTo(map.containerPointToLatLng([c.x / 2 + 50, y])) / 100; // meter per px CSS
-  const ratio = d / 0.000264583; const den = Math.round(ratio / 100) * 100;
+  const ratio = d / 0.000264583; const den = st.skala || Math.round(ratio / 100) * 100;
   const target = (st.kertas === 'A3' ? 70 : 52) / 0.264583 * d; // panjang bar ±52 mm
   const seg = nice(target / 4), segPx = seg / d; void el;
   return { den, seg, segPx };
@@ -174,7 +188,7 @@ function drawPanel() {
       ${show.map((x, i) => `<tr><td>${i + 1}</td><td><i style="background:${PAL[i % PAL.length]}"></i></td><td>${esc(x.b.nama || G.blokName(x.b))}</td><td class="r">${fmt(x.b.ha, 2)}</td><td>${esc(x.ket)}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">Tidak ada blok pada periode ini</td></tr>'}
       ${rows.length > max ? `<tr><td colspan="5" class="muted">+ ${rows.length - max} blok lain</td></tr>` : ''}
       <tr class="tt"><td colspan="3">Jumlah ${rows.length} blok</td><td class="r">${fmt(tot, 2)}</td><td></td></tr></tbody></table>
-      <div class="pl-meta">Sistem koordinat WGS 84 / UTM zona 50S<br>Citra: ${st.ortho && Object.keys(ORTHO).length ? SLOTS.filter(([k]) => ORTHO[k]).map(([k, l]) => `${l.replace('Ortho ', 'ortho ')} ${ORTHO[k].tanggal || ''}`).join(', ') + ', ' : ''}Esri World Imagery<br>Dicetak ${tglS(G.tglWIB(new Date().toISOString()))} · ${esc(S.me?.nama || '')}</div></div>
+      <div class="pl-meta">Sistem koordinat WGS 84 / UTM zona 50S<br>Citra: ${[...SLOTS.filter(([k]) => ORTHO[k] && st.lay[k]).map(([k]) => `drone ${k} ${ORTHO[k].tanggal || ''}`), ...(st.lay.online ? ['Esri World Imagery'] : [])].join(', ') || '–'}<br>Dicetak ${tglS(G.tglWIB(new Date().toISOString()))} · ${esc(S.me?.nama || '')}</div></div>
     <div class="pl-box pl-logo"><img src="img/logo.svg" alt="PT Hamparan Mulya"></div>`;
 }
 async function doPrint() {
