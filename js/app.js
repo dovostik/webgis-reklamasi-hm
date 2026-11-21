@@ -325,10 +325,12 @@ function renderBlok(id) {
     act += (isRole('admin') || isRole('spv')) ? `<div class="card stack"><h2>Beri nama blok</h2><p class="note">Melanjutkan urutan terakhir blok. Setelah disimpan, permintaan bibit penanaman langsung masuk ke nursery dan pekerjaan ExDAS dimulai.</p><div class="row" style="flex-wrap:nowrap"><input id="bnm" value="${esc(nextHRP())}" aria-label="Nama blok"><button class="btn" id="bnmOk">Simpan</button></div></div>` : '<div class="alert">Petak ini belum diberi nama oleh administrator.</div>';
   }
   // --- vendor ---
-  if ((isRole('exdas') && b.layer === 'bastl') || (isRole('bumdes') && b.layer === 'perawatan') || isRole('admin')) {
+  // Suptend / SPV boleh mengaktifkan rotasi perawatan (tindakan vendor lainnya tetap milik BUMDES)
+  const rotStart = !p && b.layer === 'perawatan' && (isRole('bumdes', 'admin', 'suptend', 'spv'));
+  if ((isRole('exdas') && b.layer === 'bastl') || (isRole('bumdes') && b.layer === 'perawatan') || isRole('admin') || rotStart) {
     if (!p && b.layer === 'perawatan') {
       const no = L.selesai(id, 'rotasi').length + 1;
-      act += `<div class="card stack"><h2>Rotasi perawatan ${no}</h2><p class="small" style="margin:0">Jadwal: ${tgl(ri?.next)} · kegiatan ${ri?.kegiatan || '–'} + NPK 100 g/pohon (${fmt(G.needs(b.ha).npkRawat, 1)} kg) + sulam.</p><button class="btn block" id="vStart" ${isRole('bumdes') || isRole('admin') ? '' : 'disabled'}>Mulai perawatan</button></div>`;
+      act += `<div class="card stack"><h2>Rotasi perawatan ${no}</h2><p class="small" style="margin:0">Jadwal: ${tgl(ri?.next)} · kegiatan ${ri?.kegiatan || '–'} + NPK 100 g/pohon (${fmt(G.needs(b.ha).npkRawat, 1)} kg) + sulam.</p><button class="btn block" id="vStart" ${isRole('bumdes', 'admin', 'suptend', 'spv') ? '' : 'disabled'}>Mulai perawatan</button></div>`;
     }
     if (p && p.status === 'pelaksanaan') {
       if (p.tipe === 'cek1') {
