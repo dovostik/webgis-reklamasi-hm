@@ -74,7 +74,7 @@ function pageBahan(r, d) {
   return `<h4>Pemakaian Bahan</h4><p class="nomor">${esc(r.sub)}</p>
     ${sec('bahan-ringkas', '7. Ringkasan pemakaian', tbl([['Bahan'], ['Dikirim', R], ['Sisa kembali', R], ['Terpakai', R], ['Satuan']],
       Object.entries(tot).map(([k, t]) => [esc(k), fmt(t.n, 1), fmt(t.sisa, 1), fmt(t.n - t.sisa, 1), esc(sat(k))])),
-      `Dibanding standar: pupuk kandang ${G.STD.koheKg} kg/pohon, NPK ${G.STD.npkG} g/pohon, LCC ${G.STD.lcc} kg/Ha.${d.bibit > 0 ? ` Periode ini: kohe ${fmt(d.kohe * G.STD.kohe / d.bibit, 2)} kg/pohon, LCC ${fmt(d.lcc / d.haSetara, 1)} kg/Ha.` : ''}`)}
+      `Dibanding standar: pupuk kandang ${G.STD.koheKg} kg/pohon, NPK ${G.STD.npkG} g/pohon (penanaman) dan ${G.STD.npkRawatG} g/pohon (rotasi perawatan), LCC ${G.STD.lcc} kg/Ha.${d.bibit > 0 ? ` Periode ini: kohe ${fmt(d.kohe * G.STD.kohe / d.bibit, 2)} kg/pohon, LCC ${fmt(d.lcc / d.haSetara, 1)} kg/Ha.` : ''}`)}
     ${sec('bahan-per-blok', '8. Pemakaian per blok', tbl([['No'], ['Blok'], ['Bahan'], ['Dikirim', R], ['Sisa kembali', R], ['Terpakai', R], ['Satuan']],
       rows.map((x, i) => [i + 1, esc(G.blokName(x.b)), esc(x.barang), fmt(x.n, 1), fmt(x.sisa, 1) + (x.balik ? ` <small>(+${fmt(x.balik, 1)} belum ditimbang)</small>` : ''), fmt(x.n - x.sisa, 1), esc(sat(x.barang))])))}`;
 }

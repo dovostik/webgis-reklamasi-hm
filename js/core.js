@@ -151,7 +151,7 @@ export const GPS = {
   start() {
     if (this.watch != null || !navigator.geolocation) { if (!navigator.geolocation) this.err = 'HP tidak mendukung GPS'; return; }
     this.watch = navigator.geolocation.watchPosition(p => {
-      this.pos = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, t: Date.now() }; this.err = null;
+      this.pos = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, head: p.coords.heading, spd: p.coords.speed, t: Date.now() }; this.err = null;
       this.subs.forEach(f => { try { f(this.pos); } catch (e) {} });
     }, e => { this.err = e.code === 1 ? 'Izin lokasi ditolak. Aktifkan lokasi untuk browser ini.' : 'GPS belum mendapat sinyal'; this.subs.forEach(f => { try { f(null); } catch (x) {} }); }, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
   },
@@ -314,7 +314,7 @@ function L_tiles() {
 }
 export function newMap(el, opts = {}) {
   const map = window.L.map(el, { zoomControl: true, attributionControl: true, preferCanvas: false, ...opts });
-  const t = L_tiles(); t.sat.addTo(map);
+  const t = L_tiles(); t.sat.addTo(map); fullscreenControl(map);
   const base = { 'Citra satelit': t.sat, 'Peta jalan': t.osm };
   map._lc = window.L.control.layers(base, null, { position: 'topright' }).addTo(map);
   // urutan tampilan: citra online < ortho utama < ortho mingguan (terbaru paling atas); centang untuk menyembunyikan
@@ -330,17 +330,43 @@ export function newMap(el, opts = {}) {
   });
   return map;
 }
+// ---------- arah hadap HP (kompas) untuk penanda posisi ----------
+export const HEAD = { deg: null, subs: new Set(), on: false,
+  start() { if (this.on) return; this.on = true;
+    const set = d => { if (d == null || isNaN(d)) return; const a = (screen.orientation && screen.orientation.angle) || window.orientation || 0; this.deg = (d + a + 360) % 360; this.subs.forEach(f => { try { f(this.deg); } catch (e) {} }); };
+    if ('ondeviceorientationabsolute' in window) window.addEventListener('deviceorientationabsolute', e => { if (e.alpha != null) set(360 - e.alpha); });
+    else window.addEventListener('deviceorientation', e => { if (e.webkitCompassHeading != null) set(e.webkitCompassHeading); else if (e.absolute && e.alpha != null) set(360 - e.alpha); });
+  },
+  // iPhone: izin kompas harus diminta dari ketukan pengguna
+  async ask() { try { if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') await DeviceOrientationEvent.requestPermission(); } catch (e) {} this.start(); },
+  sub(f) { this.subs.add(f); this.start(); return () => this.subs.delete(f); } };
+const meIcon = () => window.L.divIcon({ className: 'gps-me', iconSize: [44, 44], iconAnchor: [22, 22], html: '<svg viewBox="0 0 44 44" width="44" height="44"><g class="gps-cone"><path d="M22 22 L8 -6 A30 30 0 0 1 36 -6 Z" fill="#2a7de1" fill-opacity=".28"/><path d="M22 3 L29 15 L22 12 L15 15 Z" fill="#fff" stroke="#2a7de1" stroke-width="1.2" stroke-linejoin="round"/></g><circle cx="22" cy="22" r="7.5" fill="#2a7de1" stroke="#fff" stroke-width="2.5"/></svg>' });
 export function locateControl(map) {
-  let mk = null, circ = null;
+  let mk = null, circ = null, gpsHead = null;
+  const rot = () => { const el = mk && mk.getElement(); if (!el) return; const c = el.querySelector('.gps-cone'), d = HEAD.deg != null ? HEAD.deg : gpsHead; c.style.display = d == null ? 'none' : ''; if (d != null) c.setAttribute('transform', `rotate(${d.toFixed(0)} 22 22)`); };
   const unsub = GPS.sub(p => {
-    if (!p) return; const ll = [p.lat, p.lon];
-    if (!mk) { mk = window.L.circleMarker(ll, { radius: 7, color: '#fff', weight: 2, fillColor: '#2a7de1', fillOpacity: 1 }).addTo(map); circ = window.L.circle(ll, { radius: p.acc, color: '#2a7de1', weight: 1, fillOpacity: .1 }).addTo(map); }
+    if (!p) return; const ll = [p.lat, p.lon]; gpsHead = p.spd > 0.7 && p.head != null && !isNaN(p.head) ? p.head : gpsHead;
+    if (!mk) { circ = window.L.circle(ll, { radius: p.acc, color: '#2a7de1', weight: 1, fillOpacity: .1, interactive: false }).addTo(map); mk = window.L.marker(ll, { icon: meIcon(), interactive: false, keyboard: false, zIndexOffset: 1000 }).addTo(map); }
     else { mk.setLatLng(ll); circ.setLatLng(ll).setRadius(p.acc); }
+    rot();
   });
-  const Btn = window.L.Control.extend({ onAdd() { const b = window.L.DomUtil.create('button', ''); b.type = 'button'; b.title = 'Posisi saya'; b.innerHTML = '◎'; b.style.cssText = 'width:34px;height:34px;font-size:18px;border-radius:6px;border:2px solid rgba(0,0,0,.2);background:#fff;color:#111'; b.onclick = e => { e.stopPropagation(); if (GPS.pos) map.setView([GPS.pos.lat, GPS.pos.lon], Math.max(map.getZoom(), 18)); else toast('Menunggu GPS…'); }; return b; } });
+  const unh = HEAD.sub(rot);
+  const Btn = window.L.Control.extend({ onAdd() { const b = window.L.DomUtil.create('button', 'map-btn'); b.type = 'button'; b.title = 'Posisi saya'; b.innerHTML = '◎'; b.onclick = e => { e.stopPropagation(); HEAD.ask(); if (GPS.pos) map.setView([GPS.pos.lat, GPS.pos.lon], Math.max(map.getZoom(), 18)); else toast('Menunggu GPS…'); }; return b; } });
   new Btn({ position: 'topleft' }).addTo(map);
-  map.on('unload', unsub);
+  map.on('unload', () => { unsub(); unh(); });
   return unsub;
+}
+// ---------- layar penuh untuk peta (tanpa Fullscreen API supaya juga jalan di iPhone) ----------
+export function fullscreenControl(map) {
+  const box = map.getContainer(); let on = false, ph = null;
+  const set = v => { on = v; if (v) { ph = document.createComment('map'); box.parentNode.insertBefore(ph, box); document.body.appendChild(box); } else if (ph) { ph.parentNode.insertBefore(box, ph); ph.remove(); ph = null; }
+    box.classList.toggle('map-fs', v); document.body.classList.toggle('has-map-fs', v); btn && (btn.innerHTML = v ? '✕' : '⛶', btn.title = v ? 'Keluar layar penuh' : 'Layar penuh'); setTimeout(() => map.invalidateSize(), 60); };
+  let btn = null;
+  const Btn = window.L.Control.extend({ onAdd() { btn = window.L.DomUtil.create('button', 'map-btn'); btn.type = 'button'; btn.title = 'Layar penuh'; btn.innerHTML = '⛶'; window.L.DomEvent.disableClickPropagation(btn); btn.onclick = e => { e.stopPropagation(); set(!on); }; return btn; } });
+  new Btn({ position: 'topleft' }).addTo(map);
+  const esc = e => { if (e.key === 'Escape' && on) set(false); }; document.addEventListener('keydown', esc);
+  const away = () => { if (on) set(false); }; window.addEventListener('hashchange', away);
+  map.on('unload', () => { document.removeEventListener('keydown', esc); window.removeEventListener('hashchange', away); if (on) { box.remove(); document.body.classList.remove('has-map-fs'); } });
 }
 
 // ---------- unduh gambar PNG dari kartu / grafik / tabel (tombol .pngbtn[data-png] di dalam .pngbox) ----------

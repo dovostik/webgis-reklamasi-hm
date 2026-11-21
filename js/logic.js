@@ -1,5 +1,5 @@
 // Aturan bisnis reklamasi & nursery (dipakai semua layar).
-// standar per pohon: pupuk kandang 1 kg, NPK 50 g; LCC 20 kg per Ha
+// standar per pohon: pupuk kandang 1 kg, NPK 50 g (penanaman/retensi), NPK 100 g (rotasi perawatan BUMDES); LCC 20 kg per Ha
 // titik label blok: centroid (luas) cincin luar poligon terbesar, [lat, lon]
 export function labelPt(geom) {
   if (!geom) return null; const polys = geom.type === 'Polygon' ? [geom.coordinates] : geom.type === 'MultiPolygon' ? geom.coordinates : [];
@@ -17,7 +17,7 @@ export function labelPt(geom) {
   return bp;
 }
 export const JALUR = j => j === 'pioneer' ? 'FG' : j === 'sisipan' ? 'Sisipan' : (j || '');
-export const STD = { lubang: 881, koheKg: 1, npkG: 50, pupuk: 881, npk: 44.05, pio: 625, sis: 256, lcc: 20, kohe: 25, sekam: 25, ambang: 90 };
+export const STD = { lubang: 881, koheKg: 1, npkG: 50, pupuk: 881, npk: 44.05, npkRawatG: 100, npkRawat: 88.1, pio: 625, sis: 256, lcc: 20, kohe: 25, sekam: 25, ambang: 90 };
 export const CAP_DEFAULT = 1300;
 export const KONDISI = [['pmk', 'PMK spreading'], ['tergenang', 'Tergenang'], ['berpasir', 'Berpasir'], ['ob', 'Tanah OB']];
 export const KONDLBL = Object.fromEntries(KONDISI);
@@ -54,7 +54,7 @@ export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;'
 // ---------- blok ----------
 export function blokName(b) { if (!b) return '–'; if (b.layer === 'bastl') return b.nama || `${b.kode_bastl} · petak ${b.id.slice(2)}`; return b.nama; }
 export const vendorOf = b => b.layer === 'bastl' ? 'exdas' : 'bumdes';
-export function needs(ha) { return { lubang: Math.round(STD.lubang * ha), pupuk: Math.round(STD.pupuk * ha), npk: Math.round(STD.npk * ha * 10) / 10, pio: Math.round(STD.pio * ha), sis: Math.round(STD.sis * ha), lcc: Math.round(STD.lcc * ha), sakKohe: Math.ceil(STD.pupuk * ha / STD.kohe), hariKerja: Math.ceil(ha / 10 * 30) }; }
+export function needs(ha) { return { lubang: Math.round(STD.lubang * ha), pupuk: Math.round(STD.pupuk * ha), npk: Math.round(STD.npk * ha * 10) / 10, npkRawat: Math.round(STD.npkRawat * ha * 10) / 10, pio: Math.round(STD.pio * ha), sis: Math.round(STD.sis * ha), lcc: Math.round(STD.lcc * ha), sakKohe: Math.ceil(STD.pupuk * ha / STD.kohe), hariKerja: Math.ceil(ha / 10 * 30) }; }
 
 export function makeLogic(S) {
   const J = () => S.jenisMap;
@@ -224,7 +224,8 @@ export function makeLogic(S) {
     S.periode.filter(p => p.status === 'pelaksanaan').forEach(p => {
       const b = S.blokMap[p.blok_id]; if (!b) return; const n = needs(b.ha); const want = [];
       if (p.tipe === 'cek1') want.push(['kohe', n.sakKohe], ['npk', n.npk], ['lcc', n.lcc]);
-      else if (p.tipe === 'rotasi' || (p.tipe === 'retensi' && !(retensiInfo(p)?.left > 0))) want.push(['npk', n.npk]);
+      else if (p.tipe === 'rotasi') want.push(['npk', n.npkRawat]);
+      else if (p.tipe === 'retensi' && !(retensiInfo(p)?.left > 0)) want.push(['npk', n.npk]);
       want.forEach(([kel, need]) => {
         const rows = (S.kirim_mat || []).filter(k => k.periode_id === p.id && k.kel === kel);
         const sent = rows.reduce((a, k) => a + Number(k.n) * unitK(S.barang.find(x => x.nama === k.barang)?.satuan, MAT[kel].sat), 0); // sisa yang kembali tidak membuka permintaan lagi
@@ -233,5 +234,15 @@ export function makeLogic(S) {
     });
     return out;
   }
-  return { MAT, unitK, matDemand, periodes, aktif, selesai, tags, events, deadAt, allowed, stokTampung, dalamKirim, realisasi, lastSulam, lockInfo, retensiInfo, rotasiInfo, blokStatus, openGL, openVendor, sulamDemand, tanamDemand, bed, lotsIn, fill, pinjamOf, tahapOf, realBST, pinjamBST, stage, readyStock, readyLots, suggestTargets, sensus };
+  // progres rotasi perawatan = NPK terpakai dibanding kebutuhan 100 g/pohon; NPK diterima hari ini dihitung terpakai mulai besok
+  function progresRawat(p) {
+    if (!p || p.tipe !== 'rotasi') return null; const b = S.blokMap[p.blok_id]; if (!b) return null;
+    const need = needs(b.ha).npkRawat, t0 = today(); let used = 0, hari = 0;
+    (S.kirim_mat || []).filter(k => k.periode_id === p.id && k.kel === 'npk' && k.status === 'diterima').forEach(k => {
+      const f = unitK(S.barang.find(x => x.nama === k.barang)?.satuan, 'kg'), v = (Number(k.n) - Number(k.sisa_at ? k.sisa || 0 : k.kembali_at ? k.kembali || 0 : 0)) * f;
+      if (tglWIB(k.diterima_at) < t0) used += v; else hari += v; });
+    if (p.status !== 'pelaksanaan') return { pct: 100, used: used + hari, need, hari: 0, selesai: true };
+    return { pct: need ? Math.min(100, used / need * 100) : 0, used, need, hari };
+  }
+  return { MAT, unitK, matDemand, progresRawat, periodes, aktif, selesai, tags, events, deadAt, allowed, stokTampung, dalamKirim, realisasi, lastSulam, lockInfo, retensiInfo, rotasiInfo, blokStatus, openGL, openVendor, sulamDemand, tanamDemand, bed, lotsIn, fill, pinjamOf, tahapOf, realBST, pinjamBST, stage, readyStock, readyLots, suggestTargets, sensus };
 }
