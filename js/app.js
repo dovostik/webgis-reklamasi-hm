@@ -240,9 +240,14 @@ function renderBeranda() {
 
 // ---------- tugas ----------
 function renderTugas() {
-  const list = tugasList(); const r = role();
+  // pekerjaan yang sedang berjalan (penanaman / perawatan / retensi) tampil paling atas untuk semua akun, lengkap dengan progresnya
+  const jalan = S.blok.filter(b => seesBlok(b) && L.aktif(b.id)?.status === 'pelaksanaan').map(b => { const p = L.aktif(b.id), pr = p.tipe === 'cek1' ? progresTanam(b) : p.tipe === 'rotasi' ? L.progresRawat(p) : null, ret = p.tipe === 'retensi' ? L.retensiInfo(p) : null;
+    return { b, p, pr, t: p.tipe === 'cek1' ? 'Penanaman' : p.tipe === 'rotasi' ? `Perawatan rotasi ${p.nomor || ''}` : ret && ret.left > 0 ? `Retensi dimulai ${tgl(ret.until)}` : 'Retensi' }; })
+    .sort((a, c) => (a.pr ? a.pr.pct : 101) - (c.pr ? c.pr.pct : 101));
+  const list = tugasList().filter(x => !(x.p && x.p.status === 'pelaksanaan')); const r = role();
   const mine = urutBlok(S.blok.filter(b => seesBlok(b) && b.layer !== 'berhasil' && (b.layer !== 'bastl' || b.nama)));
   shell('Tugas', null, `<div class="stack">
+    ${jalan.length ? `<div class="card stack"><div class="row between"><h2>Sedang berjalan</h2><span class="small muted">${jalan.length} blok</span></div><div class="list">${jalan.map(x => `<a class="item" href="#blok/${esc(x.b.id)}"><div class="grow"><b>${esc(G.blokName(x.b))} <span class="muted small">${fmt(x.b.ha, 2)} Ha</span></b><span>${esc(x.t)}${x.pr ? ` · ${x.p.tipe === 'rotasi' ? `NPK ${fmt(x.pr.used, 1)}/${fmt(x.pr.need, 1)} kg` : `${fmt(x.pr.tot)}/${fmt(x.pr.target)} bibit`}` : ''}</span>${x.pr ? `<div class="bar" style="margin-top:5px"><span style="width:${x.pr.pct}%;background:${x.p.tipe === 'rotasi' ? 'var(--pend,#4F86C6)' : 'var(--tanam,#8E44AD)'}"></span></div>` : ''}</div><span class="pill ${x.p.tipe === 'cek1' ? 's-tanam' : 's-pend'}">${x.pr ? fmt(x.pr.pct, 0) + '%' : 'berjalan'}</span></a>`).join('')}</div></div>` : ''}
     <div class="list">${list.length ? list.map(x => `<a class="item" href="${x.href || '#blok/' + esc(x.b.id)}"><div class="grow"><b>${esc(G.blokName(x.b))} <span class="muted small">${fmt(x.b.ha, 2)} Ha</span></b><span>${esc(x.t)}</span></div><span class="pill s-${x.k}">${x.p ? esc(G.STATUS_LBL[x.p.status]) : 'Jadwal'}</span></a>`).join('') : '<div class="card"><p class="muted" style="margin:0">Tidak ada tugas saat ini.</p></div>'}</div>
     <div class="card stack"><div class="row between"><h2>${isRole('exdas') || isRole('bumdes') ? 'Blok saya' : 'Semua blok kerja'}</h2><span class="small muted">${mine.length}</span></div>
       <input id="tq" placeholder="Cari nama blok" aria-label="Cari blok">
