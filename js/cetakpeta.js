@@ -45,7 +45,7 @@ function blokTanam(r) {
   S.blok.filter(b => b.layer === 'bastl').forEach(b => {
     const ps = S.periode.filter(p => p.blok_id === b.id && p.tipe === 'cek1');
     const act = ps.find(p => p.mulai_at && day(p.mulai_at) <= r.b && (!p.vendor_selesai_at || day(p.vendor_selesai_at) >= r.a));
-    const bib = S.kirim.filter(k => k.blok_id === b.id && k.status === 'diterima' && inR(addD(day(k.diterima_at), 1), r) && addD(day(k.diterima_at), 1) <= G.today()).reduce((a, k) => a + Number(k.n), 0) - (S.kembali || []).filter(k => k.blok_id === b.id && inR(day(k.dikirim_at), r)).reduce((a, k) => a + Number(k.n), 0);
+    const th = L.tanamHarian(b), bib = th ? Math.round(Object.entries(th.days).filter(([d]) => inR(d, r)).reduce((a, [, x]) => a + x.bibit, 0)) : 0;
     if (!act && bib <= 0) return;
     const done = act?.vendor_selesai_at && inR(day(act.vendor_selesai_at), r);
     out.push({ b, ket: (done ? `Selesai ${tglS(day(act.vendor_selesai_at))}` : 'Berjalan') + (bib > 0 ? ` · ${fmt(bib)} bibit` : '') });

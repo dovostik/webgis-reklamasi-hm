@@ -192,9 +192,10 @@ export function progresTanam(b) {
   S.kirim.filter(k => k.blok_id === b.id && k.status !== 'batal').forEach(k => { const t = k_(k.jenis), v = Number(k.n);
     if (k.status === 'diterima' && G.tglWIB(k.diterima_at) < today) T[t] += v; else if (k.status === 'diterima') H[t] += v; R[t] += v; });
   (S.kembali || []).filter(k => k.blok_id === b.id).forEach(k => { const t = k_(k.jenis); T[t] -= Number(k.n); R[t] -= Number(k.n); });
-  (S.tampung_log || []).filter(l => l.blok_id === b.id).forEach(l => { const t = k_(l.jenis); T[t] -= Number(l.n); R[t] -= Number(l.n); });
+  (S.tampung_log || []).filter(l => l.blok_id === b.id && l.tipe !== 'tanam').forEach(l => { const t = k_(l.jenis); T[t] -= Number(l.n); R[t] -= Number(l.n); });
+  const lap = { f: 0, s: 0 }; (S.tampung_log || []).filter(l => l.blok_id === b.id && l.tipe === 'tanam').forEach(l => { lap[k_(l.jenis)] += Number(l.n); });
   const f = Math.max(0, T.f), s = Math.max(0, T.s), hari = H.f + H.s;
-  if (!jalan) { const af = Math.max(0, T.f + H.f), as = Math.max(0, T.s + H.s); return { pct: 100, f: af, s: as, tf: af, ts: as, tot: af + as, target: af + as, selesai: true }; }
+  if (!jalan) { const useLap = lap.f + lap.s > 0, af = useLap ? lap.f : Math.max(0, T.f + H.f), as = useLap ? lap.s : Math.max(0, T.s + H.s); return { pct: 100, f: af, s: as, tf: af, ts: as, tot: af + as, target: af + as, selesai: true }; }
   // kebutuhan = rencana standar, atau total bibit yang diminta/dikirim bila lebih banyak
   const tf = Math.max(n.pio, R.f), ts = Math.max(n.sis, R.s), target = tf + ts, done = Math.min(f, tf) + Math.min(s, ts);
   return { pct: target ? Math.min(100, done / target * 100) : 0, f, s, tf, ts, tot: f + s, target, hari };

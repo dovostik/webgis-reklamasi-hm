@@ -235,6 +235,21 @@ export function makeLogic(S) {
     return out;
   }
   // progres rotasi perawatan = NPK terpakai dibanding kebutuhan 100 g/pohon; NPK diterima hari ini dihitung terpakai mulai besok
+  // Penanaman harian per blok BASTL, pro rata: bibit diterima dianggap tertanam esok harinya; hasil akhir blok
+  // (luas & bibit tertanam setelah dikurangi kembali/afkir/mati, atau angka BA Penyelesaian Pekerjaan bila sudah diajukan)
+  // dibagi ke hari-hari penerimaan sebanding jumlah bibit yang diterima hari itu. Luas tidak pernah melebihi luas blok.
+  function tanamHarian(b) {
+    if (!b || b.layer !== 'bastl') return null; const t0 = today(), recv = {}; let gross = 0;
+    S.kirim.filter(k => k.blok_id === b.id && k.status === 'diterima').forEach(k => { const d = addDays(tglWIB(k.diterima_at), 1); if (d > t0) return; recv[d] = (recv[d] || 0) + Number(k.n); gross += Number(k.n); });
+    if (!gross) return null;
+    const loss = (S.kembali || []).filter(k => k.blok_id === b.id).reduce((a, k) => a + Number(k.n), 0) + (S.tampung_log || []).filter(l => l.blok_id === b.id && l.tipe !== 'tanam').reduce((a, l) => a + Number(l.n), 0);
+    const c1 = periodes(b.id).filter(p => p.tipe === 'cek1'), selesai = c1.length && !c1.some(p => p.status === 'pelaksanaan');
+    const lapor = (S.tampung_log || []).filter(l => l.blok_id === b.id && l.tipe === 'tanam').reduce((a, l) => a + Number(l.n), 0);
+    const bibit = selesai && lapor > 0 ? lapor : Math.max(0, gross - loss), ha = Number(b.ha) || 0;
+    const area = selesai ? ha : Math.min(ha, bibit / STD.lubang);
+    const days = {}; Object.entries(recv).forEach(([d, n]) => { days[d] = { ha: area * n / gross, bibit: bibit * n / gross }; });
+    return { area, bibit, gross, loss, selesai: !!selesai, lebih: Math.max(0, gross - bibit), days };
+  }
   function progresRawat(p) {
     if (!p || p.tipe !== 'rotasi') return null; const b = S.blokMap[p.blok_id]; if (!b) return null;
     const need = needs(b.ha).npkRawat, t0 = today(); let used = 0, hari = 0;
@@ -244,5 +259,5 @@ export function makeLogic(S) {
     if (p.status !== 'pelaksanaan') return { pct: 100, used: used + hari, need, hari: 0, selesai: true };
     return { pct: need ? Math.min(100, used / need * 100) : 0, used, need, hari };
   }
-  return { MAT, unitK, matDemand, progresRawat, periodes, aktif, selesai, tags, events, deadAt, allowed, stokTampung, dalamKirim, realisasi, lastSulam, lockInfo, retensiInfo, rotasiInfo, blokStatus, openGL, openVendor, sulamDemand, tanamDemand, bed, lotsIn, fill, pinjamOf, tahapOf, realBST, pinjamBST, stage, readyStock, readyLots, suggestTargets, sensus };
+  return { MAT, unitK, matDemand, tanamHarian, progresRawat, periodes, aktif, selesai, tags, events, deadAt, allowed, stokTampung, dalamKirim, realisasi, lastSulam, lockInfo, retensiInfo, rotasiInfo, blokStatus, openGL, openVendor, sulamDemand, tanamDemand, bed, lotsIn, fill, pinjamOf, tahapOf, realBST, pinjamBST, stage, readyStock, readyLots, suggestTargets, sensus };
 }

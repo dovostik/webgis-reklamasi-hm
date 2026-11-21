@@ -39,10 +39,10 @@ function rencanaOf(r, PB) {
 function data(r, sees) {
   const inR = d => d && d >= r.a && d <= r.b, bl = id => S.blokMap[id], ok = id => sees(bl(id));
   const ev = []; // {d, tipe, v}
-  // penanaman: bibit diterima di lapangan dikurangi yang dikembalikan
-  // bibit diterima dihitung tertanam esok harinya (sama dengan progres per blok)
-  S.kirim.filter(k => k.status === 'diterima' && ok(k.blok_id)).forEach(k => ev.push({ d: addD(day(k.diterima_at), 1), t: 'bibit', v: Number(k.n), blok: k.blok_id }));
-  (S.kembali || []).filter(k => ok(k.blok_id)).forEach(k => ev.push({ d: day(k.dikirim_at), t: 'bibit', v: -Number(k.n), blok: k.blok_id }));
+  // penanaman (blok BASTL): hasil akhir tiap blok (luas ≤ luas blok; bibit setelah afkir/mati, atau angka BA PP)
+  // dibagi pro rata ke hari penerimaan bibit (bibit diterima dianggap tertanam esok harinya)
+  const TH = {}; S.blok.filter(b => b.layer === 'bastl' && sees(b)).forEach(b => { const h = L.tanamHarian(b); if (!h) return; TH[b.id] = h;
+    Object.entries(h.days).forEach(([d, x]) => { ev.push({ d, t: 'bibit', v: x.bibit, blok: b.id }); ev.push({ d, t: 'haT', v: x.ha, blok: b.id }); }); });
   // selesai penanaman & rotasi
   // realisasi perawatan bulanan (aktual dari laporan Compre) menggantikan catatan aplikasi untuk bulan yang sudah diisi
   const yr = r.b.slice(0, 4), PB = (S.perawatan_bulanan || []).filter(x => String(x.tahun) === yr), manM = new Set(PB.filter(x => x.realisasi != null).map(x => Number(x.bulan)));
@@ -57,15 +57,15 @@ function data(r, sees) {
   S.sesi.filter(s => s.selesai_at && ok(s.blok_id)).forEach(s => ev.push({ d: day(s.selesai_at), t: 'sesi', v: Number(bl(s.blok_id).ha), jam: Math.max(0, (new Date(s.selesai_at) - new Date(s.mulai_at)) / 36e5) }));
   (S.tag_event || []).filter(e => e.tipe === 'mati' || e.tipe === 'sulam').forEach(e => { const t = S.tag.find(x => x.id === e.tag_id); if (t && ok(t.blok_id)) ev.push({ d: day(e.at), t: e.tipe, v: 1 }); });
   const E = ev.filter(e => inR(e.d)), sum = t => E.filter(e => e.t === t).reduce((a, e) => a + e.v, 0);
-  const bibit = sum('bibit'), perHa = G.STD.lubang, hariTanam = new Set(E.filter(e => e.t === 'bibit' && e.v > 0).map(e => e.d)).size;
+  const bibit = sum('bibit'), haT = sum('haT'), perHa = G.STD.lubang, hariTanam = new Set(E.filter(e => e.t === 'bibit' && e.v > 0).map(e => e.d)).size;
   const ses = E.filter(e => e.t === 'sesi'), jam = ses.reduce((a, e) => a + e.jam, 0);
   const rotDur = E.filter(e => e.t === 'rotHa' && e.p?.mulai_at).map(e => diffD(day(e.p.mulai_at), e.d));
-  const series = r.buckets.map(b => { const f = t => E.filter(e => e.t === t && r.key(e.d) === b.k).reduce((a, e) => a + e.v, 0); return { l: b.l, a: Math.max(0, f('bibit')) / perHa, b: f('rotHa'), r: r.monthly ? Number(PB.find(x => Number(x.bulan) === b.k)?.rencana || 0) : 0 }; });
+  const series = r.buckets.map(b => { const f = t => E.filter(e => e.t === t && r.key(e.d) === b.k).reduce((a, e) => a + e.v, 0); return { l: b.l, a: Math.max(0, f('haT')), b: f('rotHa'), r: r.monthly ? Number(PB.find(x => Number(x.bulan) === b.k)?.rencana || 0) : 0 }; });
   const bs = S.blok.filter(b => b.layer === 'bastl' && sees(b)), bastlHa = bs.reduce((a, b) => a + Number(b.ha), 0);
-  const allBibit = ev.filter(e => e.t === 'bibit' && e.d <= day(new Date().toISOString())).reduce((a, e) => a + e.v, 0);
-  return { bibit, haSetara: bibit / perHa, hariTanam, tanamHa: sum('tanamHa'), rotHa: sum('rotHa'), rotN: E.filter(e => e.t === 'rotHa' && !e.man).length, manual: E.some(e => e.man), bulanN: Math.max(1, Number(r.b.slice(5, 7)) - (r.monthly ? 0 : Number(r.a.slice(5, 7)) - 1)), rencana: rencanaOf(r, PB), rencanaThn: PB.reduce((a, x) => a + Number(x.rencana || 0), 0), retHa: sum('retHa'),
+  const allHa = Object.values(TH).reduce((a, h) => a + h.area, 0);
+  return { bibit, haSetara: haT, hariTanam, tanamHa: sum('tanamHa'), rotHa: sum('rotHa'), rotN: E.filter(e => e.t === 'rotHa' && !e.man).length, manual: E.some(e => e.man), bulanN: Math.max(1, Number(r.b.slice(5, 7)) - (r.monthly ? 0 : Number(r.a.slice(5, 7)) - 1)), rencana: rencanaOf(r, PB), rencanaThn: PB.reduce((a, x) => a + Number(x.rencana || 0), 0), retHa: sum('retHa'),
     kohe: sum('m_kohe'), npk: sum('m_npk'), lcc: sum('m_lcc'), sesiN: ses.length, sesiHa: ses.reduce((a, e) => a + e.v, 0), jam, mati: sum('mati'), sulam: sum('sulam'),
-    rotDur: rotDur.length ? rotDur.reduce((a, b) => a + b, 0) / rotDur.length : null, series, bastlHa, allSetara: allBibit / perHa,
+    rotDur: rotDur.length ? rotDur.reduce((a, b) => a + b, 0) / rotDur.length : null, series, bastlHa, allSetara: allHa,
     perHa };
 }
 
@@ -113,7 +113,7 @@ export function dashHtml(sees, opts = {}) {
       ...(tanam ? [['Penanaman', d.hariTanam ? `${fmt(d.bibit / d.hariTanam)} pohon/hari · ${fmt(d.haSetara / d.hariTanam, 2)} Ha/hari <small class="muted">(${d.hariTanam} hari kerja)</small>` : '–']] : []),
       ...(rawat ? [['Rotasi perawatan', d.rotDur != null ? `rata-rata ${fmt(d.rotDur, 1)} hari/blok` : d.manual && d.bulanN ? `rata-rata ${fmt(d.rotHa / d.bulanN, 2)} Ha/bulan` : d.rotN ? `${fmt(d.rotHa / d.rotN, 2)} Ha/blok` : '–']] : []),
       ['Inspeksi', d.jam > 0 ? `${fmt(d.sesiHa / d.jam, 2)} Ha/jam · ${fmt(d.jam, 1)} jam` : '–']])}</div>
-    <p class="note" style="margin:0">Penanaman dihitung dari bibit diterima di lapangan dikurangi yang dikembalikan; 1 Ha setara ${fmt(d.perHa)} pohon. Material = diterima di lapangan dikurangi sisa yang kembali.${d.manual ? ' Perawatan bulan yang sudah dilaporkan memakai realisasi aktual laporan Compre.' : ''}</p></div>`;
+    <p class="note" style="margin:0">Penanaman: bibit diterima dianggap tertanam esok harinya (1 Ha = ${fmt(d.perHa)} pohon, maksimal seluas blok). Afkir/mati dan angka BA Penyelesaian Pekerjaan mengoreksi hari-hari sebelumnya secara pro rata. Material = diterima di lapangan dikurangi sisa yang kembali.${d.manual ? ' Perawatan bulan yang sudah dilaporkan memakai realisasi aktual laporan Compre.' : ''}</p></div>`;
 }
 export function bindDash(rerender) {
   const sl = $('#dmSel'); if (sl) sl.addEventListener('change', () => { if (mode === 'minggu') selW = +sl.value; else selM = +sl.value; rerender(); });

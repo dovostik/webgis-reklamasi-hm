@@ -26,7 +26,7 @@ function pageRingkas(r, d) {
       ['Inspeksi (Ha)', fmt(d.sesiHa, 2), `${d.sesiN} sesi · ${fmt(d.mati)} tanaman mati ditemukan`],
       ['Penyulaman (pohon)', fmt(d.sulam), ''],
       ['Progres BASTL 2026 kumulatif', `${fmt(pct, 1)}%`, `${fmt(d.allSetara, 2)} dari ${fmt(d.bastlHa, 2)} Ha`]]))}
-    ${sec('grafik', '2. Grafik luasan', `<div class="lchart">${chart(d.series)}</div>`, 'Batang hijau: penanaman (Ha setara = bibit tertanam ÷ ' + fmt(G.STD.lubang) + ' pohon/Ha). Batang biru: perawatan (Ha rotasi). Garis putus-putus: rencana perawatan bulanan.')}
+    ${sec('grafik', '2. Grafik luasan', `<div class="lchart">${chart(d.series)}</div>`, 'Batang hijau: penanaman (Ha setara = bibit tertanam ÷ ' + fmt(G.STD.lubang) + ' pohon/Ha, maksimal seluas blok; koreksi afkir/mati dan BA PP dibagi pro rata ke hari penerimaan). Batang biru: perawatan (Ha rotasi). Garis putus-putus: rencana perawatan bulanan.')}
     ${sec('produktivitas', '3. Produktivitas', tbl([['Pekerjaan'], ['Nilai']], [
       ['Penanaman', d.hariTanam ? `${fmt(d.bibit / d.hariTanam)} pohon/hari · ${fmt(d.haSetara / d.hariTanam, 2)} Ha/hari` : '–'],
       ['Rotasi perawatan', d.rotDur != null ? `rata-rata ${fmt(d.rotDur, 1)} hari/blok` : d.manual && d.bulanN ? `rata-rata ${fmt(d.rotHa / d.bulanN, 2)} Ha/bulan` : d.rotN ? `${fmt(d.rotHa / d.rotN, 2)} Ha/blok` : '–'],
@@ -37,18 +37,16 @@ function pageTanam(r) {
   const inR = x => x && x >= r.a && x <= r.b;
   const rows = S.blok.filter(b => b.layer === 'bastl').sort((a, b) => G.blokName(a).localeCompare(G.blokName(b), 'id', { numeric: true })).map(b => {
     const ps = L.periodes(b.id).filter(p => p.tipe === 'cek1'), p = ps[ps.length - 1];
-    const kir = S.kirim.filter(k => k.blok_id === b.id && k.status === 'diterima'), kem = (S.kembali || []).filter(k => k.blok_id === b.id);
-    const net = kir.filter(k => G.addDays(day(k.diterima_at), 1) <= G.today()).reduce((a, k) => a + Number(k.n), 0) - kem.reduce((a, k) => a + Number(k.n), 0);
-    const tanamD = k => G.addDays(day(k.diterima_at), 1), tdy = G.today(); // tertanam esok hari setelah diterima
-    const netR = kir.filter(k => inR(tanamD(k)) && tanamD(k) <= tdy).reduce((a, k) => a + Number(k.n), 0) - kem.filter(k => inR(day(k.dikirim_at))).reduce((a, k) => a + Number(k.n), 0);
-    const setara = Math.max(0, net) / G.STD.lubang, pc = Number(b.ha) ? Math.min(100, setara / Number(b.ha) * 100) : 0;
-    return { b, p, net, netR, setara, pc };
+    const h = L.tanamHarian(b), net = h ? h.bibit : 0, setara = h ? h.area : 0, lebih = h ? h.lebih : 0;
+    const netR = h ? Object.entries(h.days).filter(([d]) => inR(d)).reduce((a, [, x]) => a + x.bibit, 0) : 0;
+    const pc = Number(b.ha) ? Math.min(100, setara / Number(b.ha) * 100) : 0;
+    return { b, p, net, netR, setara, pc, lebih };
   });
   const T = k => rows.reduce((a, x) => a + x[k], 0), luas = rows.reduce((a, x) => a + Number(x.b.ha || 0), 0);
   return `<h4>Progres Penanaman (BASTL 2026 · ExDAS)</h4><p class="nomor">${esc(r.sub)}</p>
-    ${sec('penanaman-per-blok', '4. Penanaman per blok', tbl([['No'], ['Blok'], ['Luas (Ha)', R], ['Status'], ['Mulai'], ['Selesai'], ['Tertanam periode ini', R], ['Tertanam kumulatif', R], ['Ha setara', R], ['%', R]],
-      rows.map((x, i) => [i + 1, esc(G.blokName(x.b)), fmt(x.b.ha, 2), esc(L.blokStatus(x.b).t), x.p?.mulai_at ? tgl(x.p.mulai_at) : '–', x.p?.vendor_selesai_at ? tgl(x.p.vendor_selesai_at) : '–', fmt(x.netR), fmt(x.net), fmt(x.setara, 2), fmt(x.pc, 0) + '%']),
-      ['', `Jumlah ${rows.length} blok`, fmt(luas, 2), '', '', '', fmt(T('netR')), fmt(T('net')), fmt(T('setara'), 2), luas ? fmt(T('setara') / luas * 100, 0) + '%' : '']), 'Tertanam = bibit diterima di lapangan dikurangi yang dikembalikan ke nursery.')}`;
+    ${sec('penanaman-per-blok', '4. Penanaman per blok', tbl([['No'], ['Blok'], ['Luas (Ha)', R], ['Status'], ['Mulai'], ['Selesai'], ['Tertanam periode ini', R], ['Tertanam kumulatif', R], ['Lebih / afkir', R], ['Ha setara', R], ['%', R]],
+      rows.map((x, i) => [i + 1, esc(G.blokName(x.b)), fmt(x.b.ha, 2), esc(L.blokStatus(x.b).t), x.p?.mulai_at ? tgl(x.p.mulai_at) : '–', x.p?.vendor_selesai_at ? tgl(x.p.vendor_selesai_at) : '–', fmt(x.netR), fmt(x.net), x.lebih ? fmt(x.lebih) : '–', fmt(x.setara, 2), fmt(x.pc, 0) + '%']),
+      ['', `Jumlah ${rows.length} blok`, fmt(luas, 2), '', '', '', fmt(T('netR')), fmt(T('net')), fmt(T('lebih')), fmt(T('setara'), 2), luas ? fmt(T('setara') / luas * 100, 0) + '%' : '']), 'Tertanam = bibit diterima (dianggap tertanam esok harinya) dikurangi kembali/afkir/mati; setelah BA Penyelesaian Pekerjaan memakai jumlah tertanam di BA. Lebih/afkir = bibit diterima yang tidak tertanam. Koreksi dibagi pro rata ke hari penerimaan.')}`;
 }
 
 function pageRawat(r) {
